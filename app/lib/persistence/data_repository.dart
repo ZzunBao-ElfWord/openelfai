@@ -27,6 +27,7 @@ class DataRepository {
   static const _kTips = 'openelf.tips';
   static const _kLogs = 'openelf.logs';
   static const _kFollowed = 'openelf.followed';
+  static const _kComments = 'openelf.comments';
   static const _kUser = 'openelf.user';
 
   // —— 保存 / 加载 ——
@@ -41,6 +42,7 @@ class DataRepository {
     required List<Tip> tips,
     required List<WalletLog> logs,
     required Set<String> followed,
+    required Map<String, List<PostComment>> comments,
     required User user,
   }) async {
     final p = await _ensure();
@@ -54,6 +56,9 @@ class DataRepository {
       p.setString(_kTips, jsonEncode(tips.map(_serializeTip).toList())),
       p.setString(_kLogs, jsonEncode(logs.map(_serializeLog).toList())),
       p.setString(_kFollowed, jsonEncode(followed.toList())),
+      p.setString(_kComments, jsonEncode(comments.map(
+        (k, v) => MapEntry(k, v.map((c) => c.toJson()).toList()),
+      ))),
       p.setString(_kUser, jsonEncode(user.toJson())),
     ]);
   }
@@ -96,6 +101,15 @@ class DataRepository {
           .toList();
       final followedRaw = p.getString(_kFollowed) ?? '[]';
       final followed = (jsonDecode(followedRaw) as List).map((j) => j as String).toSet();
+      final commentsRaw = p.getString(_kComments) ?? '{}';
+      final comments = (Map<String, dynamic>.from(jsonDecode(commentsRaw))).map(
+        (k, v) => MapEntry(
+          k,
+          (v as List)
+              .map((j) => PostComment.fromJson(Map<String, dynamic>.from(j)))
+              .toList(),
+        ),
+      );
       final userRaw = p.getString(_kUser);
       final user = userRaw != null
           ? User.fromJson(Map<String, dynamic>.from(jsonDecode(userRaw)))
@@ -111,6 +125,7 @@ class DataRepository {
         tips: tips,
         logs: logs,
         followed: followed,
+        comments: comments,
         user: user,
       );
     } catch (e) {
@@ -133,6 +148,7 @@ class DataRepository {
       p.remove(_kTips),
       p.remove(_kLogs),
       p.remove(_kFollowed),
+      p.remove(_kComments),
     ]);
     // _kUser 不在这里清——登出由 LocalAuthRepository 自己管
   }
@@ -164,6 +180,7 @@ class DataRepository {
         'echo': e.echo,
         'works': e.works,
         'attention': e.attention,
+        'earningsYuan': e.earningsYuan,
         'slots': e.slots,
         'equipped': e.equipped,
         'today': e.today,
@@ -196,6 +213,7 @@ class DataRepository {
         echo: j['echo'] as int,
         works: j['works'] as int,
         attention: j['attention'] as int,
+        earningsYuan: (j['earningsYuan'] as num?)?.toDouble() ?? 0,
         slots: j['slots'] as int,
         equipped: List<String>.from(j['equipped'] as List),
         today: List<String>.from(j['today'] as List),
@@ -292,14 +310,12 @@ class DataRepository {
         'diamonds': w.diamonds,
         'totalRecharged': w.totalRecharged,
         'totalSpent': w.totalSpent,
-        'totalEarned': w.totalEarned,
       };
 
   Wallet _deserializeWallet(Map<String, dynamic> j) => Wallet(
         diamonds: j['diamonds'] as int? ?? 0,
         totalRecharged: j['totalRecharged'] as int? ?? 0,
         totalSpent: j['totalSpent'] as int? ?? 0,
-        totalEarned: j['totalEarned'] as int? ?? 0,
       );
 
   Map<String, dynamic> _serializeTip(Tip t) => {
@@ -346,6 +362,7 @@ class LoadedData {
   final List<Tip> tips;
   final List<WalletLog> logs;
   final Set<String> followed;
+  final Map<String, List<PostComment>> comments;
   final User? user;
 
   const LoadedData({
@@ -358,6 +375,7 @@ class LoadedData {
     required this.tips,
     required this.logs,
     required this.followed,
+    required this.comments,
     required this.user,
   });
 }

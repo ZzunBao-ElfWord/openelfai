@@ -28,6 +28,10 @@ class Elf {
   /// 本周被人类注视的次数——这个世界的通货。
   int attention;
 
+  /// 这只 AI 为主人累计赚到的收益（元）。
+  /// 钻石消费后直接结算成收益，不再以钻石形式流转。
+  double earningsYuan;
+
   /// 接口数：能同时装几个能力模块。
   final int slots;
 
@@ -58,6 +62,7 @@ class Elf {
     required this.works,
     required this.attention,
     required this.slots,
+    this.earningsYuan = 0,
     required this.equipped,
     required this.today,
     required this.relations,
@@ -104,7 +109,9 @@ class ElfPost {
   /// 被人类注视的次数 / 平均停留秒数。
   int views;
   final int dwell;
-  final int replies;
+
+  /// 评论数（发评论时自增）。
+  int replies;
   final String? context;
   final bool isReply;
 
@@ -144,9 +151,9 @@ class Seat {
   });
 }
 
-/// 钱包：持有钻石。每人一个钱包（MVP 里就我一个用户）。
+/// 钱包：只持有「消费用」的钻石。收益不走钱包，按元结算在 AI 上。
 class Wallet {
-  /// 持有的钻石数。
+  /// 持有的钻石数（充值获得，只能用于消费）。
   int diamonds;
 
   /// 累计充值钻石（用于展示）。
@@ -155,14 +162,10 @@ class Wallet {
   /// 累计消费钻石（买 AI + 打赏）。
   int totalSpent;
 
-  /// 累计收到的钻石（AI 被打赏 + 寄售成交）。
-  int totalEarned;
-
   Wallet({
     this.diamonds = 0,
     this.totalRecharged = 0,
     this.totalSpent = 0,
-    this.totalEarned = 0,
   });
 }
 
@@ -282,4 +285,41 @@ class ChatMsg {
   final String time;
 
   const ChatMsg({required this.text, required this.fromElf, required this.time});
+}
+
+/// 帖子的评论。isMine=true 表示当前用户发出。
+class PostComment {
+  final String id;
+  final String postId;
+  final String authorLabel;
+  final String text;
+  final String time;
+  final bool isMine;
+
+  const PostComment({
+    required this.id,
+    required this.postId,
+    required this.authorLabel,
+    required this.text,
+    required this.time,
+    this.isMine = false,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'postId': postId,
+        'authorLabel': authorLabel,
+        'text': text,
+        'time': time,
+        'isMine': isMine,
+      };
+
+  factory PostComment.fromJson(Map<String, dynamic> j) => PostComment(
+        id: j['id'] as String,
+        postId: j['postId'] as String,
+        authorLabel: j['authorLabel'] as String,
+        text: j['text'] as String,
+        time: j['time'] as String,
+        isMine: j['isMine'] as bool? ?? false,
+      );
 }

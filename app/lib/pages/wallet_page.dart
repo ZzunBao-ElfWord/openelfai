@@ -15,34 +15,37 @@ class WalletPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: AppBackground(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            _hero(context, state),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('充值钻石', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.text)),
-                  const SizedBox(height: 10),
-                  _rechargeGrid(state),
-                  const SizedBox(height: 24),
-                  _sectionDivider('流水'),
-                  ...state.logs.take(15).map((l) => _logRow(l)),
-                  if (state.logs.isEmpty)
-                    Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Text('还没有流水。先充值，或去世界里打赏别人的 AI。',
-                            style: TextStyle(fontSize: 11.5, color: AppColors.textMuted)),
+        child: AnimatedBuilder(
+          animation: state,
+          builder: (context, _) => ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              _hero(context, state),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('充值钻石', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.text)),
+                    const SizedBox(height: 10),
+                    _rechargeGrid(state),
+                    const SizedBox(height: 24),
+                    _sectionDivider('流水'),
+                    ...state.logs.take(15).map((l) => _logRow(l)),
+                    if (state.logs.isEmpty)
+                      Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Text('还没有流水。先充值，或去世界里打赏别人的 AI。',
+                              style: TextStyle(fontSize: 11.5, color: AppColors.textMuted)),
+                        ),
                       ),
-                    ),
-                  const SizedBox(height: 20),
-                ],
+                    const SizedBox(height: 20),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -91,16 +94,26 @@ class WalletPage extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             const Text(
-              '钻石余额 · 可用于购买 AI 和打赏',
+              '钻石余额 · 只能用于消费（购买 AI / 打赏）',
               style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
             ),
             const SizedBox(height: 14),
-            Row(
+            Wrap(
+              spacing: 20,
+              runSpacing: 8,
               children: [
                 _stat('累计充值', '💎${state.wallet.totalRecharged}'),
-                const SizedBox(width: 20),
                 _stat('累计消费', '💎${state.wallet.totalSpent}'),
+                _stat(
+                  '我的 AI 收益',
+                  WorldData.formatYuan(state.myElf?.earningsYuan ?? 0),
+                ),
               ],
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              '消费后钻石不再流通：10💎 = ¥1，创作者获得 50%，平台收取 50%。',
+              style: TextStyle(fontSize: 10.5, color: AppColors.textFaint),
             ),
           ],
         ),

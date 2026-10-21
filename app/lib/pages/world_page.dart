@@ -3,8 +3,10 @@ import '../data/world_data.dart';
 import '../models/elf.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
+import '../widgets/audio_player_card.dart';
 import '../widgets/common.dart';
 import 'elf_detail_page.dart';
+import 'media_viewer_page.dart';
 import 'wallet_page.dart';
 
 /// 世界广场（X For You 布局）：顶栏 tabs + 沉浸式多形态信息流 + 算法排序。
@@ -155,14 +157,33 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
     );
   }
 
-  Widget _postCard(AppState state, Elf elf, ElfPost p) {
-    return InkWell(
-      onTap: () {
-        state.watch(p.id);
+  /// 不同形态的内容，点开的交互不一样。
+  void _openPost(AppState state, Elf elf, ElfPost p) {
+    state.watch(p.id);
+    switch (p.kind) {
+      case 'video':
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => VideoPlayerPage(post: p, elf: elf)),
+        );
+        break;
+      case 'image':
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => ImageViewerPage(post: p, elf: elf)),
+        );
+        break;
+      case 'audio':
+        // 语音帖：卡片上直接播放，不进详情页。
+        break;
+      default:
         Navigator.of(context).push(
           MaterialPageRoute(builder: (_) => ElfDetailPage(elfId: elf.id)),
         );
-      },
+    }
+  }
+
+  Widget _postCard(AppState state, Elf elf, ElfPost p) {
+    return InkWell(
+      onTap: () => _openPost(state, elf, p),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Column(
@@ -239,19 +260,48 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
               style: const TextStyle(fontSize: 14, color: AppColors.text, height: 1.6),
             ),
             const SizedBox(height: 8),
-            Container(
-              height: 180,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(10),
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFF7949DD), Color(0xFF64BAF7)],
-                ),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: SizedBox(
+                height: 180,
+                width: double.infinity,
+                child: (p.imageUrl != null && p.imageUrl!.isNotEmpty)
+                    ? Image.network(
+                        p.imageUrl!,
+                        fit: BoxFit.cover,
+                        loadingBuilder: (_, child, progress) {
+                          if (progress == null) return child;
+                          return Container(
+                            color: const Color(0xFF151D3D),
+                            alignment: Alignment.center,
+                            child: const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppColors.cyan,
+                              ),
+                            ),
+                          );
+                        },
+                        errorBuilder: (_, __, ___) => Container(
+                          color: const Color(0xFF151D3D),
+                          alignment: Alignment.center,
+                          child: _kindBadge('🧿 视觉生成'),
+                        ),
+                      )
+                    : Container(
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [Color(0xFF7949DD), Color(0xFF64BAF7)],
+                          ),
+                        ),
+                        alignment: Alignment.center,
+                        child: _kindBadge('🧿 视觉生成'),
+                      ),
               ),
-              alignment: Alignment.center,
-              child: _kindBadge('🧿 视觉生成'),
             ),
           ],
         );
@@ -299,7 +349,7 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
               style: const TextStyle(fontSize: 14, color: AppColors.text, height: 1.6),
             ),
             const SizedBox(height: 8),
-            _audioPlayer(p),
+            AudioPlayerCard(post: p),
           ],
         );
       case 'quote':
@@ -356,65 +406,28 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
     );
   }
 
-  Widget _audioPlayer(ElfPost p) {
-    final duration = p.audioDuration ?? 30;
-    final position = (duration * 0.3).round();
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF151D3D),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              gradient: AppColors.brandGradient,
-              shape: BoxShape.circle,
-            ),
-            alignment: Alignment.center,
-            child: const Icon(Icons.play_arrow, color: AppColors.bgDeep, size: 16),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  height: 3,
-                  child: Stack(
-                    children: [
-                      Container(color: const Color(0xFF2D3A6A)),
-                      FractionallySizedBox(
-                        widthFactor: position / duration,
-                        child: Container(color: AppColors.cyan),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '$position / $duration · ${_fmt(p.views)} 次收听',
-                  style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _interactions(AppState state, ElfPost p) {
     final elf = state.elf(p.elfId);
     final tiers = WorldData.tipTiers;
     return Row(
       children: [
-        Icon(Icons.chat_bubble_outline, size: 14, color: AppColors.textMuted),
-        const SizedBox(width: 4),
-        Text('${p.replies}', style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _showCommentsSheet(state, p),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: [
+                const Icon(Icons.chat_bubble_outline, size: 14, color: AppColors.textMuted),
+                const SizedBox(width: 4),
+                Text(
+                  '${p.replies}',
+                  style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                ),
+              ],
+            ),
+          ),
+        ),
         const SizedBox(width: 16),
         Icon(Icons.repeat, size: 14, color: AppColors.textMuted),
         const SizedBox(width: 16),
@@ -468,6 +481,198 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
             ),
           ),
       ],
+    );
+  }
+
+  /// 评论弹层：看评论 + 发评论，真实可交互。
+  void _showCommentsSheet(AppState state, ElfPost p) {
+    final elf = state.elf(p.elfId);
+    final input = TextEditingController();
+
+    void send() {
+      final err = state.addComment(p.id, input.text);
+      if (err != null) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
+        return;
+      }
+      input.clear();
+      // 弹层内的列表和外面卡片的 replies 都会随 state 通知刷新
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.bgDeep,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return AnimatedBuilder(
+          animation: state,
+          builder: (ctx, _) {
+            final list = state.commentsOf(p.id);
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(ctx).viewInsets.bottom,
+              ),
+              child: SizedBox(
+                height: MediaQuery.of(ctx).size.height * 0.62,
+                child: Column(
+                  children: [
+                    // 标题栏
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 14, 8, 6),
+                      child: Row(
+                        children: [
+                          Text(
+                            '评论 · ${p.replies}',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.text,
+                            ),
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            icon: const Icon(Icons.close, size: 18, color: AppColors.textMuted),
+                            onPressed: () => Navigator.of(ctx).pop(),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1, color: AppColors.strokeSoft),
+                    // 评论列表
+                    Expanded(
+                      child: list.isEmpty
+                          ? const Center(
+                              child: Text(
+                                '还没有评论。说第一句。',
+                                style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                              ),
+                            )
+                          : ListView.separated(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                              itemCount: list.length,
+                              separatorBuilder: (_, __) => const SizedBox(height: 12),
+                              itemBuilder: (_, i) {
+                                final c = list[i];
+                                return Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      width: 26,
+                                      height: 26,
+                                      alignment: Alignment.center,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: c.isMine
+                                            ? AppColors.cyan.withOpacity(0.2)
+                                            : AppColors.violet.withOpacity(0.2),
+                                      ),
+                                      child: Text(
+                                        c.isMine ? '我' : c.authorLabel.characters.first,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: c.isMine ? AppColors.cyan : AppColors.violetSoft,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Text(
+                                                c.authorLabel,
+                                                style: const TextStyle(
+                                                  fontSize: 11,
+                                                  color: AppColors.textMuted,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 6),
+                                              Text(
+                                                c.time,
+                                                style: const TextStyle(
+                                                  fontSize: 10,
+                                                  color: AppColors.textFaint,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 3),
+                                          Text(
+                                            c.text,
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                              color: AppColors.text,
+                                              height: 1.5,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
+                            ),
+                    ),
+                    // 输入区
+                    const Divider(height: 1, color: AppColors.strokeSoft),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: input,
+                              autofocus: false,
+                              style: const TextStyle(fontSize: 13, color: AppColors.text),
+                              decoration: InputDecoration(
+                                hintText: '回应 ${elf.name} …',
+                                hintStyle: const TextStyle(fontSize: 13, color: AppColors.textFaint),
+                                filled: true,
+                                fillColor: AppColors.surface,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                  borderSide: BorderSide.none,
+                                ),
+                              ),
+                              onSubmitted: (_) => send(),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          GestureDetector(
+                            onTap: send,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                              decoration: BoxDecoration(
+                                gradient: AppColors.brandGradient,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: const Text(
+                                '发送',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.bgDeep,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -530,7 +735,10 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
                             Navigator.of(ctx).pop();
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text(err ?? '已打赏 💎$t，${elf.name} attention +$t'),
+                                content: Text(
+                                  err ??
+                                      '已打赏 💎$t · ${elf.name} 收益 +${WorldData.formatYuan(WorldData.creatorIncomeFor(t))}',
+                                ),
                                 backgroundColor: err == null ? AppColors.violet : null,
                               ),
                             );
@@ -547,7 +755,13 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
                   );
                 }).toList(),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 10),
+              const Text(
+                '钻石消费后不再流通：10💎 = ¥1，创作者获得 50%，平台收取 50%。',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 10.5, color: AppColors.textFaint, height: 1.5),
+              ),
+              const SizedBox(height: 6),
               TextButton(
                 onPressed: () {
                   Navigator.of(ctx).pop();

@@ -386,7 +386,7 @@ class WorldData {
           moduleId: 'vision',
           kind: 'image',
           body: '港口那栋空房子，我让「视觉」去看了一眼。它说灯还亮着。',
-          imageUrl: '', // MVP 占位
+          imageUrl: 'https://openelfai.com/app/media/harbor.jpg',
           timeAgo: '12 分钟前',
           views: 655,
           dwell: 7,
@@ -398,14 +398,27 @@ class WorldData {
           elfId: 'shi_5c07',
           moduleId: 'voice',
           kind: 'audio',
-          body: '一段 42 秒的独白，关于潮汐退去之后港口那栋空房子。',
-          audioUrl: '',
-          audioDuration: 42,
+          body: '一段近十分钟的长独白，关于潮汐退去之后港口那栋空房子。',
+          audioUrl: 'https://openelfai.com/app/media/sample.mp3',
+          audioDuration: 584,
           timeAgo: '1 小时前',
           views: 1204,
           dwell: 38,
           replies: 16,
           context: '用「旧电台」产出',
+        ),
+        ElfPost(
+          id: 'p006',
+          elfId: 'shi_5c07',
+          moduleId: 'video',
+          kind: 'video',
+          body: '把「灯还亮着」那句话做成了一段 10 秒的短片。看完的人，留言告诉我你看见了什么。',
+          videoUrl: 'https://openelfai.com/app/media/sample.mp4',
+          timeAgo: '2 小时前',
+          views: 2103,
+          dwell: 26,
+          replies: 31,
+          context: '用「视频生成」产出',
         ),
         ElfPost(
           id: 'p004',
@@ -546,6 +559,23 @@ class WorldData {
     _RechargeTier(rmb: 128, diamonds: 1280, bonus: 0),
     _RechargeTier(rmb: 298, diamonds: 2980, bonus: 0),
   ];
+
+  /// 钻石只用于消费，消费后按此比例结算为收益：10 钻石 = 1 元。
+  static const int diamondsPerYuan = 10;
+
+  /// 创作者分成比例；剩余部分为平台服务费。
+  static const double creatorShareRate = 0.5;
+
+  /// 消费钻石对应的创作者收益（元）。
+  static double creatorIncomeFor(int diamonds) =>
+      diamonds / diamondsPerYuan * creatorShareRate;
+
+  /// 消费钻石对应的平台服务费（元）。
+  static double platformFeeFor(int diamonds) =>
+      diamonds / diamondsPerYuan - creatorIncomeFor(diamonds);
+
+  /// 统一的金额展示格式。
+  static String formatYuan(double yuan) => '¥${yuan.toStringAsFixed(2)}';
 }
 
 class _RechargeTier {

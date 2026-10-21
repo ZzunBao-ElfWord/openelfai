@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../data/world_data.dart';
 import '../models/elf.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
@@ -200,6 +201,19 @@ class MyAIPage extends StatelessWidget {
               Text(
                 _fmt(elf.attention),
                 style: const TextStyle(fontSize: 12, color: AppColors.cyan, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          // 累计收益（钻石消费后结算成元，不再回流成钻石）
+          Row(
+            children: [
+              const Text('累计收益', style: TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
+              const Spacer(),
+              Text(
+                WorldData.formatYuan(elf.earningsYuan),
+                style: const TextStyle(fontSize: 12, color: AppColors.violetSoft, fontWeight: FontWeight.w700),
               ),
             ],
           ),

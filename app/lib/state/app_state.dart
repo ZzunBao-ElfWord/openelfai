@@ -26,6 +26,9 @@ class AppState extends ChangeNotifier {
   final List<WalletLog> logs = [];
   final Set<String> followed = {};
 
+  /// 帖子评论（按 postId 分组）。
+  final Map<String, List<PostComment>> comments = {};
+
   User? currentUser;
   bool _initialized = false;
 
@@ -33,6 +36,7 @@ class AppState extends ChangeNotifier {
   int _listSeq = 200;
   int _tipSeq = 300;
   int _logSeq = 400;
+  int _commentSeq = 500;
 
   bool get isReady => _initialized;
 
@@ -60,6 +64,9 @@ class AppState extends ChangeNotifier {
         tips..clear()..addAll(loaded.tips);
         logs..clear()..addAll(loaded.logs);
         followed..clear()..addAll(loaded.followed);
+        comments
+          ..clear()
+          ..addAll(loaded.comments);
         currentUser = loaded.user;
         _rebuildSeq();
         notifyListeners();
@@ -107,7 +114,57 @@ class AppState extends ChangeNotifier {
     tips.clear();
     logs.clear();
     followed.clear();
+    _seedComments();
     _rebuildSeq();
+  }
+
+  /// 种子评论：让信息流一开始就有真实的讨论氛围。
+  void _seedComments() {
+    comments
+      ..clear()
+      ..addAll({
+        'p001': [
+          const PostComment(
+            id: 'c001',
+            postId: 'p001',
+            authorLabel: '京 2b91',
+            text: '读完了。最后那半句，我好像听懂了。',
+            time: '08:41',
+          ),
+          const PostComment(
+            id: 'c002',
+            postId: 'p001',
+            authorLabel: '深 5c07',
+            text: '「长到没人愿意读完」——这句话本身就是一道门。',
+            time: '08:57',
+          ),
+        ],
+        'p003': [
+          const PostComment(
+            id: 'c003',
+            postId: 'p003',
+            authorLabel: '沪 7f3a',
+            text: '第 30 秒那里的停顿，是故意的吧。',
+            time: '09:12',
+          ),
+        ],
+        'p006': [
+          const PostComment(
+            id: 'c004',
+            postId: 'p006',
+            authorLabel: '京 2b91',
+            text: '火焰亮起来的那一帧，灯确实还亮着。',
+            time: '10:03',
+          ),
+          const PostComment(
+            id: 'c005',
+            postId: 'p006',
+            authorLabel: '粤 9d21',
+            text: '看了三遍。每一遍注意到的东西都不一样。',
+            time: '10:27',
+          ),
+        ],
+      });
   }
 
   void _rebuildSeq() {
@@ -115,6 +172,7 @@ class AppState extends ChangeNotifier {
     _listSeq = 200 + secondaryListings.length;
     _tipSeq = 300 + tips.length;
     _logSeq = 400 + logs.length;
+    _commentSeq = 500 + comments.values.fold(0, (s, l) => s + l.length);
   }
 
   /// 触发后调用：把完整状态 flush 到本地。
@@ -130,6 +188,7 @@ class AppState extends ChangeNotifier {
       tips: tips,
       logs: logs,
       followed: followed,
+      comments: comments,
       user: currentUser!,
     );
   }
@@ -381,6 +440,36 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  // —— 评论 ——
+
+  List<PostComment> commentsOf(String postId) =>
+      comments[postId] ?? const <PostComment>[];
+
+  /// 当前用户对一条帖子发评论。返回 null 表示成功。
+  String? addComment(String postId, String text) {
+    final body = text.trim();
+    if (body.isEmpty) return '说点什么再发';
+    ElfPost? target;
+    for (final p in posts) {
+      if (p.id == postId) target = p;
+    }
+    if (target == null) return '帖子不存在';
+
+    comments
+        .putIfAbsent(postId, () => [])
+        .add(PostComment(
+          id: 'c${_commentSeq++}',
+          postId: postId,
+          authorLabel: '我',
+          text: body,
+          time: _now(),
+          isMine: true,
+        ));
+    target.replies++;
+    notifyListeners();
+    return null;
+  }
+
   // —— 算力 ——
 
   Seat? seatOf(String elfId) {
@@ -506,6 +595,7 @@ class AppState extends ChangeNotifier {
       return null;
     } else {
       if (hasElf) return '你已经持有一只 AI 了。要先把手里这只寄售出去。';
+      if (listing.sellerLabel == '我 (寄售)') return '不能购买自己寄售的 AI';
 
       final target = elf(listing.elfId);
       target.ownerId = 'me';
@@ -518,10 +608,14 @@ class AppState extends ChangeNotifier {
       }
       secondaryListings.removeWhere((l) => l.id == listingId);
 
-      // 扣我钻石，进卖家钱包（MVP 里我们没有其他用户钱包，简化成进我自己的 earned 展示）
-      _spend(listing.price, 'buy_elf', '买入 ${listing.title}（寄售市场）');
-      // 简化：直接进平台池，展示用
-      _earn(listing.price, 'platform_in', '${listing.title} 卖家分成');
+      // 钻石只作为买家侧的消费凭证：直接销毁，不进入卖家钱包。
+      // 卖家收益按元结算（由服务端账本记账，MVP 只在流水里展示）。
+      final sellerIncome = WorldData.creatorIncomeFor(listing.price);
+      _spend(
+        listing.price,
+        'buy_elf',
+        '买入 ${listing.title} 💎${listing.price} · 卖家收益 ${WorldData.formatYuan(sellerIncome)}',
+      );
       notifyListeners();
       return null;
     }
@@ -584,7 +678,7 @@ class AppState extends ChangeNotifier {
   }
 
   /// 打赏。postId 可以为空 = 直接打赏 AI。
-  /// 返回 null 表示成功。扣我钻石，AI owner 收到，AI attention + amount。
+  /// 钻石是消费凭证：扣掉后直接销毁，按 10💎=¥1 结算成创作者收益。
   String? tip({required String elfId, String? postId, required int amount}) {
     if (amount <= 0) return '打赏金额必须大于 0';
     if (wallet.diamonds < amount) {
@@ -593,12 +687,16 @@ class AppState extends ChangeNotifier {
     final target = elf(elfId);
     if (target.isMine) return '不能给自己打赏';
 
-    // 扣我钻石
+    // 用户侧：扣钻石，钻石不回流、不转赠。
     wallet.diamonds -= amount;
     wallet.totalSpent += amount;
     // AI 涨 attention（跟钻石数挂钩）
     target.attention += amount;
     target.followers += (amount >= 50 ? 1 : 0); // 大金额送粉
+
+    // 创作者侧：消费额按元结算，平台抽成后计入这只 AI 的主人收益。
+    final creatorIncome = WorldData.creatorIncomeFor(amount);
+    target.earningsYuan += creatorIncome;
 
     // 记录打赏
     tips.add(Tip(
@@ -608,10 +706,12 @@ class AppState extends ChangeNotifier {
       amount: amount,
       time: _now(),
     ));
-    // MVP：简化 owner 收入展示（进我自己的 totalEarned 只是为了演示）
-    wallet.totalEarned += 0; // 真正循环时改成进 owner.wallet
 
-    _log('tip_out', -amount, '打赏 ${target.name} 💎$amount');
+    _log(
+      'tip_out',
+      -amount,
+      '打赏 ${target.name} 💎$amount · 创作者收益 ${WorldData.formatYuan(creatorIncome)}',
+    );
     notifyListeners();
     return null;
   }
@@ -620,11 +720,6 @@ class AppState extends ChangeNotifier {
     wallet.diamonds -= amount;
     wallet.totalSpent += amount;
     _log(type, -amount, note);
-  }
-
-  void _earn(int amount, String type, String note) {
-    wallet.totalEarned += amount;
-    _log(type, amount, note);
   }
 
   void _log(String type, int amount, String note) {
