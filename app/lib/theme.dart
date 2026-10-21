@@ -1,92 +1,94 @@
 import 'package:flutter/material.dart';
 
+/// v0.3 品牌色直接从应用图标取样：紫 (#7949DD) → 蓝 (#64BAF7)，底色为图标剪影的深海军蓝 (#0C1226)。
+/// 旧字段（paper / ink / primary 等）保留，供尚未移除的工具图鉴页面继续编译。
 class AppColors {
-  static const Color primary = Color(0xFF2E7A58);
-  static const Color primaryDark = Color(0xFF1F5740);
-  static const Color primaryLight = Color(0xFFE8F3ED);
-  static const Color accent = Color(0xFFF5B841);
-  static const Color accentDark = Color(0xFFD99A1F);
+  // —— v0.3 brand ——
+  static const Color bg = Color(0xFF0C1226);
+  static const Color bgDeep = Color(0xFF070B16);
+  static const Color surface = Color(0xFF121A30);
+  static const Color surfaceAlt = Color(0xFF18223C);
+  static const Color surfaceHigh = Color(0xFF202C4A);
+  static const Color stroke = Color(0xFF243050);
+  static const Color strokeSoft = Color(0xFF1B2440);
 
-  static const Color paper = Color(0xFFF5F2E9);
-  static const Color card = Colors.white;
-  static const Color ink = Color(0xFF232E28);
-  static const Color inkSoft = Color(0xFF667061);
-  static const Color inkFaint = Color(0xFF979F90);
-  static const Color line = Color(0xFFE3DECE);
-  static const Color lineStrong = Color(0xFFD3CDBA);
+  static const Color violet = Color(0xFF7949DD);
+  static const Color violetSoft = Color(0xFFA98DF2);
+  static const Color cyan = Color(0xFF64BAF7);
+  static const Color cyanSoft = Color(0xFF9AD4FA);
 
-  static const Color cn = Color(0xFFB4432E);
-  static const Color cnDeep = Color(0xFF9A3623);
-  static const Color cnSoft = Color(0xFFF9EDE6);
+  static const Color text = Color(0xFFE9EFFA);
+  static const Color textSub = Color(0xFFA8B5CD);
+  static const Color textMuted = Color(0xFF6C7B98);
+  static const Color textFaint = Color(0xFF4C5975);
 
-  static const Color os = Color(0xFF33598C);
-  static const Color osDeep = Color(0xFF28466F);
-  static const Color osSoft = Color(0xFFEBF1F8);
+  static const Color ok = Color(0xFF5FD3A6);
+  static const Color warn = Color(0xFFE0A868);
+  static const Color danger = Color(0xFFE07A6E);
+
+  static const LinearGradient brandGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [violet, cyan],
+  );
+
+  static const LinearGradient brandGradientSoft = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF2A2255), Color(0xFF17344A)],
+  );
 }
 
 class AppTheme {
-  static ThemeData get light {
-    return ThemeData(
+  static ThemeData get dark {
+    final base = ThemeData(
       useMaterial3: true,
-      brightness: Brightness.light,
-      colorScheme: const ColorScheme.light(
-        primary: AppColors.primary,
+      brightness: Brightness.dark,
+      colorScheme: const ColorScheme.dark(
+        primary: AppColors.violet,
         onPrimary: Colors.white,
-        secondary: AppColors.accent,
-        onSecondary: AppColors.ink,
-        surface: AppColors.paper,
-        onSurface: AppColors.ink,
-        outline: AppColors.line,
+        secondary: AppColors.cyan,
+        onSecondary: AppColors.bgDeep,
+        surface: AppColors.surface,
+        onSurface: AppColors.text,
+        outline: AppColors.stroke,
       ),
-      scaffoldBackgroundColor: AppColors.paper,
+      scaffoldBackgroundColor: AppColors.bg,
+      splashFactory: InkSparkle.splashFactory,
+    );
+
+    return base.copyWith(
       appBarTheme: const AppBarTheme(
-        backgroundColor: AppColors.paper,
-        foregroundColor: AppColors.ink,
-        elevation: 0,
-        centerTitle: true,
+        backgroundColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
-      ),
-      cardTheme: CardTheme(
-        color: AppColors.card,
         elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      ),
-      inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: AppColors.card,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
-        ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      ),
-      elevatedButtonTheme: ElevatedButtonThemeData(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primary,
-          foregroundColor: Colors.white,
-          elevation: 0,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-        ),
+        foregroundColor: AppColors.text,
+        centerTitle: false,
       ),
       textTheme: const TextTheme(
-        headlineLarge: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: AppColors.ink, height: 1.2),
-        headlineMedium: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.ink, height: 1.3),
-        headlineSmall: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.ink, height: 1.3),
-        titleLarge: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.ink),
-        titleMedium: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: AppColors.ink),
-        bodyLarge: TextStyle(fontSize: 15, color: AppColors.ink, height: 1.6),
-        bodyMedium: TextStyle(fontSize: 14, color: AppColors.inkSoft, height: 1.6),
-        bodySmall: TextStyle(fontSize: 12, color: AppColors.inkFaint, height: 1.5),
+        headlineLarge: TextStyle(fontSize: 28, fontWeight: FontWeight.w700, color: AppColors.text, height: 1.25),
+        headlineMedium: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: AppColors.text, height: 1.3),
+        headlineSmall: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.text, height: 1.35),
+        titleLarge: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.text),
+        titleMedium: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.text),
+        bodyLarge: TextStyle(fontSize: 15, color: AppColors.textSub, height: 1.6),
+        bodyMedium: TextStyle(fontSize: 13.5, color: AppColors.textSub, height: 1.6),
+        bodySmall: TextStyle(fontSize: 12, color: AppColors.textMuted, height: 1.55),
+        labelSmall: TextStyle(fontSize: 10.5, letterSpacing: 0.6, color: AppColors.textMuted),
+      ),
+      dividerTheme: const DividerThemeData(color: AppColors.strokeSoft, thickness: 1, space: 1),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: AppColors.surfaceHigh,
+        contentTextStyle: const TextStyle(color: AppColors.text, fontSize: 13),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: AppColors.surface,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
       ),
     );
   }

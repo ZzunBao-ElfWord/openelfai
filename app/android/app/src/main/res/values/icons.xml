@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 自适应图标底色：与原始图标白色底一致 -->
+    <color name="ic_launcher_background">#FFFFFF</color>
+    <!-- 原生启动页底色：应用深海军蓝 -->
+    <color name="launch_background_color">#070B16</color>
+</resources>

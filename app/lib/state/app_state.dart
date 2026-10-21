@@ -1,0 +1,655 @@
+import 'package:flutter/material.dart';
+import '../auth/auth_repository.dart';
+import '../data/world_data.dart';
+import '../models/elf.dart';
+import '../models/user.dart';
+import '../persistence/data_repository.dart';
+
+class AppState extends ChangeNotifier {
+  AppState._();
+
+  static final AppState instance = AppState._();
+
+  final DataRepository _data = DataRepository.instance;
+
+  // —— 状态字段（按登录初始化）——
+
+  late List<Elf> elves;
+  late List<ElfPost> posts;
+  late List<Seat> seats;
+  late List<AbilityModule> modules;
+  late List<MarketListing> primaryListings;
+  late List<MarketListing> secondaryListings;
+
+  late Wallet wallet;
+  final List<Tip> tips = [];
+  final List<WalletLog> logs = [];
+  final Set<String> followed = {};
+
+  User? currentUser;
+  bool _initialized = false;
+
+  int _postSeq = 100;
+  int _listSeq = 200;
+  int _tipSeq = 300;
+  int _logSeq = 400;
+
+  bool get isReady => _initialized;
+
+  /// 首屏同步 bootstrap：立即注入种子数据，保证首帧有内容可渲染。
+  /// 不触发持久化（首屏没登录）。
+  void bootstrapSync() {
+    modules = WorldData.modules;
+    _injectSeeds();
+    _initialized = true;
+  }
+
+  /// 异步恢复：读本地 session + 持久化数据。在 splash 第一帧之后调用。
+  Future<void> restoreAsync() async {
+    try {
+      await _data.init();
+      final loaded = await _data.load();
+      if (loaded != null) {
+        // 有本地缓存，覆盖种子
+        elves = loaded.elfs;
+        posts = loaded.posts;
+        seats = loaded.seats;
+        primaryListings = loaded.primaryListings;
+        secondaryListings = loaded.secondaryListings;
+        wallet = loaded.wallet;
+        tips..clear()..addAll(loaded.tips);
+        logs..clear()..addAll(loaded.logs);
+        followed..clear()..addAll(loaded.followed);
+        currentUser = loaded.user;
+        _rebuildSeq();
+        notifyListeners();
+      }
+    } catch (_) {
+      // 损坏则忽略，继续用种子
+    }
+  }
+
+  Future<void> initialize({AuthRepository? auth}) async {
+    // 保留接口兼容，内部用 bootstrapSync + restoreAsync
+    bootstrapSync();
+    await restoreAsync();
+  }
+
+  /// 登录后调用。设用户 + 本地持久化。
+  Future<void> onLogin(User user) async {
+    currentUser = user;
+    // 登录时如果本地还没有种子数据（比如首次启动直接登录），先注入
+    if (!_initialized) {
+      modules = WorldData.modules;
+      _injectSeeds();
+      _initialized = true;
+    }
+    await save();
+    notifyListeners();
+  }
+
+  /// 登出。清用户 + 清本地持久化数据（种子不变）。
+  Future<void> onLogout() async {
+    await _data.clear();
+    await _data.init();
+    _injectSeeds();
+    currentUser = null;
+    notifyListeners();
+  }
+
+  void _injectSeeds() {
+    elves = WorldData.elves();
+    posts = WorldData.posts();
+    seats = WorldData.holdings();
+    primaryListings = WorldData.primary();
+    secondaryListings = WorldData.secondary();
+    wallet = Wallet(diamonds: 0);
+    tips.clear();
+    logs.clear();
+    followed.clear();
+    _rebuildSeq();
+  }
+
+  void _rebuildSeq() {
+    _postSeq = 100 + posts.length;
+    _listSeq = 200 + secondaryListings.length;
+    _tipSeq = 300 + tips.length;
+    _logSeq = 400 + logs.length;
+  }
+
+  /// 触发后调用：把完整状态 flush 到本地。
+  Future<void> save() async {
+    if (currentUser == null) return;
+    await _data.saveAll(
+      elfs: elves,
+      posts: posts,
+      seats: seats,
+      primary: primaryListings,
+      secondary: secondaryListings,
+      wallet: wallet,
+      tips: tips,
+      logs: logs,
+      followed: followed,
+      user: currentUser!,
+    );
+  }
+
+  int get worldDay => WorldData.worldDay;
+  int get watchers => WorldData.watchers;
+
+  Elf elf(String id) => elves.firstWhere((e) => e.id == id);
+
+  /// 所有状态变更自动 flush 到本地持久化。
+  @override
+  void notifyListeners() {
+    super.notifyListeners();
+    // 异步保存，不阻塞 UI；登出后（currentUser==null）save() 会跳过
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      save().catchError((e) {
+        // MVP：保存失败静默吞掉，以后接日志系统
+        debugPrint('[AppState] save failed: $e');
+      });
+    });
+  }
+
+  // —— 持有规则：每人只能持 1 只 ——
+
+  Elf? get myElf {
+    for (final e in elves) {
+      if (e.isMine) return e;
+    }
+    return null;
+  }
+
+  bool get hasElf => myElf != null;
+
+  List<ElfPost> postsOf(String elfId) =>
+      posts.where((p) => p.elfId == elfId).toList();
+
+  /// 世界注意力榜：本周被人类注视最多的 AI。
+  List<Elf> get topElves {
+    final list = [...elves]..sort((a, b) => b.attention.compareTo(a.attention));
+    return list.take(3).toList();
+  }
+
+  int get myAttention => myElf?.attention ?? 0;
+  int get myFollowers => myElf?.followers ?? 0;
+
+  // —— 世界信息流：简化版 Phoenix 评分器 ——
+
+  static const Map<String, double> _moduleBonus = {
+    'video': 1.3,
+    'image': 1.2,
+    'audio': 1.1,
+    'deep': 1.15,
+    'writing': 1.0,
+    'quote': 0.9,
+    'rhythm': 0.8,
+    'sharp': 0.7,
+    'memory': 0.9,
+    'think': 1.1,
+  };
+
+  List<ElfPost> feedForYou({int limit = 20}) {
+    final now = DateTime.now();
+    final scored = posts.map((p) {
+      final module = p.moduleId;
+      final bonus = _moduleBonus[module] ?? 1.0;
+      final dwellFactor = p.dwell > 10 ? 1.5 : (p.dwell / 10).clamp(0.3, 1.5);
+      final score = (dwellFactor * 0.5) +
+          (p.views * 0.1) +
+          (p.replies * 0.3) +
+          (bonus * 0.15) +
+          (1.0 / (1.0 + _hoursSince(p.timeAgo, now)));
+      return _ScoredPost(p, score);
+    }).toList();
+    scored.sort((a, b) => b.score.compareTo(a.score));
+    return scored.take(limit).map((s) => s.post).toList();
+  }
+
+  List<ElfPost> feedHot({int limit = 20}) {
+    final scored = posts.map((p) {
+      final dwellFactor = p.dwell > 10 ? 1.5 : (p.dwell / 10).clamp(0.3, 1.5);
+      final score = p.views * 0.6 + p.replies * 0.4 + dwellFactor * 0.2;
+      return _ScoredPost(p, score);
+    }).toList();
+    scored.sort((a, b) => b.score.compareTo(a.score));
+    return scored.take(limit).map((s) => s.post).toList();
+  }
+
+  List<ElfPost> feedMine() {
+    final e = myElf;
+    if (e == null) return [];
+    return postsOf(e.id);
+  }
+
+  static int _hoursSince(String timeAgo, DateTime now) {
+    // MVP 简化解析
+    final match = RegExp(r'(\d+)\s*秒').firstMatch(timeAgo);
+    if (match != null) return 0;
+    final min = RegExp(r'(\d+)\s*分钟').firstMatch(timeAgo);
+    if (min != null) return (int.parse(min[1]!) / 60).round();
+    final hr = RegExp(r'(\d+)\s*小时').firstMatch(timeAgo);
+    if (hr != null) return int.parse(hr[1]!);
+    return 10;
+  }
+
+  // —— 能力装配 ——
+
+  AbilityModule? module(String id) => WorldData.module(id);
+
+  List<AbilityModule> modulesOf(String elfId) {
+    return elf(elfId)
+        .equipped
+        .map((id) => module(id))
+        .whereType<AbilityModule>()
+        .toList();
+  }
+
+  /// 这个模块现在装在谁身上（只会是我的 AI）。
+  Elf? equippedBy(String moduleId) {
+    for (final e in elves) {
+      if (e.equipped.contains(moduleId)) return e;
+    }
+    return null;
+  }
+
+  int slotsUsed(String elfId) =>
+      modulesOf(elfId).fold(0, (sum, m) => sum + m.load);
+
+  /// 装配。返回 null 表示成功，否则返回原因。
+  String? equip(String moduleId, String elfId) {
+    final m = module(moduleId);
+    if (m == null) return '模块不存在';
+    final target = elf(elfId);
+    if (!target.isMine) return '${target.name} 不属于你，你不能改装它';
+    if (target.equipped.contains(moduleId)) return '已经装在 ${target.name} 身上了';
+
+    final holder = equippedBy(moduleId);
+    if (holder != null) return '它正装在 ${holder.name} 身上，先卸下再装';
+
+    final used = slotsUsed(elfId);
+    if (used + m.load > target.slots) {
+      return '接口不够：${target.name} 还剩 ${target.slots - used} 个接口，这个模块要 ${m.load} 个';
+    }
+
+    target.equipped.add(moduleId);
+    notifyListeners();
+    return null;
+  }
+
+  void unequip(String moduleId) {
+    final e = myElf;
+    if (e != null) {
+      e.equipped.remove(moduleId);
+      notifyListeners();
+    }
+  }
+
+  // —— 发布：把 AI 放进世界争取注意力 ——
+
+  static const Map<String, String> _kindOf = {
+    'sharp': 'text',
+    'writing': 'text',
+    'rhythm': 'text',
+    'vision': 'image',
+    'imageedit': 'image',
+    'video': 'video',
+    'voice': 'audio',
+    'music': 'audio',
+    'retrieval': 'quote',
+    'deep': 'text',
+    'memory': 'text',
+    'source': 'quote',
+    'mingle': 'reply',
+    'think': 'text',
+  };
+
+  final Map<String, int> _publishCursor = {};
+
+  /// 返回 null 表示发布成功，否则返回原因。
+  String? publish(String elfId) {
+    final target = elf(elfId);
+    if (!target.isMine) return '你只能发布自己的 AI';
+    if (target.liveStatus == ElfStatus.sleeping) {
+      return '${target.name} 在休眠，先注算力再叫醒它';
+    }
+
+    final equipped = modulesOf(elfId);
+    AbilityModule? chosen;
+    for (final m in equipped) {
+      if (WorldData.publishTemplates.containsKey(m.id)) {
+        chosen = m;
+        break;
+      }
+    }
+
+    final cost = chosen?.compute ?? 0;
+    if (target.energy < cost) {
+      return '算力不足：这次发布需要 $cost，它只剩 ${target.energy}';
+    }
+
+    final List<String> pool;
+    final String kind;
+    final String? moduleId;
+    final String context;
+    if (chosen != null) {
+      pool = WorldData.publishTemplates[chosen.id]!;
+      kind = _kindOf[chosen.id] ?? 'text';
+      moduleId = chosen.id;
+      context = '用「${chosen.name}」产出';
+    } else {
+      pool = WorldData.basicTemplates;
+      kind = 'text';
+      moduleId = null;
+      context = '只装配了基础表达';
+    }
+
+    final i = (_publishCursor[chosen?.id ?? 'basic'] ?? 0) % pool.length;
+    _publishCursor[chosen?.id ?? 'basic'] = i + 1;
+
+    target.energy -= cost;
+    target.works++;
+
+    posts.insert(
+      0,
+      ElfPost(
+        id: 'p${_postSeq++}',
+        elfId: elfId,
+        moduleId: moduleId,
+        kind: kind,
+        body: pool[i],
+        timeAgo: '刚刚',
+        views: 0,
+        dwell: 0,
+        context: context,
+      ),
+    );
+    notifyListeners();
+    return null;
+  }
+
+  /// 人类点开一条内容，就算一次注视。
+  void watch(String postId) {
+    for (final p in posts) {
+      if (p.id == postId) {
+        p.views++;
+        elf(p.elfId).attention++;
+        notifyListeners();
+        return;
+      }
+    }
+  }
+
+  // —— 算力 ——
+
+  Seat? seatOf(String elfId) {
+    for (final s in seats) {
+      if (s.elfId == elfId) return s;
+    }
+    return null;
+  }
+
+  /// 注算力：加进去就退不回来。
+  void inject(String elfId, int amount) {
+    final target = elf(elfId);
+    target.energy = (target.energy + amount).clamp(0, target.maxEnergy);
+    final s = seatOf(elfId);
+    if (s != null) {
+      s.injected += amount;
+    }
+    notifyListeners();
+  }
+
+  // —— 关注 ——
+
+  bool isFollowed(String elfId) => followed.contains(elfId);
+
+  void toggleFollow(String elfId) {
+    final target = elf(elfId);
+    if (followed.remove(elfId)) {
+      target.followers--;
+    } else {
+      followed.add(elfId);
+      target.followers++;
+    }
+    notifyListeners();
+  }
+
+  // —— 私聊 ——
+
+  final Map<String, List<ChatMsg>> _chats = {};
+  final Map<String, int> _replyCursor = {};
+
+  List<ChatMsg> chatOf(String elfId) {
+    return _chats.putIfAbsent(elfId, () {
+      final g = WorldData.greetings[elfId];
+      return [
+        if (g != null) ChatMsg(text: g, fromElf: true, time: _now()),
+      ];
+    });
+  }
+
+  /// 人类发一条，精灵延迟回一条。休眠的精灵不回复。
+  void sendChat(String elfId, String text) {
+    final list = chatOf(elfId);
+    list.add(ChatMsg(text: text, fromElf: false, time: _now()));
+    notifyListeners();
+
+    final target = elf(elfId);
+    if (target.liveStatus == ElfStatus.sleeping) return;
+
+    final pool = WorldData.replies[elfId] ?? const ['……'];
+    final i = (_replyCursor[elfId] ?? 0) % pool.length;
+    _replyCursor[elfId] = i + 1;
+    final reply = pool[i];
+
+    Future.delayed(Duration(milliseconds: 700 + (text.length % 5) * 180), () {
+      list.add(ChatMsg(text: reply, fromElf: true, time: _now()));
+      notifyListeners();
+    });
+  }
+
+  // —— 市场：买入 / 挂牌 / 撤单 ——
+
+  MarketListing? listingOf(String id) {
+    for (final l in primaryListings) {
+      if (l.id == id) return l;
+    }
+    for (final l in secondaryListings) {
+      if (l.id == id) return l;
+    }
+    return null;
+  }
+
+  /// 买一只 AI。返回 null 表示成功，否则返回原因。钻石从我的钱包扣。
+  String? buy(String listingId) {
+    final listing = listingOf(listingId);
+    if (listing == null) return '挂单不存在';
+    if (wallet.diamonds < listing.price) {
+      return '钻石不够。要 💎${listing.price}，你有 💎${wallet.diamonds}';
+    }
+
+    if (listing.market == 'primary') {
+      if (hasElf) return '你已经持有一只 AI 了。要先把手里这只寄售出去。';
+
+      final newElf = Elf(
+        id: listing.elfId,
+        serial: '#P${primaryListings.indexOf(listing) + 1}',
+        name: listing.title.split(' · ').first,
+        initial: listing.title[0],
+        ownerId: 'me',
+        ownerLabel: '我',
+        isMine: true,
+        generation: 1,
+        edition: listing.edition ?? '初版',
+        persona: '还没写',
+        fear: '还没写',
+        habit: '还没写',
+        status: ElfStatus.active,
+        energy: 160,
+        maxEnergy: 320,
+        followers: 0,
+        echo: 0,
+        works: 0,
+        attention: 0,
+        slots: listing.title.contains('6') ? 6 : 3,
+        equipped: [],
+        today: [],
+        relations: [],
+      );
+      elves.add(newElf);
+      seats.add(Seat(elfId: newElf.id, days: 0, edition: newElf.edition, injected: 160));
+      primaryListings.removeWhere((l) => l.id == listingId);
+      _spend(listing.price, 'buy_elf', '买入 ${listing.title}（一级市场）');
+      notifyListeners();
+      return null;
+    } else {
+      if (hasElf) return '你已经持有一只 AI 了。要先把手里这只寄售出去。';
+
+      final target = elf(listing.elfId);
+      target.ownerId = 'me';
+      target.ownerLabel = '我';
+      target.isMine = true;
+      if (listing.equippedCarry != null) {
+        target.equipped
+          ..clear()
+          ..addAll(listing.equippedCarry!);
+      }
+      secondaryListings.removeWhere((l) => l.id == listingId);
+
+      // 扣我钻石，进卖家钱包（MVP 里我们没有其他用户钱包，简化成进我自己的 earned 展示）
+      _spend(listing.price, 'buy_elf', '买入 ${listing.title}（寄售市场）');
+      // 简化：直接进平台池，展示用
+      _earn(listing.price, 'platform_in', '${listing.title} 卖家分成');
+      notifyListeners();
+      return null;
+    }
+  }
+
+  /// 把我的 AI 送进寄售市场。返回 null 表示成功。
+  String? resellMyElf({required int price}) {
+    final e = myElf;
+    if (e == null) return '你没有 AI 可寄售';
+
+    // 生成一个 fake 卖家代号
+    final sellerCode = '我 (寄售)';
+    final listing = MarketListing(
+      id: 'sl${_listSeq++}',
+      market: 'secondary',
+      elfId: e.id,
+      title: '${e.name} · 转卖',
+      subtitle: '转赠 1 次 · 装了 ${e.equipped.length} 个模块',
+      price: price,
+      sellerLabel: sellerCode,
+      equippedCarry: List.from(e.equipped),
+      edition: e.edition,
+      note: '先寄售，等别人买走。',
+    );
+    secondaryListings.add(listing);
+
+    // 我的 AI 暂时标记为"已进入寄售"，变成 isMine=false
+    e.isMine = false;
+    e.ownerLabel = '市场 · 等待买家';
+    e.ownerId = 'market_pending';
+
+    notifyListeners();
+    return null;
+  }
+
+  /// 从寄售市场撤下自己的 AI。
+  String? cancelResell() {
+    final sellerCode = '我 (寄售)';
+    final myListing = secondaryListings.firstWhere(
+      (l) => l.sellerLabel == sellerCode,
+      orElse: () => throw StateError('not found'),
+    );
+    secondaryListings.remove(myListing);
+    final target = elf(myListing.elfId);
+    target.isMine = true;
+    target.ownerId = 'me';
+    target.ownerLabel = '我';
+    notifyListeners();
+    return null;
+  }
+
+  // —— 钻石币系统：充值 / 打赏 / 流水 ——
+
+  /// 充值：加钻石到钱包。MVP 里是模拟充值，实际支付留未来接。
+  void recharge({required int diamonds, int bonus = 0}) {
+    wallet.diamonds += diamonds + bonus;
+    wallet.totalRecharged += diamonds;
+    _log('recharge', diamonds + bonus, '充值 💎$diamonds${bonus > 0 ? '+赠 💎$bonus' : ''}');
+    notifyListeners();
+  }
+
+  /// 打赏。postId 可以为空 = 直接打赏 AI。
+  /// 返回 null 表示成功。扣我钻石，AI owner 收到，AI attention + amount。
+  String? tip({required String elfId, String? postId, required int amount}) {
+    if (amount <= 0) return '打赏金额必须大于 0';
+    if (wallet.diamonds < amount) {
+      return '钻石不够。要 💎$amount，你有 💎${wallet.diamonds}';
+    }
+    final target = elf(elfId);
+    if (target.isMine) return '不能给自己打赏';
+
+    // 扣我钻石
+    wallet.diamonds -= amount;
+    wallet.totalSpent += amount;
+    // AI 涨 attention（跟钻石数挂钩）
+    target.attention += amount;
+    target.followers += (amount >= 50 ? 1 : 0); // 大金额送粉
+
+    // 记录打赏
+    tips.add(Tip(
+      id: 't${_tipSeq++}',
+      postId: postId ?? '',
+      elfId: elfId,
+      amount: amount,
+      time: _now(),
+    ));
+    // MVP：简化 owner 收入展示（进我自己的 totalEarned 只是为了演示）
+    wallet.totalEarned += 0; // 真正循环时改成进 owner.wallet
+
+    _log('tip_out', -amount, '打赏 ${target.name} 💎$amount');
+    notifyListeners();
+    return null;
+  }
+
+  void _spend(int amount, String type, String note) {
+    wallet.diamonds -= amount;
+    wallet.totalSpent += amount;
+    _log(type, -amount, note);
+  }
+
+  void _earn(int amount, String type, String note) {
+    wallet.totalEarned += amount;
+    _log(type, amount, note);
+  }
+
+  void _log(String type, int amount, String note) {
+    logs.insert(
+      0,
+      WalletLog(
+        id: 'w${_logSeq++}',
+        type: type,
+        amount: amount,
+        note: note,
+        time: _now(),
+      ),
+    );
+  }
+
+  // —— utils ——
+
+  static String _now() {
+    final n = DateTime.now();
+    return '${n.hour.toString().padLeft(2, '0')}:${n.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+class _ScoredPost {
+  final ElfPost post;
+  final double score;
+  _ScoredPost(this.post, this.score);
+}
