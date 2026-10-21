@@ -1,12 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../auth/auth_factory.dart';
-import '../models/user.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'home_shell.dart';
 
-/// 登录页：手机号 + 验证码。MVP 验证码固定 1234。
+/// 登录页：手机号 + 短信验证码（服务端下发）。
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -19,10 +20,12 @@ class _LoginPageState extends State<LoginPage> {
   final _codeCtrl = TextEditingController();
   bool _loading = false;
   bool _sending = false;
-  int _debugTaps = 0;
+  int _countdown = 0;
+  Timer? _timer;
 
   @override
   void dispose() {
+    _timer?.cancel();
     _phoneCtrl.dispose();
     _codeCtrl.dispose();
     super.dispose();
@@ -33,7 +36,7 @@ class _LoginPageState extends State<LoginPage> {
     return p.length == 11 && RegExp(r'^1\d{10}$').hasMatch(p);
   }
 
-  bool get _codeOk => _codeCtrl.text.trim().length >= 4;
+  bool get _codeOk => _codeCtrl.text.trim().length == 6;
 
   Future<void> _sendCode() async {
     if (!_phoneOk) {
@@ -42,17 +45,20 @@ class _LoginPageState extends State<LoginPage> {
       );
       return;
     }
+    if (_sending || _countdown > 0) return;
+
     setState(() => _sending = true);
     try {
-      final code = await createAuth(useRemote: true).sendCode(_phoneCtrl.text.trim());
+      await createAuth().sendCode(_phoneCtrl.text.trim());
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('验证码已发送。MVP 固定码：$code'),
+          content: const Text('验证码已发送，请查看短信'),
           backgroundColor: AppColors.violet,
-          duration: const Duration(seconds: 4),
+          duration: const Duration(seconds: 3),
         ),
       );
+      _startCountdown();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -61,6 +67,23 @@ class _LoginPageState extends State<LoginPage> {
     } finally {
       if (mounted) setState(() => _sending = false);
     }
+  }
+
+  void _startCountdown() {
+    _timer?.cancel();
+    setState(() => _countdown = 60);
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_countdown <= 1) {
+        timer.cancel();
+        setState(() => _countdown = 0);
+      } else {
+        setState(() => _countdown -= 1);
+      }
+    });
   }
 
   Future<void> _login() async {
@@ -78,7 +101,7 @@ class _LoginPageState extends State<LoginPage> {
     }
     setState(() => _loading = true);
     try {
-      final user = await createAuth(useRemote: true).loginWithCode(
+      final user = await createAuth().loginWithCode(
         phone: _phoneCtrl.text.trim(),
         code: _codeCtrl.text.trim(),
       );
@@ -113,77 +136,47 @@ class _LoginPageState extends State<LoginPage> {
             padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
             child: Column(
               children: [
-                // Logo + 标题（调试：连点 3 次跳过验证码）
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () async {
-                    _debugTaps++;
-                    if (_debugTaps >= 3) {
-                      _debugTaps = 0;
-                      final debugUser = User(
-                        id: 'u_13800138000',
-                        phone: '13800138000',
-                        nickname: '用户8000',
-                        avatarInitial: '用',
-                        createdAt: DateTime.now(),
-                      );
-                      await AppState.instance.onLogin(debugUser);
-                      if (!mounted) return;
-                      Navigator.of(context).pushReplacement(
-                        PageRouteBuilder(
-                          transitionDuration: const Duration(milliseconds: 360),
-                          pageBuilder: (_, __, ___) => const HomeShell(),
-                          transitionsBuilder: (_, a, __, c) =>
-                              FadeTransition(opacity: a, child: c),
-                        ),
-                      );
-                    }
-                  },
-                  child: Column(
-                    children: [
-                      const SizedBox(height: 40),
-                      Container(
-                        width: 88,
-                        height: 88,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(44),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.violet.withOpacity(0.34),
-                              blurRadius: 38,
-                              offset: const Offset(0, 12),
-                            ),
-                          ],
-                        ),
-                        child: Image.asset(
-                          'assets/brand/app_icon.png',
-                          fit: BoxFit.cover,
-                        ),
+                // Logo + 标题
+                const SizedBox(height: 40),
+                Container(
+                  width: 88,
+                  height: 88,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(44),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.violet.withOpacity(0.34),
+                        blurRadius: 38,
+                        offset: const Offset(0, 12),
                       ),
-                      const SizedBox(height: 22),
-                      ShaderMask(
-                        blendMode: BlendMode.srcIn,
-                        shaderCallback: (rect) =>
-                            AppColors.brandGradient.createShader(rect),
-                        child: const Text(
-                          'OpenElf',
-                          style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                            letterSpacing: 2,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      const Text(
-                        '我的 AI，我做主',
-                        style: TextStyle(fontSize: 12, color: AppColors.textSub),
-                      ),
-                      const SizedBox(height: 40),
                     ],
                   ),
+                  child: Image.asset(
+                    'assets/brand/app_icon.png',
+                    fit: BoxFit.cover,
+                  ),
                 ),
+                const SizedBox(height: 22),
+                ShaderMask(
+                  blendMode: BlendMode.srcIn,
+                  shaderCallback: (rect) =>
+                      AppColors.brandGradient.createShader(rect),
+                  child: const Text(
+                    'OpenElf',
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  '我的 AI，我做主',
+                  style: TextStyle(fontSize: 12, color: AppColors.textSub),
+                ),
+                const SizedBox(height: 40),
 
                 // 手机号
                 TextField(
@@ -250,16 +243,22 @@ class _LoginPageState extends State<LoginPage> {
                       width: 120,
                       height: 48,
                       child: ElevatedButton(
-                        onPressed: _sending ? null : _sendCode,
+                        onPressed: (_sending || _countdown > 0) ? null : _sendCode,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.violet.withOpacity(0.25),
                           foregroundColor: AppColors.violetSoft,
                           elevation: 0,
+                          padding: EdgeInsets.zero,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10),
                           ),
                         ),
-                        child: Text(_sending ? '发送中…' : '发送验证码', style: const TextStyle(fontSize: 12)),
+                        child: Text(
+                          _sending
+                              ? '发送中…'
+                              : (_countdown > 0 ? '${_countdown}s 后重发' : '发送验证码'),
+                          style: const TextStyle(fontSize: 12),
+                        ),
                       ),
                     ),
                   ],

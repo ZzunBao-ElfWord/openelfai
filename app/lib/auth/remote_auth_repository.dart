@@ -1,148 +1,297 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
+
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../config/api_config.dart';
 import '../models/user.dart';
 import 'auth_repository.dart';
 
-/// 真实后端实现。HTTP + JSON + Bearer token。
-/// 接口格式以 [ApiConfig] 里的 path 为准，按你的后端实际 API 调整。
+/// 服务端认证实现：短信验证码登录 + access/refresh 双令牌。
+/// 令牌存放在 Android Keystore 加密存储，用户资料缓存在 shared_preferences。
 class RemoteAuthRepository implements AuthRepository {
   RemoteAuthRepository._();
+
   static final RemoteAuthRepository instance = RemoteAuthRepository._();
 
-  static const _kToken = 'openelf.token';
   static const _kUserCache = 'openelf.user';
+  static const _kDeviceId = 'openelf.deviceId';
+  static const _kAccessToken = 'openelf.accessToken';
+  static const _kRefreshToken = 'openelf.refreshToken';
+
+  final FlutterSecureStorage _secure = const FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
 
   http.Client? _client;
+  Future<bool>? _refreshing;
+
   http.Client get _http => _client ??= http.Client();
 
-  Future<SharedPreferences> get _p async => SharedPreferences.getInstance();
-
-  Future<String?> get _token async => (await _p).getString(_kToken);
+  Future<SharedPreferences> get _prefs async => SharedPreferences.getInstance();
 
   @override
   Future<User?> get currentUser async {
-    final raw = (await _p).getString(_kUserCache);
+    final raw = (await _prefs).getString(_kUserCache);
     if (raw == null) return null;
     try {
-      return User.fromJson(Map<String, dynamic>.from(jsonDecode(raw)));
-    } catch (_) {
-      return null;
+      final json = jsonDecode(raw);
+      if (json is Map<String, dynamic>) return User.fromJson(json);
+    } catch (_) {}
+    return null;
+  }
+
+  @override
+  Future<User?> restoreSession() async {
+    final accessToken = await _secure.read(key: _kAccessToken);
+    final refreshToken = await _secure.read(key: _kRefreshToken);
+
+    if (accessToken == null || refreshToken == null) return null;
+
+    try {
+      final body = await _get(ApiConfig.mePath, accessToken: accessToken);
+      final user = _parseUser(body['user'], await currentUser);
+      await _cacheUser(user);
+      return user;
+    } on AuthException catch (error) {
+      // 网络不可用时允许使用本地缓存的登录态，保证离线可进入。
+      if (error.code == 'NETWORK_ERROR') return currentUser;
+
+      if (_isUnauthorized(error.code)) {
+        final refreshed = await _refreshSession();
+        return refreshed ? currentUser : null;
+      }
+
+      return currentUser;
     }
   }
 
   @override
-  Future<void> logout() async {
-    final p = await _p;
-    await p.remove(_kToken);
-    await p.remove(_kUserCache);
-  }
-
-  @override
-  Future<String> sendCode(String phone) async {
-    final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.sendCodePath}');
-    final resp = await _http
-        .post(
-          uri,
-          headers: ApiConfig.jsonHeaders,
-          body: jsonEncode({'phone': phone}),
-        )
-        .timeout(ApiConfig.timeout);
-
-    if (resp.statusCode >= 200 && resp.statusCode < 300) {
-      final body = _parseBody(resp);
-      // 后端可能直接返回 code，也可能返回 {data: "1234"}
-      final dynamic data = body['data'] ?? body['code'] ?? body;
-      if (data is String && data.isNotEmpty) return data;
-      // MVP 兜底：后端没返回 code 就返回占位（调试用）
-      return '1234';
-    }
-    throw _err('发送验证码失败', resp);
+  Future<void> sendCode(String phone) async {
+    await _post(ApiConfig.sendCodePath, {'phone': phone});
   }
 
   @override
   Future<User> loginWithCode({required String phone, required String code}) async {
-    final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.loginByCodePath}');
-    final resp = await _http
-        .post(
-          uri,
-          headers: ApiConfig.jsonHeaders,
-          body: jsonEncode({'phone': phone, 'code': code}),
-        )
-        .timeout(ApiConfig.timeout);
+    final deviceId = await _deviceId();
+    final body = await _post(ApiConfig.loginByCodePath, {
+      'phone': phone,
+      'code': code,
+      'deviceId': deviceId,
+    });
 
-    if (resp.statusCode >= 200 && resp.statusCode < 300) {
-      final body = _parseBody(resp);
+    final accessToken = body['accessToken'];
+    final refreshToken = body['refreshToken'];
+    if (accessToken is! String || refreshToken is! String) {
+      throw const AuthException('INVALID_RESPONSE', '登录响应异常，请稍后重试');
+    }
 
-      // 取 token（放 Authorization: Bearer xxx，或 data.token）
-      final dynamic token = body['token'] ?? body['data']?['token'];
-      if (token != null && token is String && token.isNotEmpty) {
-        await (await _p).setString(_kToken, token);
+    final user = _parseUser(body['user'], await currentUser, fallbackPhone: phone);
+    await _saveSession(accessToken, refreshToken, user);
+    return user;
+  }
+
+  @override
+  Future<void> logout() async {
+    final accessToken = await _secure.read(key: _kAccessToken);
+    final refreshToken = await _secure.read(key: _kRefreshToken);
+
+    if (accessToken != null || refreshToken != null) {
+      try {
+        await _post(
+          ApiConfig.logoutPath,
+          {'refreshToken': refreshToken ?? ''},
+          accessToken: accessToken,
+        );
+      } on AuthException {
+        // 网络失败也要清本地，避免用户卡在已登录态。
+      }
+    }
+
+    await _clearSession();
+  }
+
+  // —— 会话续期（单飞：并发请求只刷新一次）——
+
+  Future<bool> _refreshSession() {
+    final pending = _refreshing;
+    if (pending != null) return pending;
+
+    final future = _doRefresh();
+    _refreshing = future;
+    return future.whenComplete(() => _refreshing = null);
+  }
+
+  Future<bool> _doRefresh() async {
+    final refreshToken = await _secure.read(key: _kRefreshToken);
+    if (refreshToken == null) return false;
+
+    final deviceId = await _deviceId();
+
+    try {
+      final body = await _post(ApiConfig.refreshPath, {
+        'refreshToken': refreshToken,
+        'deviceId': deviceId,
+      });
+
+      final accessToken = body['accessToken'];
+      final newRefreshToken = body['refreshToken'];
+      if (accessToken is! String || newRefreshToken is! String) {
+        await _clearSession();
+        return false;
       }
 
-      // 取 user
-      final dynamic userJson = body['user'] ?? body['data']?['user'] ?? body['data'];
-      final user = _parseUser(userJson, phone);
-      await (await _p).setString(_kUserCache, jsonEncode(user.toJson()));
-      return user;
+      final user = _parseUser(body['user'], await currentUser);
+      await _saveSession(accessToken, newRefreshToken, user);
+      return true;
+    } on AuthException catch (error) {
+      if (error.code != 'NETWORK_ERROR') {
+        await _clearSession();
+      }
+      return false;
     }
-    throw _err('登录失败', resp);
   }
 
-  // —— helpers ——
+  // —— HTTP ——
 
-  Map<String, dynamic> _parseBody(http.Response resp) {
+  Future<Map<String, dynamic>> _get(String path, {String? accessToken}) async {
+    final uri = Uri.parse('${ApiConfig.baseUrl}$path');
+    http.Response response;
+
     try {
-      final d = jsonDecode(resp.body);
-      if (d is Map<String, dynamic>) return d;
-    } catch (_) {}
-    return {};
+      response = await _http
+          .get(uri, headers: _headers(accessToken: accessToken))
+          .timeout(ApiConfig.timeout);
+    } on TimeoutException {
+      throw const AuthException('NETWORK_ERROR', '网络超时，请稍后重试');
+    } on http.ClientException {
+      throw const AuthException('NETWORK_ERROR', '网络连接失败，请检查网络');
+    } catch (_) {
+      throw const AuthException('NETWORK_ERROR', '网络连接失败，请检查网络');
+    }
+
+    return _decode(response);
   }
 
-  User _parseUser(dynamic raw, String fallbackPhone) {
+  Future<Map<String, dynamic>> _post(
+    String path,
+    Map<String, dynamic> body, {
+    String? accessToken,
+  }) async {
+    final uri = Uri.parse('${ApiConfig.baseUrl}$path');
+    http.Response response;
+
+    try {
+      response = await _http
+          .post(
+            uri,
+            headers: _headers(accessToken: accessToken),
+            body: jsonEncode(body),
+          )
+          .timeout(ApiConfig.timeout);
+    } on TimeoutException {
+      throw const AuthException('NETWORK_ERROR', '网络超时，请稍后重试');
+    } on http.ClientException {
+      throw const AuthException('NETWORK_ERROR', '网络连接失败，请检查网络');
+    } catch (_) {
+      throw const AuthException('NETWORK_ERROR', '网络连接失败，请检查网络');
+    }
+
+    return _decode(response);
+  }
+
+  Map<String, String> _headers({String? accessToken}) => {
+        ...ApiConfig.jsonHeaders,
+        if (accessToken != null && accessToken.isNotEmpty) 'Authorization': 'Bearer $accessToken',
+      };
+
+  Map<String, dynamic> _decode(http.Response response) {
+    Map<String, dynamic> body = {};
+    try {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map<String, dynamic>) body = decoded;
+    } catch (_) {}
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return body;
+    }
+
+    final error = body['error'];
+    if (error is Map) {
+      throw AuthException(
+        (error['code'] ?? 'UNKNOWN').toString(),
+        (error['message'] ?? '请求失败').toString(),
+      );
+    }
+
+    throw AuthException('HTTP_${response.statusCode}', '请求失败，请稍后重试');
+  }
+
+  // —— 持久化 ——
+
+  Future<void> _saveSession(String accessToken, String refreshToken, User user) async {
+    await _secure.write(key: _kAccessToken, value: accessToken);
+    await _secure.write(key: _kRefreshToken, value: refreshToken);
+    await _cacheUser(user);
+  }
+
+  Future<void> _cacheUser(User user) async {
+    await (await _prefs).setString(_kUserCache, jsonEncode(user.toJson()));
+  }
+
+  Future<void> _clearSession() async {
+    await _secure.delete(key: _kAccessToken);
+    await _secure.delete(key: _kRefreshToken);
+    await (await _prefs).remove(_kUserCache);
+  }
+
+  Future<String> _deviceId() async {
+    final prefs = await _prefs;
+    final existing = prefs.getString(_kDeviceId);
+    if (existing != null && existing.length >= 8) return existing;
+
+    final random = Random.secure();
+    const chars = '0123456789abcdef';
+    final id = List.generate(32, (_) => chars[random.nextInt(chars.length)]).join();
+    await prefs.setString(_kDeviceId, id);
+    return id;
+  }
+
+  bool _isUnauthorized(String code) =>
+      code == 'UNAUTHORIZED' || code == 'SESSION_EXPIRED' || code == 'SESSION_REVOKED';
+
+  User _parseUser(dynamic raw, User? cached, {String fallbackPhone = ''}) {
     if (raw is Map<String, dynamic>) {
-      final id = raw['id']?.toString() ?? raw['uid']?.toString() ?? raw['userId']?.toString() ?? '';
-      final nickname = raw['nickname']?.toString() ?? raw['name']?.toString() ?? raw['username']?.toString() ?? '';
-      final phone = raw['phone']?.toString() ?? raw['mobile']?.toString() ?? fallbackPhone;
-      final avatar = raw['avatarInitial']?.toString() ??
-          raw['nickname']?.toString()?.substring(0, 1) ??
-          '用';
-      final createdAtStr = raw['createdAt']?.toString() ??
-          raw['created_at']?.toString() ??
-          raw['registerTime']?.toString();
+      final id = raw['id']?.toString() ?? '';
+      final phone = raw['phone']?.toString() ?? cached?.phone ?? fallbackPhone;
+      final nickname = raw['nickname']?.toString() ??
+          (phone.length >= 4 ? '用户${phone.substring(phone.length - 4)}' : '用户');
+      final avatar = raw['avatarInitial']?.toString() ?? (nickname.isEmpty ? '用' : nickname[0]);
+      final createdAtStr = raw['createdAt']?.toString();
       final createdAt = createdAtStr != null
           ? DateTime.tryParse(createdAtStr) ?? DateTime.now()
           : DateTime.now();
+
       return User(
-        id: id,
+        id: id.isEmpty ? (cached?.id ?? '') : id,
         phone: phone,
-        nickname: nickname.isEmpty ? '用户${phone.substring(phone.length - 4)}' : nickname,
+        nickname: nickname,
         avatarInitial: avatar.isEmpty ? '用' : avatar,
         createdAt: createdAt,
       );
     }
-    // 后端只返回一个 id 或字符串的兜底
+
+    if (cached != null) return cached;
+
     return User(
-      id: raw?.toString() ?? 'local_${fallbackPhone.substring(fallbackPhone.length - 4)}',
+      id: '',
       phone: fallbackPhone,
-      nickname: '用户${fallbackPhone.substring(fallbackPhone.length - 4)}',
+      nickname: fallbackPhone.length >= 4 ? '用户${fallbackPhone.substring(fallbackPhone.length - 4)}' : '用户',
       avatarInitial: '用',
       createdAt: DateTime.now(),
     );
-  }
-
-  Exception _err(String prefix, http.Response resp) {
-    String detail;
-    try {
-      final body = _parseBody(resp);
-      detail = body['message']?.toString() ??
-          body['error']?.toString() ??
-          body['msg']?.toString() ??
-          resp.body;
-    } catch (_) {
-      detail = resp.body;
-    }
-    return Exception('$prefix (HTTP ${resp.statusCode}): $detail');
   }
 }

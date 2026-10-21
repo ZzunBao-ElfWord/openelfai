@@ -42,7 +42,7 @@ class SplashScreen extends StatefulWidget {
 class _SplashScreenState extends State<SplashScreen> {
   bool _show = false;
   bool _done = false;
-  Widget? _next;
+  bool _navigated = false;
 
   @override
   void initState() {
@@ -52,42 +52,46 @@ class _SplashScreenState extends State<SplashScreen> {
     Future.delayed(const Duration(milliseconds: 120), () {
       if (mounted) setState(() => _show = true);
     });
-    // —— 异步：恢复本地 session + 持久化数据 ——
-    _asyncRestore();
-    Future.delayed(const Duration(milliseconds: 1400), _enter);
+    _boot();
   }
 
-  Future<void> _asyncRestore() async {
+  /// 恢复本地数据与服务端会话，保证 splash 至少展示 1.4s 后只导航一次。
+  Future<void> _boot() async {
+    final startedAt = DateTime.now();
+    Widget next = const LoginPage();
+
     try {
       await AppState.instance.restoreAsync();
-      final auth = createAuth(useRemote: true);
-      final user = await auth.currentUser;
-      if (user != null && AppState.instance.currentUser == null) {
-        AppState.instance.currentUser = user;
+      final user = await createAuth().restoreSession();
+      if (user != null) {
+        await AppState.instance.onLogin(user);
+        next = const HomeShell();
+      } else {
+        // 令牌无效：清掉本地缓存的登录态
+        AppState.instance.currentUser = null;
       }
-      _next = user != null ? const HomeShell() : const LoginPage();
     } catch (_) {
       // 初始化失败也别卡 splash，按未登录处理
-      _next = const LoginPage();
+      next = const LoginPage();
     }
-  }
 
-  void _enter() {
-    if (!mounted) return;
-    // 如果 _asyncRestore 还没跑完（比如 slow device），默认进 LoginPage
-    _next ??= const LoginPage();
+    final elapsed = DateTime.now().difference(startedAt);
+    final remain = const Duration(milliseconds: 1400) - elapsed;
+    if (remain > Duration.zero) {
+      await Future.delayed(remain);
+    }
+
+    if (!mounted || _navigated) return;
+    _navigated = true;
     setState(() => _done = true);
-    Future.delayed(const Duration(milliseconds: 420), () {
-      if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        PageRouteBuilder(
-          transitionDuration: const Duration(milliseconds: 420),
-          pageBuilder: (_, __, ___) => _next!,
-          transitionsBuilder: (_, animation, __, child) =>
-              FadeTransition(opacity: animation, child: child),
-        ),
-      );
-    });
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        transitionDuration: const Duration(milliseconds: 420),
+        pageBuilder: (_, __, ___) => next,
+        transitionsBuilder: (_, animation, __, child) =>
+            FadeTransition(opacity: animation, child: child),
+      ),
+    );
   }
 
   @override
@@ -95,71 +99,66 @@ class _SplashScreenState extends State<SplashScreen> {
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: AppBackground(
-        child: GestureDetector(
-          onTap: _done ? () {
-            if (_next != null) _enter();
-          } : null,
-          child: Center(
-            child: AnimatedOpacity(
-              opacity: _show ? 1 : 0,
-              duration: const Duration(milliseconds: 520),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 82,
-                    height: 82,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(41),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.violet.withOpacity(0.34),
-                          blurRadius: 38,
-                          offset: const Offset(0, 12),
-                        ),
-                      ],
-                    ),
-                    child: Image.asset(
-                      'assets/brand/app_icon.png',
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                  const SizedBox(height: 26),
-                  ShaderMask(
-                    blendMode: BlendMode.srcIn,
-                    shaderCallback: (rect) =>
-                        AppColors.brandGradient.createShader(rect),
-                    child: const Text(
-                      'OpenElf',
-                      style: TextStyle(
-                        fontSize: 30,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                        letterSpacing: 2.4,
+        child: Center(
+          child: AnimatedOpacity(
+            opacity: _show ? 1 : 0,
+            duration: const Duration(milliseconds: 520),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 82,
+                  height: 82,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(41),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.violet.withOpacity(0.34),
+                        blurRadius: 38,
+                        offset: const Offset(0, 12),
                       ),
-                    ),
+                    ],
                   ),
-                  const SizedBox(height: 10),
-                  const Text(
-                    '我的 AI，我做主',
+                  child: Image.asset(
+                    'assets/brand/app_icon.png',
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                const SizedBox(height: 26),
+                ShaderMask(
+                  blendMode: BlendMode.srcIn,
+                  shaderCallback: (rect) =>
+                      AppColors.brandGradient.createShader(rect),
+                  child: const Text(
+                    'OpenElf',
                     style: TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textSub,
-                      letterSpacing: 3,
+                      fontSize: 30,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      letterSpacing: 2.4,
                     ),
                   ),
-                  const SizedBox(height: 30),
-                  if (!_done)
-                    const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 1.8,
-                        color: AppColors.cyan,
-                      ),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  '我的 AI，我做主',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSub,
+                    letterSpacing: 3,
+                  ),
+                ),
+                const SizedBox(height: 30),
+                if (!_done)
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 1.8,
+                      color: AppColors.cyan,
                     ),
-                ],
-              ),
+                  ),
+              ],
             ),
           ),
         ),

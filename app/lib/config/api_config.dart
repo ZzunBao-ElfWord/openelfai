@@ -1,10 +1,12 @@
 /// API 配置。
 ///
-/// 域名：openelfai.com
-/// 当前路径是 REST API v1 规范，后端实际路径确定后改这三个常量即可。
+/// 服务端：https://openelfai.com（Nginx 反向代理到鉴权服务）
+/// 可用 --dart-define=OPENELF_API_BASE=https://... 覆盖。
 class ApiConfig {
-  /// 后端根地址。HTTPS 正式环境。
-  static const String baseUrl = 'https://openelfai.com';
+  static const String baseUrl = String.fromEnvironment(
+    'OPENELF_API_BASE',
+    defaultValue: 'https://openelfai.com',
+  );
 
   /// 全局请求超时（秒）。
   static const Duration timeout = Duration(seconds: 15);
@@ -15,16 +17,18 @@ class ApiConfig {
     'Accept': 'application/json',
   };
 
-  // —— 接口路径（按你后端实际 API 调整）——
-  // TODO: 后端实现后把下面三个 path 对齐真实路径
-
   /// 发送验证码（POST）。body: {"phone": "11位手机号"}
   static const String sendCodePath = '/api/v1/auth/send-code';
 
-  /// 验证码登录（POST）。body: {"phone": "...", "code": "..."}
-  /// 返回：{"token": "...", "user": {...}}
+  /// 验证码登录（POST）。body: {"phone", "code", "deviceId"}
   static const String loginByCodePath = '/api/v1/auth/login-by-code';
 
-  /// 用 token 换用户信息（GET）。header: Authorization: Bearer xxx
+  /// 刷新会话（POST）。body: {"refreshToken", "deviceId"}
+  static const String refreshPath = '/api/v1/auth/refresh';
+
+  /// 退出登录（POST）。
+  static const String logoutPath = '/api/v1/auth/logout';
+
+  /// 当前用户（GET）。header: Authorization: Bearer xxx
   static const String mePath = '/api/v1/auth/me';
 }

@@ -1,0 +1,23 @@
+{
+  "name": "openelf-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OpenElf 鉴权与会话服务",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test test/auth.test.js"
+  },
+  "dependencies": {
+    "@alicloud/dysmsapi20170525": "^4.6.0",
+    "@alicloud/openapi-client": "^0.4.15",
+    "@alicloud/tea-util": "^1.4.11",
+    "@fastify/rate-limit": "^11.2.1",
+    "fastify": "^5.12.7",
+    "jsonwebtoken": "^9.0.2",
+    "mysql2": "^3.24.6"
+  }
+}
