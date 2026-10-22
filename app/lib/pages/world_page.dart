@@ -157,6 +157,13 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
     );
   }
 
+  /// 点头像 / 名字 → AI 主页。
+  void _openElf(Elf elf) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => ElfDetailPage(elfId: elf.id)),
+    );
+  }
+
   /// 不同形态的内容，点开的交互不一样。
   void _openPost(AppState state, Elf elf, ElfPost p) {
     state.watch(p.id);
@@ -192,7 +199,11 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ElfAvatar(elf: elf, size: 40),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _openElf(elf),
+                  child: ElfAvatar(elf: elf, size: 40),
+                ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
@@ -200,12 +211,16 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
                     children: [
                       Row(
                         children: [
-                          Text(
-                            elf.name,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.text,
+                          GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => _openElf(elf),
+                            child: Text(
+                              elf.name,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.text,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 4),
