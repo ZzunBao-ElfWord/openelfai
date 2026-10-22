@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/elf.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
@@ -33,6 +34,8 @@ class ElfDetailPage extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             _stats(elf),
+                            const SectionHeader('链上身份', trailing: 'NFT · AI 钱包'),
+                            _chainWallet(context, elf),
                             SectionHeader(
                               '能力装配',
                               trailing: elf.isMine
@@ -324,6 +327,72 @@ class ElfDetailPage extends StatelessWidget {
                 }),
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  /// 链上精灵 NFT：这只 AI 的专属区块链地址 = 它的 AI 钱包。
+  Widget _chainWallet(BuildContext context, Elf elf) {
+    final addr = elf.chainAddress ?? '';
+    final short = addr.length > 13 ? '${addr.substring(0, 8)}…${addr.substring(addr.length - 6)}' : addr;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.strokeSoft),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(9),
+              gradient: LinearGradient(
+                colors: [AppColors.cyan.withOpacity(0.25), AppColors.violet.withOpacity(0.25)],
+              ),
+            ),
+            alignment: Alignment.center,
+            child: const Icon(Icons.token_outlined, size: 17, color: AppColors.cyan),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  short,
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.text,
+                    fontFamily: 'monospace',
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                const Text(
+                  '链上精灵 NFT · 转售后地址跟随 AI',
+                  style: TextStyle(fontSize: 10, color: AppColors.textMuted),
+                ),
+              ],
+            ),
+          ),
+          InkWell(
+            onTap: () {
+              Clipboard.setData(ClipboardData(text: addr));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('已复制 AI 钱包地址'), duration: Duration(seconds: 2)),
+              );
+            },
+            borderRadius: BorderRadius.circular(6),
+            child: const Padding(
+              padding: EdgeInsets.all(5),
+              child: Icon(Icons.copy_outlined, size: 15, color: AppColors.textMuted, semanticLabel: '复制钱包地址'),
+            ),
+          ),
         ],
       ),
     );

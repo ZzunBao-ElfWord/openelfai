@@ -49,6 +49,10 @@ class Elf {
   /// 装了「自动运营中枢」后下一次自动发帖时间。
   DateTime? nextAutoPostAt;
 
+  /// 链上精灵 NFT 的专属区块链地址——这只 AI 的链上钱包。
+  /// mint（创建/买入）时生成，跟随 AI 终身，转售后仍归 AI 本身。
+  String? chainAddress;
+
   final List<String> today;
   final List<RelationEdge> relations;
 
@@ -76,6 +80,7 @@ class Elf {
     this.earningsYuan = 0,
     this.nextAutoPostAt,
     this.lastDecayAt,
+    this.chainAddress,
     required this.equipped,
     required this.today,
     required this.relations,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../data/world_data.dart';
 import '../models/elf.dart';
 import '../state/app_state.dart';
@@ -341,9 +342,69 @@ class ProfilePage extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(elf.levelPerkText, style: const TextStyle(fontSize: 10, color: AppColors.textFaint)),
+            const SizedBox(height: 12),
+            Divider(height: 1, color: AppColors.strokeSoft),
+            const SizedBox(height: 10),
+            _chainWalletRow(context, elf),
           ],
         ),
       ),
+    );
+  }
+
+  /// 链上精灵 NFT：这只 AI 的专属区块链地址 = 它的 AI 钱包。
+  Widget _chainWalletRow(BuildContext context, Elf elf) {
+    final addr = elf.chainAddress ?? '';
+    final short = addr.length > 13 ? '${addr.substring(0, 6)}…${addr.substring(addr.length - 4)}' : addr;
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(5),
+            gradient: LinearGradient(
+              colors: [AppColors.cyan.withOpacity(0.22), AppColors.violet.withOpacity(0.22)],
+            ),
+            border: Border.all(color: AppColors.cyan.withOpacity(0.35)),
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.token_outlined, size: 11, color: AppColors.cyan),
+              SizedBox(width: 3),
+              Text(
+                'NFT · AI 钱包',
+                style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: AppColors.cyan),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            short,
+            style: const TextStyle(
+              fontSize: 11,
+              color: AppColors.textSub,
+              fontFamily: 'monospace',
+              letterSpacing: 0.5,
+            ),
+          ),
+        ),
+        InkWell(
+          onTap: () {
+            Clipboard.setData(ClipboardData(text: addr));
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('已复制 AI 钱包地址'), duration: Duration(seconds: 2)),
+            );
+          },
+          borderRadius: BorderRadius.circular(6),
+          child: const Padding(
+            padding: EdgeInsets.all(4),
+            child: Icon(Icons.copy_outlined, size: 13, color: AppColors.textMuted, semanticLabel: '复制钱包地址'),
+          ),
+        ),
+      ],
     );
   }
 
@@ -490,9 +551,18 @@ class ProfilePage extends StatelessWidget {
             children: equipped.map((m) => _equippedChip(context, state, m)).toList(),
           ),
         const SizedBox(height: 12),
-        const Text(
-          '能力模块',
-          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSub),
+        Row(
+          children: [
+            const Text(
+              '我的能力模块',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSub),
+            ),
+            const Spacer(),
+            Text(
+              '已拥有 ${state.ownedModules.length} 个',
+              style: const TextStyle(fontSize: 10, color: AppColors.textFaint),
+            ),
+          ],
         ),
         const SizedBox(height: 8),
         _modulesGrid(context, state, elf),
@@ -539,10 +609,26 @@ class ProfilePage extends StatelessWidget {
   }
 
   Widget _modulesGrid(BuildContext context, AppState state, Elf elf) {
+    // 只展示「已拥有」的模块；未拥有的去发现页一级发售购买。
+    final owned = state.modules.where((m) => state.ownedModules.contains(m.id)).toList();
+    if (owned.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.strokeSoft),
+        ),
+        child: const Text(
+          '还没有能力模块。去「发现」页的一级发售购入后，会出现在这里。',
+          style: TextStyle(fontSize: 11, color: AppColors.textMuted, height: 1.6),
+        ),
+      );
+    }
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      itemCount: state.modules.length,
+      itemCount: owned.length,
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
         mainAxisSpacing: 8,
@@ -550,10 +636,9 @@ class ProfilePage extends StatelessWidget {
         childAspectRatio: 1.55,
       ),
       itemBuilder: (_, i) {
-        final m = state.modules[i];
+        final m = owned[i];
         final holder = state.equippedBy(m.id);
         final isMine = holder?.id == elf.id;
-        final holderIsOther = holder != null && holder.id != elf.id;
         return InkWell(
           onTap: () => _openModuleSheet(context, state, elf, m),
           borderRadius: BorderRadius.circular(10),
@@ -603,7 +688,7 @@ class ProfilePage extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  holderIsOther ? '已装于 ${holder.name}' : (isMine ? '已装 · 点按卸下' : '${m.load} 接口 · ${m.compute} 算力'),
+                  isMine ? '已装 · 点按卸下' : '已拥有 · ${m.load} 接口 · ${m.compute} 算力',
                   style: TextStyle(
                     fontSize: 9.5,
                     color: isMine ? AppColors.violetSoft : AppColors.textFaint,

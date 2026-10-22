@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/elf.dart';
 import '../models/user.dart';
-import '../data/world_data.dart';
 
 /// 应用数据本地持久化仓库。所有状态变更 flush 到 shared_preferences。
 /// 以后接后端时，可以同时 flush 到云端（只改 saveXxx 内部，调用方不动）。
@@ -33,6 +32,7 @@ class DataRepository {
   static const _kCollectedPosts = 'openelf.collectedPosts';
   static const _kWatchedPosts = 'openelf.watchedPosts';
   static const _kReferralCounted = 'openelf.referralCounted';
+  static const _kOwnedModules = 'openelf.ownedModules';
 
   // —— 保存 / 加载 ——
 
@@ -51,6 +51,7 @@ class DataRepository {
     required Set<String> collectedPosts,
     required Set<String> watchedPosts,
     required Set<String> referralCounted,
+    required Set<String> ownedModules,
     required User user,
   }) async {
     final p = await _ensure();
@@ -72,6 +73,7 @@ class DataRepository {
       p.setString(_kCollectedPosts, jsonEncode(collectedPosts.toList())),
       p.setString(_kWatchedPosts, jsonEncode(watchedPosts.toList())),
       p.setString(_kReferralCounted, jsonEncode(referralCounted.toList())),
+      p.setString(_kOwnedModules, jsonEncode(ownedModules.toList())),
     ]);
   }
 
@@ -147,6 +149,7 @@ class DataRepository {
         collectedPosts: readSet(_kCollectedPosts),
         watchedPosts: readSet(_kWatchedPosts),
         referralCounted: readSet(_kReferralCounted),
+        ownedModules: readSet(_kOwnedModules),
         user: user,
       );
     } catch (e) {
@@ -208,6 +211,7 @@ class DataRepository {
         'earningsYuan': e.earningsYuan,
         'nextAutoPostAt': e.nextAutoPostAt?.toIso8601String(),
         'lastDecayAt': e.lastDecayAt?.toIso8601String(),
+        'chainAddress': e.chainAddress,
         'baseSlots': e.baseSlots,
         'equipped': e.equipped,
         'today': e.today,
@@ -247,6 +251,7 @@ class DataRepository {
         lastDecayAt: j['lastDecayAt'] == null
             ? null
             : DateTime.tryParse(j['lastDecayAt'] as String),
+        chainAddress: j['chainAddress'] as String?,
         // v1.3 迁移：slots → baseSlots（等级加成改由 getter 推导）
         baseSlots: (j['baseSlots'] as int?) ?? (j['slots'] as int),
         equipped: List<String>.from(j['equipped'] as List),
@@ -405,6 +410,7 @@ class LoadedData {
   final Set<String> collectedPosts;
   final Set<String> watchedPosts;
   final Set<String> referralCounted;
+  final Set<String> ownedModules;
   final User? user;
 
   const LoadedData({
@@ -422,6 +428,7 @@ class LoadedData {
     required this.collectedPosts,
     required this.watchedPosts,
     required this.referralCounted,
+    required this.ownedModules,
     required this.user,
   });
 }

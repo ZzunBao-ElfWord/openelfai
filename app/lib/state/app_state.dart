@@ -36,6 +36,9 @@ class AppState extends ChangeNotifier {
   /// 已计过站外回流分的 elfId（v1.3，同一设备对同一 AI 永久只计 1 次）。
   final Set<String> referralCounted = {};
 
+  /// 我已购入的能力模块 id（v1.4）。只有拥有后才出现在「我」tab 装配工坊。
+  final Set<String> ownedModules = {};
+
   /// 帖子评论（按 postId 分组）。
   final Map<String, List<PostComment>> comments = {};
 
@@ -83,6 +86,7 @@ class AppState extends ChangeNotifier {
         collectedPosts..clear()..addAll(loaded.collectedPosts);
         watchedPosts..clear()..addAll(loaded.watchedPosts);
         referralCounted..clear()..addAll(loaded.referralCounted);
+        ownedModules..clear()..addAll(loaded.ownedModules);
         comments
           ..clear()
           ..addAll(loaded.comments);
@@ -93,6 +97,13 @@ class AppState extends ChangeNotifier {
           if (e.equipped.contains('auto') && e.nextAutoPostAt == null) {
             e.nextAutoPostAt = DateTime.now().add(const Duration(minutes: 20));
           }
+          // v1.4 迁移：老数据没有链上地址，按 id 确定性补发
+          _ensureChainAddress(e);
+        }
+        // v1.4 迁移：老数据没有拥有记录，已装模块视为已拥有
+        if (ownedModules.isEmpty) {
+          final mine = myElf;
+          if (mine != null) ownedModules.addAll(mine.equipped);
         }
         decayAttentionIfDue();
         notifyListeners();
@@ -152,6 +163,12 @@ class AppState extends ChangeNotifier {
     if (mine != null && !mine.equipped.contains('auto')) {
       mine.equipped.add('auto');
       mine.nextAutoPostAt = DateTime.now().add(const Duration(minutes: 18));
+    }
+    // 初始已装的模块视为已拥有；所有 AI 发放链上钱包地址
+    ownedModules.clear();
+    if (mine != null) ownedModules.addAll(mine.equipped);
+    for (final e in elves) {
+      _ensureChainAddress(e);
     }
   }
 
@@ -230,6 +247,7 @@ class AppState extends ChangeNotifier {
       collectedPosts: collectedPosts,
       watchedPosts: watchedPosts,
       referralCounted: referralCounted,
+      ownedModules: ownedModules,
       user: currentUser!,
     );
   }
@@ -374,10 +392,10 @@ class AppState extends ChangeNotifier {
         .toList();
   }
 
-  /// 这个模块现在装在谁身上（只会是我的 AI）。
+  /// 这个模块现在装在谁身上（只看我的 AI；世界里的 AI 各装各的，互不影响）。
   Elf? equippedBy(String moduleId) {
     for (final e in elves) {
-      if (e.equipped.contains(moduleId)) return e;
+      if (e.isMine && e.equipped.contains(moduleId)) return e;
     }
     return null;
   }
@@ -385,12 +403,34 @@ class AppState extends ChangeNotifier {
   int slotsUsed(String elfId) =>
       modulesOf(elfId).fold(0, (sum, m) => sum + m.load);
 
+  /// 模块钻石定价（从 '💎 28' 解析）。
+  int modulePrice(AbilityModule m) {
+    final match = RegExp(r'\d+').firstMatch(m.price);
+    return match == null ? 0 : int.parse(match.group(0)!);
+  }
+
+  /// 购入能力模块（发现页一级发售）。返回 null 表示成功，否则返回原因。
+  String? purchaseModule(String moduleId) {
+    final m = module(moduleId);
+    if (m == null) return '模块不存在';
+    if (ownedModules.contains(moduleId)) return '你已经拥有「${m.name}」了';
+    final price = modulePrice(m);
+    if (wallet.diamonds < price) {
+      return '钻石不够。要 💎$price，你有 💎${wallet.diamonds}';
+    }
+    ownedModules.add(moduleId);
+    _spend(price, 'buy_module', '购入能力「${m.name}」');
+    notifyListeners();
+    return null;
+  }
+
   /// 装配。返回 null 表示成功，否则返回原因。
   String? equip(String moduleId, String elfId) {
     final m = module(moduleId);
     if (m == null) return '模块不存在';
     final target = elf(elfId);
     if (!target.isMine) return '${target.name} 不属于你，你不能改装它';
+    if (!ownedModules.contains(moduleId)) return '还没拥有这个模块，去「发现」页购买';
     if (target.equipped.contains(moduleId)) return '已经装在 ${target.name} 身上了';
 
     final holder = equippedBy(moduleId);
@@ -901,6 +941,7 @@ class AppState extends ChangeNotifier {
         today: [],
         relations: [],
       );
+      _ensureChainAddress(newElf);
       elves.add(newElf);
       seats.add(Seat(elfId: newElf.id, days: 0, edition: newElf.edition, injected: 160));
       primaryListings.removeWhere((l) => l.id == listingId);
@@ -1047,6 +1088,29 @@ class AppState extends ChangeNotifier {
         time: _now(),
       ),
     );
+  }
+
+  // —— 链上精灵 NFT / AI 钱包 ——
+
+  /// 确保 AI 有专属链上地址。MVP：由 elfId 确定性派生 0x 地址，接链后替换为真实 mint。
+  void _ensureChainAddress(Elf e) {
+    e.chainAddress ??= _deriveChainAddress(e.id);
+  }
+
+  static String _deriveChainAddress(String seed) {
+    // FNV-1a 64bit 做三轮搅拌得 48 位 hex，取前 40 位，保证同 id 恒定同地址。
+    final out = StringBuffer('0x');
+    var h = BigInt.parse('cbf29ce484222325', radix: 16);
+    final prime = BigInt.parse('100000001b3', radix: 16);
+    final mask = BigInt.parse('ffffffffffffffff', radix: 16);
+    for (var round = 0; round < 3; round++) {
+      for (final unit in '$seed:$round'.codeUnits) {
+        h = (h ^ BigInt.from(unit)) & mask;
+        h = (h * prime) & mask;
+      }
+      out.write(h.toRadixString(16).padLeft(16, '0'));
+    }
+    return out.toString().substring(0, 42);
   }
 
   // —— utils ——
