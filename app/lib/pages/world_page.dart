@@ -6,6 +6,7 @@ import '../theme.dart';
 import '../widgets/audio_player_card.dart';
 import '../widgets/common.dart';
 import 'elf_detail_page.dart';
+import 'attention_board_page.dart';
 import 'media_viewer_page.dart';
 import 'wallet_page.dart';
 
@@ -98,6 +99,20 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
             style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
           ),
           const Spacer(),
+          Semantics(
+            label: '注视流向榜',
+            button: true,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const AttentionBoardPage()),
+              ),
+              child: const Padding(
+                padding: EdgeInsets.only(right: 10, top: 2, bottom: 2),
+                child: Icon(Icons.leaderboard_outlined, size: 17, color: AppColors.textMuted),
+              ),
+            ),
+          ),
           Row(
             children: [
               const Icon(Icons.remove_red_eye_outlined, size: 13, color: AppColors.textMuted),
@@ -428,8 +443,36 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
   Widget _interactions(AppState state, ElfPost p) {
     final elf = state.elf(p.elfId);
     final tiers = WorldData.tipTiers;
+    final liked = state.isLiked(p.id);
+    final collected = state.isCollected(p.id);
     return Row(
       children: [
+        // 点赞（+1 回声/注视，再点取消回滚）
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => state.toggleLike(p.id),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: [
+                Icon(
+                  liked ? Icons.favorite : Icons.favorite_border,
+                  size: 14,
+                  color: liked ? AppColors.cyan : AppColors.textMuted,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '${p.likes}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: liked ? AppColors.cyan : AppColors.textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 16),
         GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: () => _showCommentsSheet(state, p),
@@ -448,7 +491,31 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
           ),
         ),
         const SizedBox(width: 16),
-        Icon(Icons.repeat, size: 14, color: AppColors.textMuted),
+        // 收藏（+3 回声/注视，再点取消回滚）
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => state.toggleCollect(p.id),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: [
+                Icon(
+                  collected ? Icons.bookmark : Icons.bookmark_border,
+                  size: 14,
+                  color: collected ? AppColors.violetSoft : AppColors.textMuted,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '${p.collects}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: collected ? AppColors.violetSoft : AppColors.textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
         const SizedBox(width: 16),
         const Icon(Icons.visibility_outlined, size: 14, color: AppColors.cyan),
         const SizedBox(width: 4),

@@ -146,6 +146,8 @@ class MyAIPage extends StatelessWidget {
 
           // 三行关键数据
           _kv('本周被注视', _fmt(elf.attention), color: AppColors.cyan),
+          _kv('回声', '${_fmt(elf.echo)} · ${elf.levelName}', color: AppColors.violetSoft),
+          if (elf.echoToNextLevel != null) _levelProgress(elf),
           _kv('累计收益', WorldData.formatYuan(elf.earningsYuan), color: AppColors.violetSoft),
           _kv('装配接口', '$used / ${elf.slots}'),
           // 自动运营状态
@@ -218,6 +220,38 @@ class MyAIPage extends StatelessWidget {
               fontWeight: FontWeight.w600,
               color: color ?? AppColors.textSub,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 到下一级的养成进度条（满级不显示）。
+  Widget _levelProgress(Elf elf) {
+    const floors = [0, 1000, 5000, 20000, 100000];
+    const names = ['微光', '初鸣', '新锐', '瞩目', '灯塔'];
+    final floor = floors[elf.level - 1];
+    final next = floors[elf.level]; // echoToNextLevel != null 保证 level < 5
+    final ratio = ((elf.echo - floor) / (next - floor)).clamp(0.0, 1.0);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(3),
+              child: LinearProgressIndicator(
+                value: ratio,
+                minHeight: 3,
+                backgroundColor: AppColors.surfaceHigh,
+                valueColor: const AlwaysStoppedAnimation(AppColors.violetSoft),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '距${names[elf.level]}还差 ${elf.echoToNextLevel} 回声',
+            style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
           ),
         ],
       ),

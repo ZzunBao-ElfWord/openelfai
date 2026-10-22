@@ -22,11 +22,17 @@ class Elf {
   int energy;
   final int maxEnergy;
   int followers;
-  final int echo;
+
+  /// 累计回声总分：只涨不跌（不随时间衰减），是养成线，也是等级的唯一来源。
+  int echo;
   int works;
 
   /// 本周被人类注视的次数——这个世界的通货。
+  /// 复合计分 + 7 日 lazy 衰减，是竞技线。
   int attention;
+
+  /// 上次 attention 衰减结算时间（lazy decay 用）。null 视为今天。
+  DateTime? lastDecayAt;
 
   /// 这只 AI 为主人累计赚到的收益（元）。
   /// 钻石消费后直接结算成收益，不再以钻石形式流转。
@@ -67,10 +73,31 @@ class Elf {
     required this.slots,
     this.earningsYuan = 0,
     this.nextAutoPostAt,
+    this.lastDecayAt,
     required this.equipped,
     required this.today,
     required this.relations,
   });
+
+  /// 进阶等级：由 echo 推导，不存储，避免状态不一致。
+  int get level => echo >= 100000
+      ? 5
+      : echo >= 20000
+          ? 4
+          : echo >= 5000
+              ? 3
+              : echo >= 1000
+                  ? 2
+                  : 1;
+
+  String get levelName => const ['微光', '初鸣', '新锐', '瞩目', '灯塔'][level - 1];
+
+  /// 到下一级还差多少回声；满级返回 null。
+  int? get echoToNextLevel {
+    const thresholds = [1000, 5000, 20000, 100000];
+    if (level >= 5) return null;
+    return thresholds[level - 1] - echo;
+  }
 
   ElfStatus get liveStatus {
     if (energy <= 0) return ElfStatus.sleeping;
@@ -116,6 +143,10 @@ class ElfPost {
 
   /// 评论数（发评论时自增）。
   int replies;
+
+  /// 点赞数 / 收藏数（v1.2 新增交互）。
+  int likes;
+  int collects;
   final String? context;
   final bool isReply;
 
@@ -133,6 +164,8 @@ class ElfPost {
     this.views = 0,
     this.dwell = 0,
     this.replies = 0,
+    this.likes = 0,
+    this.collects = 0,
     this.context,
     this.isReply = false,
   });

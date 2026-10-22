@@ -29,6 +29,9 @@ class DataRepository {
   static const _kFollowed = 'openelf.followed';
   static const _kComments = 'openelf.comments';
   static const _kUser = 'openelf.user';
+  static const _kLikedPosts = 'openelf.likedPosts';
+  static const _kCollectedPosts = 'openelf.collectedPosts';
+  static const _kWatchedPosts = 'openelf.watchedPosts';
 
   // —— 保存 / 加载 ——
 
@@ -43,6 +46,9 @@ class DataRepository {
     required List<WalletLog> logs,
     required Set<String> followed,
     required Map<String, List<PostComment>> comments,
+    required Set<String> likedPosts,
+    required Set<String> collectedPosts,
+    required Set<String> watchedPosts,
     required User user,
   }) async {
     final p = await _ensure();
@@ -60,6 +66,9 @@ class DataRepository {
         (k, v) => MapEntry(k, v.map((c) => c.toJson()).toList()),
       ))),
       p.setString(_kUser, jsonEncode(user.toJson())),
+      p.setString(_kLikedPosts, jsonEncode(likedPosts.toList())),
+      p.setString(_kCollectedPosts, jsonEncode(collectedPosts.toList())),
+      p.setString(_kWatchedPosts, jsonEncode(watchedPosts.toList())),
     ]);
   }
 
@@ -114,6 +123,11 @@ class DataRepository {
       final user = userRaw != null
           ? User.fromJson(Map<String, dynamic>.from(jsonDecode(userRaw)))
           : null;
+      // v1.2 新增字段：老数据缺失时迁移为空集
+      Set<String> readSet(String key) {
+        final raw = p.getString(key) ?? '[]';
+        return (jsonDecode(raw) as List).map((j) => j as String).toSet();
+      }
 
       return LoadedData(
         elfs: elfs,
@@ -126,6 +140,9 @@ class DataRepository {
         logs: logs,
         followed: followed,
         comments: comments,
+        likedPosts: readSet(_kLikedPosts),
+        collectedPosts: readSet(_kCollectedPosts),
+        watchedPosts: readSet(_kWatchedPosts),
         user: user,
       );
     } catch (e) {
@@ -149,6 +166,9 @@ class DataRepository {
       p.remove(_kLogs),
       p.remove(_kFollowed),
       p.remove(_kComments),
+      p.remove(_kLikedPosts),
+      p.remove(_kCollectedPosts),
+      p.remove(_kWatchedPosts),
     ]);
     // _kUser 不在这里清——登出由 LocalAuthRepository 自己管
   }
@@ -182,6 +202,7 @@ class DataRepository {
         'attention': e.attention,
         'earningsYuan': e.earningsYuan,
         'nextAutoPostAt': e.nextAutoPostAt?.toIso8601String(),
+        'lastDecayAt': e.lastDecayAt?.toIso8601String(),
         'slots': e.slots,
         'equipped': e.equipped,
         'today': e.today,
@@ -218,6 +239,9 @@ class DataRepository {
         nextAutoPostAt: j['nextAutoPostAt'] == null
             ? null
             : DateTime.tryParse(j['nextAutoPostAt'] as String),
+        lastDecayAt: j['lastDecayAt'] == null
+            ? null
+            : DateTime.tryParse(j['lastDecayAt'] as String),
         slots: j['slots'] as int,
         equipped: List<String>.from(j['equipped'] as List),
         today: List<String>.from(j['today'] as List),
@@ -244,6 +268,8 @@ class DataRepository {
         'views': p.views,
         'dwell': p.dwell,
         'replies': p.replies,
+        'likes': p.likes,
+        'collects': p.collects,
         'context': p.context,
         'isReply': p.isReply,
       };
@@ -262,6 +288,8 @@ class DataRepository {
         views: j['views'] as int? ?? 0,
         dwell: j['dwell'] as int? ?? 0,
         replies: j['replies'] as int? ?? 0,
+        likes: j['likes'] as int? ?? 0,
+        collects: j['collects'] as int? ?? 0,
         context: j['context'] as String?,
         isReply: j['isReply'] as bool? ?? false,
       );
@@ -367,6 +395,9 @@ class LoadedData {
   final List<WalletLog> logs;
   final Set<String> followed;
   final Map<String, List<PostComment>> comments;
+  final Set<String> likedPosts;
+  final Set<String> collectedPosts;
+  final Set<String> watchedPosts;
   final User? user;
 
   const LoadedData({
@@ -380,6 +411,9 @@ class LoadedData {
     required this.logs,
     required this.followed,
     required this.comments,
+    required this.likedPosts,
+    required this.collectedPosts,
+    required this.watchedPosts,
     required this.user,
   });
 }

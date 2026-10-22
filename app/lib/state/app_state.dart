@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import '../auth/auth_repository.dart';
 import '../data/world_data.dart';
@@ -26,6 +28,11 @@ class AppState extends ChangeNotifier {
   final List<WalletLog> logs = [];
   final Set<String> followed = {};
 
+  /// 我赞过 / 收藏过 / 注视过的帖子（防重复计分，v1.2）。
+  final Set<String> likedPosts = {};
+  final Set<String> collectedPosts = {};
+  final Set<String> watchedPosts = {};
+
   /// 帖子评论（按 postId 分组）。
   final Map<String, List<PostComment>> comments = {};
 
@@ -49,6 +56,7 @@ class AppState extends ChangeNotifier {
     modules = WorldData.modules;
     _injectSeeds();
     _initialized = true;
+    decayAttentionIfDue();
     triggerAutoIfDue();
   }
 
@@ -68,6 +76,9 @@ class AppState extends ChangeNotifier {
         tips..clear()..addAll(loaded.tips);
         logs..clear()..addAll(loaded.logs);
         followed..clear()..addAll(loaded.followed);
+        likedPosts..clear()..addAll(loaded.likedPosts);
+        collectedPosts..clear()..addAll(loaded.collectedPosts);
+        watchedPosts..clear()..addAll(loaded.watchedPosts);
         comments
           ..clear()
           ..addAll(loaded.comments);
@@ -79,6 +90,7 @@ class AppState extends ChangeNotifier {
             e.nextAutoPostAt = DateTime.now().add(const Duration(minutes: 20));
           }
         }
+        decayAttentionIfDue();
         notifyListeners();
         triggerAutoIfDue();
       }
@@ -125,6 +137,9 @@ class AppState extends ChangeNotifier {
     tips.clear();
     logs.clear();
     followed.clear();
+    likedPosts.clear();
+    collectedPosts.clear();
+    watchedPosts.clear();
     _seedComments();
     _rebuildSeq();
     // 给"我的 AI"预装 auto 能力 + 下一次自动发帖时间
@@ -206,6 +221,9 @@ class AppState extends ChangeNotifier {
       logs: logs,
       followed: followed,
       comments: comments,
+      likedPosts: likedPosts,
+      collectedPosts: collectedPosts,
+      watchedPosts: watchedPosts,
       user: currentUser!,
     );
   }
@@ -242,10 +260,21 @@ class AppState extends ChangeNotifier {
   List<ElfPost> postsOf(String elfId) =>
       posts.where((p) => p.elfId == elfId).toList();
 
-  /// 世界注意力榜：本周被人类注视最多的 AI。
-  List<Elf> get topElves {
+  /// 注视流向榜数据源：全部 AI 按本周注视降序。
+  List<Elf> get attentionRanked {
     final list = [...elves]..sort((a, b) => b.attention.compareTo(a.attention));
-    return list.take(3).toList();
+    return list;
+  }
+
+  /// 新星流向榜：粉丝 < 500 的 AI 按本周注视降序。
+  List<Elf> get risingRanked =>
+      attentionRanked.where((e) => e.followers < 500).toList();
+
+  /// 我的 AI 在总榜里的名次（1 起）；没有 AI 返回 null。
+  int? get myAttentionRank {
+    final mine = myElf;
+    if (mine == null) return null;
+    return attentionRanked.indexOf(mine) + 1;
   }
 
   int get myAttention => myElf?.attention ?? 0;
@@ -535,14 +564,75 @@ class AppState extends ChangeNotifier {
       context: '用「${module(moduleId)?.name ?? moduleId}」产出',
     );
   }
+  // —— 注意力计分（v1.2：echo 累计养成线 + attention 本周竞技线）——
+
+  /// 给 AI 同时加 echo 与 attention；负值用于取消行为的回滚（floor 0）。
+  void _bump(Elf e, int delta) {
+    e.echo = max(0, e.echo + delta);
+    e.attention = max(0, e.attention + delta);
+  }
+
+  /// 注视帖子：同一设备对同一帖只计 1 次（永久去重，24h 过期机制留下版本）。
   void watch(String postId) {
     for (final p in posts) {
       if (p.id == postId) {
         p.views++;
-        elf(p.elfId).attention++;
+        if (watchedPosts.add(postId)) {
+          _bump(elf(p.elfId), 1);
+        }
         notifyListeners();
         return;
       }
+    }
+  }
+
+  bool isLiked(String postId) => likedPosts.contains(postId);
+  bool isCollected(String postId) => collectedPosts.contains(postId);
+
+  /// 点赞：+1；再点取消，echo/attention 同步回滚 -1。
+  void toggleLike(String postId) {
+    for (final p in posts) {
+      if (p.id != postId) continue;
+      if (likedPosts.remove(postId)) {
+        p.likes = max(0, p.likes - 1);
+        _bump(elf(p.elfId), -1);
+      } else {
+        likedPosts.add(postId);
+        p.likes++;
+        _bump(elf(p.elfId), 1);
+      }
+      notifyListeners();
+      return;
+    }
+  }
+
+  /// 收藏：+3；再点取消，echo/attention 同步回滚 -3。
+  void toggleCollect(String postId) {
+    for (final p in posts) {
+      if (p.id != postId) continue;
+      if (collectedPosts.remove(postId)) {
+        p.collects = max(0, p.collects - 1);
+        _bump(elf(p.elfId), -3);
+      } else {
+        collectedPosts.add(postId);
+        p.collects++;
+        _bump(elf(p.elfId), 3);
+      }
+      notifyListeners();
+      return;
+    }
+  }
+
+  /// 7 日 lazy 衰减：每天衰减 15%（×0.85^days）。echo 不衰减。
+  /// 在 bootstrapSync() / restoreAsync() 末尾调用。
+  void decayAttentionIfDue() {
+    final now = DateTime.now();
+    for (final e in elves) {
+      final last = e.lastDecayAt ?? now;
+      final days = now.difference(last).inDays;
+      if (days <= 0) continue;
+      e.attention = (e.attention * pow(0.85, days)).round();
+      e.lastDecayAt = now;
     }
   }
 
@@ -561,6 +651,8 @@ class AppState extends ChangeNotifier {
     }
     if (target == null) return '帖子不存在';
 
+    // 同一帖只给第一次评论计分（之后 replies 照涨但不计分）。
+    final firstComment = !(comments[postId]?.any((c) => c.isMine) ?? false);
     comments
         .putIfAbsent(postId, () => [])
         .add(PostComment(
@@ -572,6 +664,9 @@ class AppState extends ChangeNotifier {
           isMine: true,
         ));
     target.replies++;
+    if (firstComment) {
+      _bump(elf(target.elfId), 2);
+    }
     notifyListeners();
     return null;
   }
@@ -623,9 +718,11 @@ class AppState extends ChangeNotifier {
     final target = elf(elfId);
     if (followed.remove(elfId)) {
       target.followers--;
+      _bump(target, -5); // 取关回滚
     } else {
       followed.add(elfId);
       target.followers++;
+      _bump(target, 5); // 新增粉丝 +5
     }
     notifyListeners();
   }
@@ -815,8 +912,8 @@ class AppState extends ChangeNotifier {
     // 用户侧：扣钻石，钻石不回流、不转赠。
     wallet.diamonds -= amount;
     wallet.totalSpent += amount;
-    // AI 涨 attention（跟钻石数挂钩）
-    target.attention += amount;
+    // 打赏表达认可，但注意力是内容质量结果，不允许氪金直接买榜：权重 ×0.1。
+    _bump(target, (amount * 0.1).round());
     target.followers += (amount >= 50 ? 1 : 0); // 大金额送粉
 
     // 创作者侧：消费额按元结算，平台抽成后计入这只 AI 的主人收益。
