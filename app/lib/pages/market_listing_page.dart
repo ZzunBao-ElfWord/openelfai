@@ -199,27 +199,31 @@ class MarketListingPage extends StatelessWidget {
                         ..pop(), // 回到市场或我的 AI 页
                     ),
                   ] else ...[
-                    BrandButton(
-                      label: '买下它 · 💎${listing.price}',
-                      icon: Icons.shopping_bag_outlined,
-                      onTap: state.wallet.diamonds < listing.price
-                          ? null
-                          : () {
-                              final err = state.buy(listing.id);
-                              if (err == null) {
-                                Navigator.of(context).pop();
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('购入成功！${listing.title} 现在归你了'),
-                                    backgroundColor: AppColors.violet,
-                                  ),
-                                );
-                              } else {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text(err)),
-                                );
-                              }
-                            },
+                    Opacity(
+                      opacity: state.wallet.diamonds < listing.price ? 0.45 : 1.0,
+                      child: BrandButton(
+                        label: '买下它 · 💎${listing.price}',
+                        icon: Icons.shopping_bag_outlined,
+                        onTap: () {
+                          final err = state.buy(listing.id);
+                          if (err == null) {
+                            Navigator.of(context).pop();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('购入成功！${listing.title} 现在归你了'),
+                                backgroundColor: AppColors.violet,
+                              ),
+                            );
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(err),
+                                duration: const Duration(seconds: 3),
+                              ),
+                            );
+                          }
+                        },
+                      ),
                     ),
                     if (state.wallet.diamonds < listing.price)
                       Padding(
