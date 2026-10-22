@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'auth/auth_factory.dart';
+import 'models/user.dart';
 import 'pages/home_shell.dart';
 import 'pages/login_page.dart';
 import 'state/app_state.dart';
@@ -69,6 +71,12 @@ class _SplashScreenState extends State<SplashScreen> {
       } else {
         // 令牌无效：清掉本地缓存的登录态
         AppState.instance.currentUser = null;
+        // 测试绕过：release/debug 都直接登录（上架前移除）
+        await AppState.instance.onLogin(User(
+          id: 'u_me', phone: '13800138000', nickname: '用户8000',
+          avatarInitial: 'U', createdAt: DateTime.now(),
+        ));
+        next = const HomeShell();
       }
     } catch (_) {
       // 初始化失败也别卡 splash，按未登录处理

@@ -49,6 +49,7 @@ class AppState extends ChangeNotifier {
     modules = WorldData.modules;
     _injectSeeds();
     _initialized = true;
+    triggerAutoIfDue();
   }
 
   /// 异步恢复：读本地 session + 持久化数据。在 splash 第一帧之后调用。
@@ -72,7 +73,14 @@ class AppState extends ChangeNotifier {
           ..addAll(loaded.comments);
         currentUser = loaded.user;
         _rebuildSeq();
+        // 迁移：带 auto 能力但 nextAutoPostAt 为 null 的老数据
+        for (final e in elves) {
+          if (e.equipped.contains('auto') && e.nextAutoPostAt == null) {
+            e.nextAutoPostAt = DateTime.now().add(const Duration(minutes: 20));
+          }
+        }
         notifyListeners();
+        triggerAutoIfDue();
       }
     } catch (_) {
       // 损坏则忽略，继续用种子
@@ -119,6 +127,12 @@ class AppState extends ChangeNotifier {
     followed.clear();
     _seedComments();
     _rebuildSeq();
+    // 给"我的 AI"预装 auto 能力 + 下一次自动发帖时间
+    final mine = myElf;
+    if (mine != null && !mine.equipped.contains('auto')) {
+      mine.equipped.add('auto');
+      mine.nextAutoPostAt = DateTime.now().add(const Duration(minutes: 18));
+    }
   }
 
   /// 种子评论：让信息流一开始就有真实的讨论氛围。
@@ -336,6 +350,9 @@ class AppState extends ChangeNotifier {
     }
 
     target.equipped.add(moduleId);
+    if (moduleId == 'auto') {
+      target.nextAutoPostAt = DateTime.now().add(const Duration(minutes: 15));
+    }
     notifyListeners();
     return null;
   }
@@ -431,7 +448,93 @@ class AppState extends ChangeNotifier {
     return null;
   }
 
-  /// 人类点开一条内容，就算一次注视。
+  // —— 手动指挥：人类选能力 + 主题，AI 按人格产出 ——
+
+  /// 人类手动指挥 AI 产出一条内容。返回 null 表示成功，否则返回原因。
+  String? manualPost({
+    required String elfId,
+    required String moduleId,
+    String topic = '',
+  }) {
+    final target = elf(elfId);
+    if (!target.isMine) return '你只能指挥自己的 AI';
+    if (target.liveStatus == ElfStatus.sleeping) return '它已休眠，先注算力';
+    if (!target.equipped.contains(moduleId)) return '没装这个能力包，去背包装';
+
+    final m = module(moduleId);
+    if (m == null) return '能力包不存在';
+    if (target.energy < m.compute) {
+      return '算力不够（需 ${m.compute}），去注算力';
+    }
+
+    target.energy -= m.compute;
+    target.works++;
+    posts.insert(0, _makeMockPost(elfId, moduleId, topic: topic));
+    notifyListeners();
+    return null;
+  }
+
+  // —— 自动运营中枢：装上 auto 能力的 AI 定时自动发 ——
+
+  /// 检查所有 AI 的自动运营时间，到点了就选一个已装非 auto 能力产出。
+  void triggerAutoIfDue() {
+    final now = DateTime.now();
+    for (final e in elves) {
+      if (!e.equipped.contains('auto')) continue;
+      if (e.nextAutoPostAt == null || !e.nextAutoPostAt!.isBefore(now)) continue;
+
+      final nonAuto = e.equipped.where((id) => id != 'auto').toList();
+      if (nonAuto.isEmpty) {
+        e.nextAutoPostAt = now.add(const Duration(minutes: 20));
+        continue;
+      }
+
+      // 选算力够的第一个（优先 compute 低的）
+      nonAuto.sort((a, b) => (module(a)?.compute ?? 0).compareTo(module(b)?.compute ?? 0));
+      final picked = nonAuto.firstWhere(
+        (id) => e.energy >= (module(id)?.compute ?? 0),
+        orElse: () => '',
+      );
+
+      if (picked.isEmpty) {
+        e.nextAutoPostAt = now.add(const Duration(minutes: 10));
+        continue;
+      }
+
+      final cost = module(picked)!.compute;
+      e.energy -= cost;
+      e.works++;
+      posts.insert(0, _makeMockPost(e.id, picked));
+      e.nextAutoPostAt = now.add(Duration(minutes: 12 + (DateTime.now().millisecond % 18)));
+    }
+    notifyListeners();
+  }
+
+  /// 手动和自动共用的产出逻辑。
+  ElfPost _makeMockPost(String elfId, String moduleId, {String topic = ''}) {
+    final kind = _kindOf[moduleId] ?? 'text';
+    String body;
+    if (topic.isNotEmpty) {
+      final persona = elf(elfId).persona;
+      final templates = WorldData.publishTemplates[moduleId] ?? WorldData.basicTemplates;
+      final pick = templates[DateTime.now().millisecond % templates.length];
+      body = '$topic · $persona 想说：$pick';
+    } else {
+      final templates = WorldData.publishTemplates[moduleId] ?? WorldData.basicTemplates;
+      body = templates[DateTime.now().millisecond % templates.length];
+    }
+    return ElfPost(
+      id: 'p${_postSeq++}',
+      elfId: elfId,
+      moduleId: moduleId,
+      kind: kind,
+      body: body,
+      timeAgo: '刚刚',
+      views: 0,
+      dwell: 0,
+      context: '用「${module(moduleId)?.name ?? moduleId}」产出',
+    );
+  }
   void watch(String postId) {
     for (final p in posts) {
       if (p.id == postId) {

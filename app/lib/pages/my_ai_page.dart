@@ -4,6 +4,7 @@ import '../models/elf.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import 'create_post_sheet.dart';
 import 'elf_detail_page.dart';
 import 'market_page.dart';
 
@@ -147,33 +148,38 @@ class MyAIPage extends StatelessWidget {
           _kv('本周被注视', _fmt(elf.attention), color: AppColors.cyan),
           _kv('累计收益', WorldData.formatYuan(elf.earningsYuan), color: AppColors.violetSoft),
           _kv('装配接口', '$used / ${elf.slots}'),
+          // 自动运营状态
+          if (elf.equipped.contains('auto')) ...[
+            const SizedBox(height: 6),
+            _autoStatus(elf),
+          ],
           const SizedBox(height: 16),
 
           // 主要操作
+          BrandButton(
+            label: elf.liveStatus == ElfStatus.sleeping ? '注算力 · 叫醒它' : '让它创作',
+            icon: elf.liveStatus == ElfStatus.sleeping
+                ? Icons.battery_charging_full_outlined
+                : Icons.auto_awesome_outlined,
+            onTap: () {
+              if (elf.liveStatus == ElfStatus.sleeping) {
+                state.inject(elf.id, 160);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('已注入 160 算力，它醒了')),
+                );
+              } else {
+                showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (_) => CreatePostSheet(elf: elf),
+                );
+              }
+            },
+          ),
+          const SizedBox(height: 8),
           Row(
             children: [
-              Expanded(
-                child: GhostButton(
-                  label: elf.liveStatus == ElfStatus.sleeping ? '注算力' : '发布一条',
-                  icon: elf.liveStatus == ElfStatus.sleeping
-                      ? Icons.battery_charging_full_outlined
-                      : Icons.send,
-                  onTap: () {
-                    if (elf.liveStatus == ElfStatus.sleeping) {
-                      state.inject(elf.id, 160);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('已注入 160 算力，它醒了')),
-                      );
-                    } else {
-                      final err = state.publish(elf.id);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(err ?? '${elf.name} 已发布，等人类注视')),
-                      );
-                    }
-                  },
-                ),
-              ),
-              const SizedBox(width: 10),
               Expanded(
                 child: GhostButton(
                   label: '去背包',
@@ -212,6 +218,29 @@ class MyAIPage extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _autoStatus(Elf elf) {
+    String text;
+    if (elf.nextAutoPostAt == null) {
+      text = '自动运营已开启';
+    } else {
+      final remaining = elf.nextAutoPostAt!.difference(DateTime.now());
+      final mins = remaining.inMinutes.clamp(1, 240);
+      text = '自动运营中 · 约 ${mins} 分钟后发下一条';
+    }
+    return Row(
+      children: [
+        Container(
+          width: 14, height: 14,
+          decoration: const BoxDecoration(color: AppColors.cyan, shape: BoxShape.circle),
+          alignment: Alignment.center,
+          child: const Icon(Icons.autorenew, size: 9, color: AppColors.bgDeep),
+        ),
+        const SizedBox(width: 6),
+        Text(text, style: const TextStyle(fontSize: 10.5, color: AppColors.cyan)),
+      ],
     );
   }
 

@@ -181,6 +181,7 @@ class DataRepository {
         'works': e.works,
         'attention': e.attention,
         'earningsYuan': e.earningsYuan,
+        'nextAutoPostAt': e.nextAutoPostAt?.toIso8601String(),
         'slots': e.slots,
         'equipped': e.equipped,
         'today': e.today,
@@ -214,6 +215,9 @@ class DataRepository {
         works: j['works'] as int,
         attention: j['attention'] as int,
         earningsYuan: (j['earningsYuan'] as num?)?.toDouble() ?? 0,
+        nextAutoPostAt: j['nextAutoPostAt'] == null
+            ? null
+            : DateTime.tryParse(j['nextAutoPostAt'] as String),
         slots: j['slots'] as int,
         equipped: List<String>.from(j['equipped'] as List),
         today: List<String>.from(j['today'] as List),

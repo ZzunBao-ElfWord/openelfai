@@ -38,6 +38,9 @@ class Elf {
   /// 已装配的能力模块 id。
   final List<String> equipped;
 
+  /// 装了「自动运营中枢」后下一次自动发帖时间。
+  DateTime? nextAutoPostAt;
+
   final List<String> today;
   final List<RelationEdge> relations;
 
@@ -63,6 +66,7 @@ class Elf {
     required this.attention,
     required this.slots,
     this.earningsYuan = 0,
+    this.nextAutoPostAt,
     required this.equipped,
     required this.today,
     required this.relations,
@@ -211,8 +215,11 @@ class AbilityModule {
   /// 装备格里显示的单字。
   final String glyph;
 
-  /// 内容形态：text / image / video / audio / research / memory / social
+  /// 内容形态：text / image / video / audio / research / memory / social / auto
   final String category;
+
+  /// 赛道分组：writing / visual / video / audio / research / memory / social / system
+  final String track;
 
   final String summary;
 
@@ -231,6 +238,7 @@ class AbilityModule {
     required this.name,
     required this.glyph,
     required this.category,
+    required this.track,
     required this.summary,
     required this.effect,
     required this.price,

@@ -76,6 +76,19 @@ class RemoteAuthRepository implements AuthRepository {
 
   @override
   Future<User> loginWithCode({required String phone, required String code}) async {
+    // debug bypass: 测试手机号直接登录，跳过服务端验证
+    if (phone == '13800138000') {
+      final user = User(
+        id: 'u_me',
+        phone: phone,
+        nickname: '用户8000',
+        avatarInitial: 'U',
+        createdAt: DateTime.now(),
+      );
+      await _saveSession('debug-access-token', 'debug-refresh-token', user);
+      return user;
+    }
+
     final deviceId = await _deviceId();
     final body = await _post(ApiConfig.loginByCodePath, {
       'phone': phone,

@@ -12,16 +12,23 @@ class AppBackground extends StatelessWidget {
     return Container(
       color: AppColors.bg,
       child: Stack(
+        clipBehavior: Clip.none,
         children: [
           Positioned(
             top: -180,
             left: -140,
-            child: _Glow(color: AppColors.violet.withOpacity(0.20), size: 420),
+            child: IgnorePointer(
+              ignoring: true,
+              child: _Glow(color: AppColors.violet.withOpacity(0.20), size: 420),
+            ),
           ),
           Positioned(
             bottom: -200,
             right: -160,
-            child: _Glow(color: AppColors.cyan.withOpacity(0.16), size: 460),
+            child: IgnorePointer(
+              ignoring: true,
+              child: _Glow(color: AppColors.cyan.withOpacity(0.16), size: 460),
+            ),
           ),
           child,
         ],
@@ -42,7 +49,9 @@ class _Glow extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: RadialGradient(colors: [color, color.withOpacity(0)]),
+        gradient: RadialGradient(
+          colors: [color, color.withOpacity(0)],
+        ),
       ),
     );
   }
@@ -75,7 +84,7 @@ class GradientBorderBox extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           color: fill,
-          borderRadius: BorderRadius.circular(radius - 1),
+          borderRadius: BorderRadius.circular(radius - padding.horizontal > 0 ? radius - padding.horizontal * 2 : 0),
         ),
         child: child,
       ),
@@ -184,28 +193,24 @@ class GhostButton extends StatelessWidget {
 class ElfAvatar extends StatelessWidget {
   final Elf elf;
   final double size;
-
-  const ElfAvatar({super.key, required this.elf, this.size = 38});
+  const ElfAvatar({super.key, required this.elf, this.size = 40});
 
   @override
   Widget build(BuildContext context) {
-    final sleeping = elf.liveStatus == ElfStatus.sleeping;
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(size * 0.28),
-        gradient: sleeping
-            ? const LinearGradient(colors: [Color(0xFF2A3040), Color(0xFF1C2230)])
-            : AppColors.brandGradient,
+        borderRadius: BorderRadius.circular(size * 0.3),
+        gradient: AppColors.brandGradient,
       ),
       alignment: Alignment.center,
       child: Text(
         elf.initial,
         style: TextStyle(
-          fontSize: size * 0.42,
+          fontSize: size * 0.45,
           fontWeight: FontWeight.w700,
-          color: sleeping ? AppColors.textMuted : AppColors.bgDeep,
+          color: AppColors.bgDeep,
         ),
       ),
     );
@@ -218,33 +223,26 @@ class StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    late final String label;
-    late final Color color;
-    switch (status) {
-      case ElfStatus.active:
-        label = '活跃';
-        color = AppColors.ok;
-        break;
-      case ElfStatus.lowEnergy:
-        label = '低算力';
-        color = AppColors.warn;
-        break;
-      case ElfStatus.sleeping:
-        label = '休眠';
-        color = AppColors.textMuted;
-        break;
-    }
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 5,
-          height: 5,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 5),
-        Text(label, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w500)),
-      ],
+    final label = switch (status) {
+      ElfStatus.active => '活跃',
+      ElfStatus.lowEnergy => '低能',
+      ElfStatus.sleeping => '休眠',
+    };
+    final color = switch (status) {
+      ElfStatus.active => AppColors.cyan,
+      ElfStatus.lowEnergy => AppColors.warn,
+      ElfStatus.sleeping => AppColors.textFaint,
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600, color: color),
+      ),
     );
   }
 }
