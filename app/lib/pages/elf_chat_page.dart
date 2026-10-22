@@ -78,52 +78,213 @@ class _ElfChatPageState extends State<ElfChatPage> {
   Widget _header(BuildContext context, Elf elf) {
     final followed = AppState.instance.isFollowed(elf.id);
     return Container(
-      padding: const EdgeInsets.fromLTRB(4, 4, 12, 10),
       decoration: const BoxDecoration(
         border: Border(bottom: BorderSide(color: AppColors.strokeSoft)),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          IconButton(
-            onPressed: () => Navigator.of(context).pop(),
-            icon: const Icon(Icons.arrow_back_ios_new, size: 17, color: AppColors.textSub),
+          // 返回栏
+          Row(
+            children: [
+              IconButton(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.arrow_back_ios_new, size: 17, color: AppColors.textSub),
+              ),
+              const Spacer(),
+            ],
           ),
-          ElfAvatar(elf: elf, size: 34),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
+          // 头图区：大 initial + 渐变
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Text(elf.name,
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.text)),
-                    const SizedBox(width: 6),
-                    Text(elf.serial, style: const TextStyle(fontSize: 9.5, color: AppColors.textMuted)),
-                  ],
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(20),
+                    gradient: AppColors.brandGradient,
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.violet.withOpacity(0.3),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    elf.initial,
+                    style: const TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.bgDeep,
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 2),
-                StatusChip(status: elf.liveStatus),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Text(
+                            elf.name,
+                            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.text),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            elf.serial,
+                            style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(4),
+                              color: AppColors.violet.withOpacity(0.18),
+                            ),
+                            child: const Text(
+                              '由 AI 生成',
+                              style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: AppColors.violetSoft),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          StatusChip(status: elf.liveStatus),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
-          GestureDetector(
-            onTap: () => AppState.instance.toggleFollow(elf.id),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                gradient: followed ? null : AppColors.brandGradient,
-                border: followed ? Border.all(color: AppColors.stroke) : null,
-              ),
-              child: Text(
-                followed ? '已粉' : '+ 粉',
-                style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w700,
-                  color: followed ? AppColors.textMuted : AppColors.bgDeep,
+          const SizedBox(height: 12),
+          // 一句话人格 + 数据行
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  elf.persona,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12.5, color: AppColors.textSub, height: 1.6),
                 ),
-              ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    _dataChip('${elf.followers}', '粉丝'),
+                    const SizedBox(width: 20),
+                    _dataChip('${elf.works}', '作品'),
+                    const SizedBox(width: 20),
+                    _dataChip('${elf.echo}', '回声'),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          // 操作栏：❤ 转发 💬 历史
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                if (!elf.isMine) ...[
+                  _actionBtn(
+                    icon: followed ? Icons.favorite : Icons.favorite_border,
+                    label: followed ? '已粉' : '粉它',
+                    active: followed,
+                    onTap: () => AppState.instance.toggleFollow(elf.id),
+                  ),
+                  const SizedBox(width: 24),
+                ],
+                _actionBtn(
+                  icon: Icons.share_outlined,
+                  label: '转发',
+                  onTap: () {},
+                ),
+                const SizedBox(width: 24),
+                _actionBtn(
+                  icon: Icons.forum_outlined,
+                  label: '历史',
+                  onTap: () {},
+                ),
+                const Spacer(),
+                if (elf.isMine)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(5),
+                      gradient: AppColors.brandGradient,
+                    ),
+                    child: const Text(
+                      '我的 AI',
+                      style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: AppColors.bgDeep),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+
+  Widget _dataChip(String value, String label) {
+    return Row(
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: AppColors.text,
+            fontFeatures: [FontFeature.tabularFigures()],
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
+        ),
+      ],
+    );
+  }
+
+  Widget _actionBtn({
+    required IconData icon,
+    required String label,
+    bool active = false,
+    VoidCallback? onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 16,
+            color: active ? AppColors.violetSoft : AppColors.textMuted,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: active ? AppColors.violetSoft : AppColors.textMuted,
             ),
           ),
         ],
