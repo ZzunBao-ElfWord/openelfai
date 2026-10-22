@@ -13,7 +13,6 @@ class SettingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = AppState.instance;
-    final user = state.currentUser;
     return AppBackground(
       child: SafeArea(
         bottom: false,
@@ -23,7 +22,7 @@ class SettingsPage extends StatelessWidget {
             return ListView(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
               children: [
-                _header(),
+                _header(context),
                 const SizedBox(height: 14),
                 _userCard(state),
                 const SizedBox(height: 14),
@@ -92,9 +91,26 @@ class SettingsPage extends StatelessWidget {
     );
   }
 
-  Widget _header() => const Text(
-        '设置',
-        style: TextStyle(fontSize: 21, fontWeight: FontWeight.w700, color: AppColors.text),
+  Widget _header(BuildContext context) => Row(
+        children: [
+          InkWell(
+            onTap: () => Navigator.of(context).maybePop(),
+            borderRadius: BorderRadius.circular(8),
+            child: const Padding(
+              padding: EdgeInsets.only(right: 8, top: 6, bottom: 6),
+              child: Icon(
+                Icons.arrow_back_ios_new,
+                size: 17,
+                color: AppColors.textSub,
+                semanticLabel: '返回',
+              ),
+            ),
+          ),
+          const Text(
+            '设置',
+            style: TextStyle(fontSize: 21, fontWeight: FontWeight.w700, color: AppColors.text),
+          ),
+        ],
       );
 
   Widget _userCard(AppState state) {

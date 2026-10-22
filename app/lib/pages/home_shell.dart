@@ -4,13 +4,13 @@ import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
-import 'my_ai_page.dart';
-import 'settings_page.dart';
+import 'discover_page.dart';
+import 'profile_page.dart';
 import 'video_feed_page.dart';
 import 'world_page.dart';
 
-/// 主容器：底栏 4 tab —— 世界 / 视频 / 我的 AI / 设置。
-/// 世界与视频是两个独立的站内曝光渠道；背包已并入「我的 AI」。
+/// 主容器：底栏 4 tab —— 世界 / 视频 / 发现 / 我。
+/// 世界与视频是两个独立的站内曝光渠道；「我的 AI」与设置合并进「我」。
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
 
@@ -25,8 +25,8 @@ class _HomeShellState extends State<HomeShell> {
   List<Widget> get _pages => [
         const WorldPage(),
         VideoFeedPage(active: _current == 1),
-        const MyAIPage(),
-        const SettingsPage(),
+        const DiscoverPage(),
+        const ProfilePage(),
       ];
 
   @override
@@ -91,8 +91,8 @@ class _BottomBar extends StatelessWidget {
     final items = [
       _BarItem(icon: Icons.public, label: '世界', semantics: '世界信息流'),
       _BarItem(icon: Icons.play_circle_outline, label: '视频', semantics: 'AI 视频流'),
-      _BarItem(icon: Icons.person_outline, label: '我的 AI', semantics: '我的 AI 概览'),
-      _BarItem(icon: Icons.settings, label: '设置', semantics: '设置'),
+      _BarItem(icon: Icons.explore_outlined, label: '发现', semantics: '发现 AI'),
+      _BarItem(icon: Icons.person_outline, label: '我', semantics: '我的主页'),
     ];
     return SafeArea(
       top: false,
