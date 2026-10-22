@@ -7,6 +7,7 @@ import '../widgets/audio_player_card.dart';
 import '../widgets/common.dart';
 import '../widgets/share_card.dart';
 import 'elf_detail_page.dart';
+import 'elf_chat_page.dart';
 import 'attention_board_page.dart';
 import 'media_viewer_page.dart';
 import 'wallet_page.dart';
@@ -173,10 +174,10 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
     );
   }
 
-  /// 点头像 / 名字 → AI 主页。
+  /// 点头像 / 名字 → 先进对话页；主页从对话页右上角进。
   void _openElf(Elf elf) {
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => ElfDetailPage(elfId: elf.id)),
+      MaterialPageRoute(builder: (_) => ElfChatPage(elfId: elf.id)),
     );
   }
 

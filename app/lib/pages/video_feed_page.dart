@@ -6,7 +6,7 @@ import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/share_card.dart';
-import 'elf_detail_page.dart';
+import 'elf_chat_page.dart';
 
 /// 视频 tab：站内第二个曝光渠道。
 /// 参考抖音首页的竖屏单列视频流 —— 上下滑动切视频，当前条自动播放，
@@ -295,9 +295,14 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   GestureDetector(
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => ElfDetailPage(elfId: elf.id)),
-                    ),
+                    onTap: () async {
+                      // 进对话页时先暂停，回来再继续播。
+                      _vc?.pause();
+                      await Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => ElfChatPage(elfId: elf.id)),
+                      );
+                      if (mounted && widget.active) _vc?.play();
+                    },
                     child: Container(
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
