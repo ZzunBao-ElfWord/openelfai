@@ -143,7 +143,7 @@ class _CreatePostSheetState extends State<CreatePostSheet> {
       list.add(Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Text(
-          '未装（去背包装）',
+          '未装（去「我的 AI」装配）',
           style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textFaint),
         ),
       ));
@@ -234,12 +234,10 @@ class _CreatePostSheetState extends State<CreatePostSheet> {
             ),
             const SizedBox(height: 16),
             BrandButton(
-              label: '去背包装能力',
-              icon: Icons.backpack_outlined,
-              onTap: () {
-                Navigator.of(context).pop();
-                DefaultTabController.of(context)?.animateTo(2);
-              },
+              label: '去装配能力',
+              icon: Icons.tune,
+              // 装配区已内嵌在「我的 AI」页，关掉弹层即可看到
+              onTap: () => Navigator.of(context).pop(),
             ),
           ],
         ),

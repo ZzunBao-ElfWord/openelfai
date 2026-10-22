@@ -537,7 +537,7 @@ class AppState extends ChangeNotifier {
     final target = elf(elfId);
     if (!target.isMine) return '你只能指挥自己的 AI';
     if (target.liveStatus == ElfStatus.sleeping) return '它已休眠，先注算力';
-    if (!target.equipped.contains(moduleId)) return '没装这个能力包，去背包装';
+    if (!target.equipped.contains(moduleId)) return '没装这个能力包，去「我的 AI」页装配';
 
     final m = module(moduleId);
     if (m == null) return '能力包不存在';

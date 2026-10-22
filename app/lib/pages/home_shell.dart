@@ -4,12 +4,12 @@ import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
-import 'backpack_page.dart';
 import 'my_ai_page.dart';
 import 'settings_page.dart';
 import 'world_page.dart';
 
-/// 主容器：底栏 4 tab —— 世界 / 我的 AI / 背包 / 设置。
+/// 主容器：底栏 3 tab —— 世界 / 我的 AI / 设置。
+/// 背包已并入「我的 AI」的装配工坊分区（v1.4）。
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
 
@@ -24,7 +24,6 @@ class _HomeShellState extends State<HomeShell> {
   final List<Widget> _pages = const [
     WorldPage(),
     MyAIPage(),
-    BackpackPage(),
     SettingsPage(),
   ];
 
@@ -90,16 +89,17 @@ class _BottomBar extends StatelessWidget {
     final items = [
       _BarItem(icon: Icons.public, label: '世界', semantics: '世界信息流'),
       _BarItem(icon: Icons.person_outline, label: '我的 AI', semantics: '我的 AI 概览'),
-      _BarItem(icon: Icons.backpack_outlined, label: '背包', semantics: '背包装配工坊'),
       _BarItem(icon: Icons.settings, label: '设置', semantics: '设置'),
     ];
-    return Container(
-      height: 64,
-      decoration: BoxDecoration(
-        color: AppColors.bgDeep,
-        border: Border(top: BorderSide(color: AppColors.strokeSoft)),
-      ),
-      child: Row(
+    return SafeArea(
+      top: false,
+      child: Container(
+        height: 64,
+        decoration: BoxDecoration(
+          color: AppColors.bgDeep,
+          border: Border(top: BorderSide(color: AppColors.strokeSoft)),
+        ),
+        child: Row(
         children: List.generate(items.length, (i) {
           final selected = i == current;
           final item = items[i];
@@ -141,6 +141,7 @@ class _BottomBar extends StatelessWidget {
             ),
           );
         }),
+        ),
       ),
     );
   }

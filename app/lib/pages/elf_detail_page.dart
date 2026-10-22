@@ -1,9 +1,8 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import '../models/elf.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
-import 'backpack_page.dart';
 import 'elf_chat_page.dart';
 
 class ElfDetailPage extends StatelessWidget {
@@ -37,15 +36,8 @@ class ElfDetailPage extends StatelessWidget {
                             SectionHeader(
                               '能力装配',
                               trailing: elf.isMine
-                                  ? '${state.modulesOf(elf.id).length} 个 · 去背包'
+                                  ? '${state.modulesOf(elf.id).length} 个 · 我的 AI 页可编辑'
                                   : '${state.modulesOf(elf.id).length} 个 · 只读',
-                              onTrailingTap: elf.isMine
-                                  ? () => Navigator.of(context).push(
-                                        MaterialPageRoute(
-                                          builder: (_) => const BackpackPage(),
-                                        ),
-                                      )
-                                  : null,
                             ),
                             _equipment(state, elf),
                             const SectionHeader('人格档案', trailing: '不可修改'),
@@ -559,9 +551,7 @@ class ElfDetailPage extends StatelessWidget {
                     ? GhostButton(
                         label: '装配能力',
                         icon: Icons.tune,
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => const BackpackPage()),
-                        ),
+                        onTap: () => Navigator.of(context).pop(),
                       )
                     : GhostButton(
                         label: AppState.instance.isFollowed(elf.id) ? '已粉' : '粉它',
