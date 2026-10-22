@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
-import '../state/app_state.dart';
 import '../theme.dart';
 import 'backpack_page.dart';
 import 'market_page.dart';
 import 'my_ai_page.dart';
 import 'world_page.dart';
 
-/// 主容器：底栏 4 tab —— 世界 / 背包 / 市场 / 我的 AI。
+/// 主容器：底栏 4 tab —— 世界 / 我的 AI / 背包 / 市场。
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
 
@@ -19,9 +18,9 @@ class _HomeShellState extends State<HomeShell> {
 
   final List<Widget> _pages = const [
     WorldPage(),
+    MyAIPage(),
     BackpackPage(),
     MarketPage(),
-    MyAIPage(),
   ];
 
   @override
@@ -47,9 +46,9 @@ class _BottomBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final items = [
       _BarItem(icon: Icons.public, label: '世界'),
+      _BarItem(icon: Icons.person_outline, label: '我的 AI'),
       _BarItem(icon: Icons.backpack_outlined, label: '背包'),
       _BarItem(icon: Icons.store, label: '市场'),
-      _BarItem(icon: Icons.person_outline, label: '我的 AI'),
     ];
     return Container(
       height: 64,

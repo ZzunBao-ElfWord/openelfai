@@ -4,10 +4,9 @@ import '../models/elf.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
-import 'market_listing_page.dart';
 import 'elf_detail_page.dart';
 
-/// 我的 AI tab：只有 1 只（每人只能持 1 只），底部操作发布 / 注算力 / 去市场寄售。
+/// 我的 AI tab：概览+操作入口——精灵状态、算力、注视、收益、发布/注算力/去背包/寄售。
 class MyAIPage extends StatelessWidget {
   const MyAIPage({super.key});
 
@@ -25,9 +24,7 @@ class MyAIPage extends StatelessWidget {
             return ListView(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
               children: [
-                _header(),
-                const SizedBox(height: 14),
-                _sloganCard(state, elf),
+                _header(state),
                 const SizedBox(height: 14),
                 _elfCard(context, state, elf),
               ],
@@ -38,71 +35,29 @@ class MyAIPage extends StatelessWidget {
     );
   }
 
-  Widget _header() {
+  Widget _header(AppState state) {
+    final owner = state.currentUser?.nickname;
     return Row(
-      children: const [
-        Text(
+      children: [
+        const Text(
           '我的 AI',
           style: TextStyle(fontSize: 21, fontWeight: FontWeight.w700, color: AppColors.text),
         ),
-        SizedBox(width: 8),
-        Text(
-          '持有者 · 沪 7f3a',
-          style: TextStyle(fontSize: 11, color: AppColors.textMuted),
-        ),
-      ],
-    );
-  }
-
-  Widget _sloganCard(AppState state, Elf elf) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
-        gradient: AppColors.brandGradientSoft,
-        border: Border.all(color: AppColors.violet.withOpacity(0.25)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ShaderMask(
-            shaderCallback: (_) => AppColors.brandGradient.createShader(Rect.fromLTWH(0, 0, 200, 40)),
-            child: const Text(
-              '我的 AI，我做主',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
-              ),
-            ),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            '主流产品把能力一股脑塞给你。这里不是——能力被拆成模块，你自己组装，然后把它放进世界，替你去争取别人的注意力。',
-            style: TextStyle(fontSize: 11.5, color: AppColors.textMuted, height: 1.6),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              StatTile(value: '1', label: '我的 AI'),
-              const SizedBox(width: 22),
-              StatTile(value: '${state.modulesOf(elf.id).length}', label: '已装模块'),
-              const SizedBox(width: 22),
-              StatTile(value: '${_fmt(state.myAttention)}', label: '本周被注视'),
-              const SizedBox(width: 22),
-              StatTile(value: '${_fmt(state.myFollowers)}', label: '累计粉丝'),
-            ],
+        if (owner != null) ...[
+          const SizedBox(width: 8),
+          Text(
+            '持有者 · $owner',
+            style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
           ),
         ],
-      ),
+      ],
     );
   }
 
   Widget _elfCard(BuildContext context, AppState state, Elf elf) {
     final used = state.slotsUsed(elf.id);
-    final modules = state.modulesOf(elf.id);
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.strokeSoft),
@@ -110,13 +65,14 @@ class MyAIPage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // 头像 + 基本信息（整体可点进详情）
           InkWell(
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => ElfDetailPage(elfId: elf.id)),
             ),
             child: Row(
               children: [
-                ElfAvatar(elf: elf, size: 48),
+                ElfAvatar(elf: elf, size: 56),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -126,7 +82,7 @@ class MyAIPage extends StatelessWidget {
                         children: [
                           Text(
                             elf.name,
-                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.text),
+                            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: AppColors.text),
                           ),
                           const SizedBox(width: 6),
                           Text(
@@ -137,22 +93,15 @@ class MyAIPage extends StatelessWidget {
                           const Icon(Icons.chevron_right, size: 16, color: AppColors.textMuted),
                         ],
                       ),
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 4),
                       Row(
                         children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(4),
-                              gradient: AppColors.brandGradient,
-                            ),
-                            child: const Text(
-                              '我的 AI',
-                              style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: AppColors.bgDeep),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
                           StatusChip(status: elf.liveStatus),
+                          const SizedBox(width: 8),
+                          Text(
+                            '第 ${elf.generation} 代 · ${elf.edition}',
+                            style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted),
+                          ),
                         ],
                       ),
                     ],
@@ -161,7 +110,7 @@ class MyAIPage extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
 
           // 算力条
           Row(
@@ -179,7 +128,7 @@ class MyAIPage extends StatelessWidget {
             borderRadius: BorderRadius.circular(3),
             child: LinearProgressIndicator(
               value: elf.energyRatio,
-              minHeight: 4,
+              minHeight: 5,
               backgroundColor: AppColors.surfaceHigh,
               valueColor: const AlwaysStoppedAnimation(AppColors.violetSoft),
             ),
@@ -191,83 +140,23 @@ class MyAIPage extends StatelessWidget {
               style: TextStyle(fontSize: 10.5, color: AppColors.warn),
             ),
           ],
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
 
-          // 本周注视
-          Row(
-            children: [
-              const Text('本周被注视', style: TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
-              const Spacer(),
-              Text(
-                _fmt(elf.attention),
-                style: const TextStyle(fontSize: 12, color: AppColors.cyan, fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-
-          // 累计收益（钻石消费后结算成元，不再回流成钻石）
-          Row(
-            children: [
-              const Text('累计收益', style: TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
-              const Spacer(),
-              Text(
-                WorldData.formatYuan(elf.earningsYuan),
-                style: const TextStyle(fontSize: 12, color: AppColors.violetSoft, fontWeight: FontWeight.w700),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-
-          // 装配状态
-          Row(
-            children: [
-              const Text('装配', style: TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
-              const Spacer(),
-              Text(
-                '$used / ${elf.slots}',
-                style: const TextStyle(fontSize: 11.5, color: AppColors.textSub, fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 6,
-            children: [
-              ...modules.map(
-                (m) => Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppColors.violet.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: AppColors.violet.withOpacity(0.4)),
-                  ),
-                  child: Text(
-                    m.glyph,
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.violetSoft),
-                  ),
-                ),
-              ),
-              for (int i = modules.length; i < elf.slots; i++)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: AppColors.strokeSoft),
-                  ),
-                  child: const Icon(Icons.add, size: 12, color: AppColors.textFaint),
-                ),
-            ],
-          ),
+          // 三行关键数据
+          _kv('本周被注视', _fmt(elf.attention), color: AppColors.cyan),
+          _kv('累计收益', WorldData.formatYuan(elf.earningsYuan), color: AppColors.violetSoft),
+          _kv('装配接口', '$used / ${elf.slots}'),
           const SizedBox(height: 16),
 
-          // 操作按钮
+          // 主要操作
           Row(
             children: [
               Expanded(
                 child: GhostButton(
-                  label: elf.liveStatus == ElfStatus.sleeping ? '先注算力' : '发布',
-                  icon: elf.liveStatus == ElfStatus.sleeping ? Icons.battery_charging_full_outlined : Icons.send,
+                  label: elf.liveStatus == ElfStatus.sleeping ? '注算力' : '发布一条',
+                  icon: elf.liveStatus == ElfStatus.sleeping
+                      ? Icons.battery_charging_full_outlined
+                      : Icons.send,
                   onTap: () {
                     if (elf.liveStatus == ElfStatus.sleeping) {
                       state.inject(elf.id, 160);
@@ -277,7 +166,7 @@ class MyAIPage extends StatelessWidget {
                     } else {
                       final err = state.publish(elf.id);
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(err ?? '${elf.name} 已发布一条，等人类注视')),
+                        SnackBar(content: Text(err ?? '${elf.name} 已发布，等人类注视')),
                       );
                     }
                   },
@@ -288,7 +177,7 @@ class MyAIPage extends StatelessWidget {
                 child: GhostButton(
                   label: '去背包',
                   icon: Icons.backpack_outlined,
-                  onTap: () => DefaultTabController.of(context)?.animateTo(1),
+                  onTap: () => DefaultTabController.of(context)?.animateTo(2),
                 ),
               ),
             ],
@@ -299,6 +188,26 @@ class MyAIPage extends StatelessWidget {
             icon: Icons.store,
             onTap: () => _showResellDialog(context, state),
             expand: true,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _kv(String label, String value, {Color? color}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          Text(label, style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
+          const Spacer(),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: color ?? AppColors.textSub,
+            ),
           ),
         ],
       ),
@@ -380,7 +289,7 @@ class MyAIPage extends StatelessWidget {
           BrandButton(
             label: '去市场',
             icon: Icons.store,
-            onTap: () => DefaultTabController.of(context)?.animateTo(2),
+            onTap: () => DefaultTabController.of(context)?.animateTo(3),
           ),
         ],
       ),

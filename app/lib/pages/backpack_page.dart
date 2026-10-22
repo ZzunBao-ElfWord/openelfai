@@ -59,7 +59,7 @@ class BackpackPage extends StatelessWidget {
           const SizedBox(height: 18),
           GhostButton(
             label: '去市场',
-            onTap: () => DefaultTabController.of(context)?.animateTo(2),
+            onTap: () => DefaultTabController.of(context)?.animateTo(3),
           ),
         ],
       ),
@@ -85,105 +85,47 @@ class BackpackPage extends StatelessWidget {
 
   Widget _equipment(AppState state, Elf elf) {
     final used = state.slotsUsed(elf.id);
-    final modules = state.modulesOf(elf.id);
-    final remaining = elf.slots - used;
-
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.strokeSoft),
         gradient: AppColors.brandGradientSoft,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              ElfAvatar(elf: elf, size: 46),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${elf.name} ${elf.serial}',
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.text),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '我的 AI · 第 ${elf.generation} 代 · ${elf.edition}',
-                      style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted),
-                    ),
-                  ],
+          ElfAvatar(elf: elf, size: 40),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${elf.name} ${elf.serial}',
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.text),
                 ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  const Text('接口', style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
-                  Text(
-                    '$used / ${elf.slots}',
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.cyan),
-                  ),
-                ],
-              ),
-            ],
+                Text(
+                  '装配工坊 · 给它装能力',
+                  style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 14),
-
-          // 装备槽位
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
+          Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              ...modules.map((m) => _filledSlot(m)),
-              for (int i = 0; i < remaining; i++) _emptySlot(),
+              const Icon(Icons.settings_input_component, size: 14, color: AppColors.cyan),
+              const SizedBox(width: 4),
+              Text(
+                '$used / ${elf.slots}',
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.cyan),
+              ),
+              const SizedBox(width: 2),
+              const Text('接口', style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
             ],
           ),
-          const SizedBox(height: 10),
-          Text(
-            remaining == 0 ? '接口已用完。卸下一个才能装新的。' : '$remaining 个空槽可以继续装。',
-            style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
-          ),
         ],
       ),
-    );
-  }
-
-  Widget _filledSlot(AbilityModule m) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: AppColors.violet.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.violet.withOpacity(0.4)),
-      ),
-      child: Column(
-        children: [
-          Text(
-            m.glyph,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.violetSoft),
-          ),
-          Text(
-            m.category,
-            style: const TextStyle(fontSize: 9, color: AppColors.textFaint),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _emptySlot() {
-    return Container(
-      width: 48,
-      height: 48,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.strokeSoft, style: BorderStyle.solid),
-      ),
-      alignment: Alignment.center,
-      child: const Icon(Icons.add, size: 18, color: AppColors.textFaint),
     );
   }
 
@@ -194,9 +136,9 @@ class BackpackPage extends StatelessWidget {
       itemCount: state.modules.length,
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
-        mainAxisSpacing: 8,
-        crossAxisSpacing: 8,
-        childAspectRatio: 1.6,
+        mainAxisSpacing: 10,
+        crossAxisSpacing: 10,
+        childAspectRatio: 1.35,
       ),
       itemBuilder: (_, i) {
         final m = state.modules[i];
