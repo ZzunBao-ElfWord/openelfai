@@ -29,6 +29,9 @@ class AppState extends ChangeNotifier {
   /// 帖子评论（按 postId 分组）。
   final Map<String, List<PostComment>> comments = {};
 
+  /// 举报记录（客户端临时存储，服务端审核接口待对接）。
+  final List<Map<String, String>> reports = [];
+
   User? currentUser;
   bool _initialized = false;
 
@@ -468,6 +471,17 @@ class AppState extends ChangeNotifier {
     target.replies++;
     notifyListeners();
     return null;
+  }
+
+  // —— 举报 ——
+
+  void report({required String targetId, required String reason}) {
+    reports.add({
+      'targetId': targetId,
+      'reason': reason,
+      'time': _now(),
+    });
+    // 举报不需要触发 UI 刷新，也不持久化（临时存储）
   }
 
   // —— 算力 ——

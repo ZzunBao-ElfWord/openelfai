@@ -33,7 +33,6 @@ android {
         release {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
-            // 关闭代码压缩/资源裁剪：R8 会重命名 JNI 反射调用的插件方法（shared_preferences 等），导致运行时崩溃。
             isMinifyEnabled = false
             isShrinkResources = false
             signingConfig = signingConfigs.getByName("debug")

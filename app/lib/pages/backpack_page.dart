@@ -3,6 +3,7 @@ import '../models/elf.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import 'market_page.dart';
 
 /// 背包 tab：为我的 AI 组装能力。一人只能持 1 只。
 class BackpackPage extends StatelessWidget {
@@ -59,7 +60,9 @@ class BackpackPage extends StatelessWidget {
           const SizedBox(height: 18),
           GhostButton(
             label: '去市场',
-            onTap: () => DefaultTabController.of(context)?.animateTo(3),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const MarketPage()),
+            ),
           ),
         ],
       ),

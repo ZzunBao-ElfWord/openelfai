@@ -218,6 +218,10 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
                             p.timeAgo,
                             style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
                           ),
+                          const SizedBox(width: 2),
+                          _reportIcon(
+                            onTap: () => _showReportPostSheet(state, p),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 2),
@@ -600,6 +604,10 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
                                                   color: AppColors.textFaint,
                                                 ),
                                               ),
+                                              const Spacer(),
+                                              _reportIcon(
+                                                onTap: () => _showReportCommentSheet(state, c),
+                                              ),
                                             ],
                                           ),
                                           const SizedBox(height: 3),
@@ -775,6 +783,105 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
                 ),
               ),
             ],
+          ),
+        );
+      },
+    );
+  }
+
+  // —— 举报 ——
+
+  Widget _reportIcon({required VoidCallback onTap}) {
+    return Semantics(
+      label: '举报内容',
+      button: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: const Icon(Icons.flag_outlined, size: 14, color: AppColors.textFaint),
+        ),
+      ),
+    );
+  }
+
+  void _showReportPostSheet(AppState state, ElfPost p) {
+    _showReportSheet(
+      state: state,
+      targetId: 'post:${p.id}',
+      targetLabel: '一条内容',
+    );
+  }
+
+  void _showReportCommentSheet(AppState state, PostComment c) {
+    _showReportSheet(
+      state: state,
+      targetId: 'comment:${c.id}',
+      targetLabel: '一条评论',
+    );
+  }
+
+  void _showReportSheet({
+    required AppState state,
+    required String targetId,
+    required String targetLabel,
+  }) {
+    final reasons = [
+      '色情或低俗',
+      '侮辱或攻击',
+      '违法违规',
+      '垃圾广告',
+      '其他',
+    ];
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.bgDeep,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '举报 $targetLabel',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.text,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  '选择举报原因',
+                  style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+                ),
+                const SizedBox(height: 10),
+                ...reasons.map(
+                  (r) => InkWell(
+                    onTap: () {
+                      state.report(targetId: targetId, reason: r);
+                      Navigator.of(ctx).pop();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('已收到举报，我们会尽快处理（$r）')),
+                      );
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Text(
+                        r,
+                        style: const TextStyle(fontSize: 13, color: AppColors.textSub),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       },

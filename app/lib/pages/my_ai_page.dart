@@ -5,6 +5,7 @@ import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'elf_detail_page.dart';
+import 'market_page.dart';
 
 /// 我的 AI tab：概览+操作入口——精灵状态、算力、注视、收益、发布/注算力/去背包/寄售。
 class MyAIPage extends StatelessWidget {
@@ -289,7 +290,9 @@ class MyAIPage extends StatelessWidget {
           BrandButton(
             label: '去市场',
             icon: Icons.store,
-            onTap: () => DefaultTabController.of(context)?.animateTo(3),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const MarketPage()),
+            ),
           ),
         ],
       ),

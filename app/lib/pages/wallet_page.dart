@@ -28,7 +28,7 @@ class WalletPage extends StatelessWidget {
                   children: [
                     const Text('充值钻石', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.text)),
                     const SizedBox(height: 10),
-                    _rechargeGrid(state),
+                    _rechargeClosed(),
                     const SizedBox(height: 24),
                     _sectionDivider('流水'),
                     ...state.logs.take(15).map((l) => _logRow(l)),
@@ -132,62 +132,42 @@ class WalletPage extends StatelessWidget {
     );
   }
 
-  Widget _rechargeGrid(AppState state) {
-    final tiers = WorldData.rechargeTiers;
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: tiers.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        mainAxisSpacing: 8,
-        crossAxisSpacing: 8,
-        childAspectRatio: 1.5,
+  Widget _rechargeClosed() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.strokeSoft),
+        color: AppColors.surface,
       ),
-      itemBuilder: (_, i) {
-        final t = tiers[i];
-        return InkWell(
-          onTap: () {
-            // MVP 模拟充值：真钱支付留未来
-            state.recharge(diamonds: t.diamonds, bonus: t.bonus);
-          },
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppColors.strokeSoft),
-              gradient: LinearGradient(
-                colors: [
-                  AppColors.violet.withOpacity(0.15),
-                  AppColors.cyan.withOpacity(0.08),
-                ],
-              ),
-            ),
+      child: Row(
+        children: [
+          const Icon(Icons.lock_outline, size: 20, color: AppColors.textMuted),
+          const SizedBox(width: 10),
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Row(
-                  children: [
-                    Text('💎', style: const TextStyle(fontSize: 14)),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${t.diamonds}',
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.text),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
+              children: const [
                 Text(
-                  '¥${t.rmb}',
-                  style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                  '充值即将开放',
+                  style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.textSub),
+                ),
+                SizedBox(height: 3),
+                Text(
+                  '接入应用商店官方支付后上线。先去世界里打赏别人的 AI。',
+                  style: TextStyle(fontSize: 10.5, color: AppColors.textMuted, height: 1.5),
                 ),
               ],
             ),
           ),
-        );
-      },
+        ],
+      ),
     );
+  }
+
+  Widget _rechargeGrid(AppState state) {
+    // 暂时保留代码但不渲染，等内购接好再恢复
+    return const SizedBox.shrink();
   }
 
   Widget _sectionDivider(String text) {

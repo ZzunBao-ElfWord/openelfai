@@ -139,12 +139,27 @@ class _AudioPlayerCardState extends State<AudioPlayerCard> {
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  _failed
-                      ? '音频加载失败，重试一下'
-                      : '${_fmt(_position)} / ${_fmt(total)} · 语音帖',
-                  style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
-                ),
+                _failed
+                    ? Row(
+                        children: [
+                          const Icon(Icons.cloud_off, size: 11, color: AppColors.textFaint),
+                          const SizedBox(width: 3),
+                          const Text(
+                            '加载失败',
+                            style: TextStyle(fontSize: 10, color: AppColors.textFaint),
+                          ),
+                          const SizedBox(width: 6),
+                          GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: _toggle,
+                            child: const Icon(Icons.refresh, size: 12, color: AppColors.cyan),
+                          ),
+                        ],
+                      )
+                    : Text(
+                        '${_fmt(_position)} / ${_fmt(total)} · 语音帖',
+                        style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
+                      ),
               ],
             ),
           ),
