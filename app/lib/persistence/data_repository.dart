@@ -33,6 +33,7 @@ class DataRepository {
   static const _kWatchedPosts = 'openelf.watchedPosts';
   static const _kReferralCounted = 'openelf.referralCounted';
   static const _kOwnedModules = 'openelf.ownedModules';
+  static const _kActiveElfId = 'openelf.activeElfId';
 
   // —— 保存 / 加载 ——
 
@@ -52,6 +53,7 @@ class DataRepository {
     required Set<String> watchedPosts,
     required Set<String> referralCounted,
     required Set<String> ownedModules,
+    String? activeElfId,
     required User user,
   }) async {
     final p = await _ensure();
@@ -74,6 +76,10 @@ class DataRepository {
       p.setString(_kWatchedPosts, jsonEncode(watchedPosts.toList())),
       p.setString(_kReferralCounted, jsonEncode(referralCounted.toList())),
       p.setString(_kOwnedModules, jsonEncode(ownedModules.toList())),
+      if (activeElfId != null)
+        p.setString(_kActiveElfId, activeElfId)
+      else
+        p.remove(_kActiveElfId),
     ]);
   }
 
@@ -150,6 +156,7 @@ class DataRepository {
         watchedPosts: readSet(_kWatchedPosts),
         referralCounted: readSet(_kReferralCounted),
         ownedModules: readSet(_kOwnedModules),
+        activeElfId: p.getString(_kActiveElfId),
         user: user,
       );
     } catch (e) {
@@ -177,6 +184,8 @@ class DataRepository {
       p.remove(_kCollectedPosts),
       p.remove(_kWatchedPosts),
       p.remove(_kReferralCounted),
+      p.remove(_kOwnedModules),
+      p.remove(_kActiveElfId),
     ]);
     // _kUser 不在这里清——登出由 LocalAuthRepository 自己管
   }
@@ -411,6 +420,7 @@ class LoadedData {
   final Set<String> watchedPosts;
   final Set<String> referralCounted;
   final Set<String> ownedModules;
+  final String? activeElfId;
   final User? user;
 
   const LoadedData({
@@ -429,6 +439,7 @@ class LoadedData {
     required this.watchedPosts,
     required this.referralCounted,
     required this.ownedModules,
+    this.activeElfId,
     required this.user,
   });
 }

@@ -150,7 +150,7 @@ class _MarketPageState extends State<MarketPage> with SingleTickerProviderStateM
           ),
           const SizedBox(height: 6),
           Text(
-            '每人只能持 1 只 AI。想换？先把手里这只寄售出去，再买新的。全部使用 💎 钻石支付。',
+            '可以同时持有多只 AI，喜欢就买。全部使用 💎 钻石支付。',
             style: TextStyle(
               fontSize: 11,
               color: AppColors.textMuted,
@@ -168,7 +168,7 @@ class _MarketPageState extends State<MarketPage> with SingleTickerProviderStateM
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
       children: [
-        _sectionTitle('AI · 官方首发', '每人限持 1 只，带专属链上钱包'),
+        _sectionTitle('AI · 官方首发', '可以同时持有多只，每只带专属链上钱包'),
         const SizedBox(height: 8),
         if (listings.isEmpty)
           const Padding(

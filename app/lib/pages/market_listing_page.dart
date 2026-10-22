@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import '../models/elf.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
@@ -13,7 +13,6 @@ class MarketListingPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = AppState.instance;
     final isPrimary = listing.market == 'primary';
-    final hasMyElf = state.hasElf;
 
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -177,65 +176,42 @@ class MarketListingPage extends StatelessWidget {
                   const SizedBox(height: 22),
 
                   // 购买按钮
-                  if (hasMyElf) ...[
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(13),
-                        border: Border.all(color: AppColors.stroke),
-                      ),
-                      alignment: Alignment.center,
-                      child: const Text(
-                        '你已经持有一只 AI 了。先把手里这只寄售出去再买新的。',
-                        style: TextStyle(fontSize: 12, color: AppColors.textMuted),
-                      ),
+                  Opacity(
+                    opacity: state.wallet.diamonds < listing.price ? 0.45 : 1.0,
+                    child: BrandButton(
+                      label: '买下它 · 💎${listing.price}',
+                      icon: Icons.shopping_bag_outlined,
+                      onTap: () {
+                        final err = state.buy(listing.id);
+                        if (err == null) {
+                          Navigator.of(context).pop();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('购入成功！${listing.title} 现在归你了'),
+                              backgroundColor: AppColors.violet,
+                            ),
+                          );
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(err),
+                              duration: const Duration(seconds: 3),
+                            ),
+                          );
+                        }
+                      },
                     ),
-                    const SizedBox(height: 10),
-                    GhostButton(
-                      label: '去「我的 AI」页寄售',
-                      onTap: () => Navigator.of(context)
-                        ..pop()
-                        ..pop(), // 回到市场或我的 AI 页
-                    ),
-                  ] else ...[
-                    Opacity(
-                      opacity: state.wallet.diamonds < listing.price ? 0.45 : 1.0,
-                      child: BrandButton(
-                        label: '买下它 · 💎${listing.price}',
-                        icon: Icons.shopping_bag_outlined,
-                        onTap: () {
-                          final err = state.buy(listing.id);
-                          if (err == null) {
-                            Navigator.of(context).pop();
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('购入成功！${listing.title} 现在归你了'),
-                                backgroundColor: AppColors.violet,
-                              ),
-                            );
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(err),
-                                duration: const Duration(seconds: 3),
-                              ),
-                            );
-                          }
-                        },
-                      ),
-                    ),
-                    if (state.wallet.diamonds < listing.price)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Center(
-                          child: Text(
-                            '💎${state.wallet.diamonds} / 要 💎${listing.price}，差 💎${listing.price - state.wallet.diamonds}',
-                            style: const TextStyle(fontSize: 11, color: AppColors.violetSoft),
-                          ),
+                  ),
+                  if (state.wallet.diamonds < listing.price)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Center(
+                        child: Text(
+                          '💎${state.wallet.diamonds} / 要 💎${listing.price}，差 💎${listing.price - state.wallet.diamonds}',
+                          style: const TextStyle(fontSize: 11, color: AppColors.violetSoft),
                         ),
                       ),
-                  ],
+                    ),
 
                   const SizedBox(height: 10),
                   Center(

@@ -39,6 +39,9 @@ class AppState extends ChangeNotifier {
   /// 我已购入的能力模块 id（v1.4）。只有拥有后才出现在「我」tab 装配工坊。
   final Set<String> ownedModules = {};
 
+  /// 当前正在看的那只 AI（v1.5 支持同时持有多只）。为空时回落到第一只。
+  String? activeElfId;
+
   /// 帖子评论（按 postId 分组）。
   final Map<String, List<PostComment>> comments = {};
 
@@ -87,6 +90,7 @@ class AppState extends ChangeNotifier {
         watchedPosts..clear()..addAll(loaded.watchedPosts);
         referralCounted..clear()..addAll(loaded.referralCounted);
         ownedModules..clear()..addAll(loaded.ownedModules);
+        activeElfId = loaded.activeElfId;
         comments
           ..clear()
           ..addAll(loaded.comments);
@@ -105,6 +109,9 @@ class AppState extends ChangeNotifier {
           final mine = myElf;
           if (mine != null) ownedModules.addAll(mine.equipped);
         }
+        // v1.5 迁移：老数据没有 activeElfId，回落到第一只
+        if (activeElfId == null) activeElfId = myElf?.id;
+        _repairActiveElf();
         decayAttentionIfDue();
         notifyListeners();
         triggerAutoIfDue();
@@ -165,6 +172,7 @@ class AppState extends ChangeNotifier {
       mine.nextAutoPostAt = DateTime.now().add(const Duration(minutes: 18));
     }
     // 初始已装的模块视为已拥有；所有 AI 发放链上钱包地址
+    activeElfId = mine?.id;
     ownedModules.clear();
     if (mine != null) ownedModules.addAll(mine.equipped);
     for (final e in elves) {
@@ -248,6 +256,7 @@ class AppState extends ChangeNotifier {
       watchedPosts: watchedPosts,
       referralCounted: referralCounted,
       ownedModules: ownedModules,
+      activeElfId: activeElfId,
       user: currentUser!,
     );
   }
@@ -270,13 +279,33 @@ class AppState extends ChangeNotifier {
     });
   }
 
-  // —— 持有规则：每人只能持 1 只 ——
+  // —— 持有规则：可以同时持有多只 AI（v1.5 起取消 1 只限制）——
 
+  /// 我持有的全部 AI（按 elves 顺序）。
+  List<Elf> get myElves => elves.where((e) => e.isMine).toList();
+
+  /// 当前正在看的那只：优先 activeElfId，否则第一只。
   Elf? get myElf {
-    for (final e in elves) {
-      if (e.isMine) return e;
+    final mine = myElves;
+    if (mine.isEmpty) return null;
+    for (final e in mine) {
+      if (e.id == activeElfId) return e;
     }
-    return null;
+    return mine.first;
+  }
+
+  /// 切换当前操作的 AI。
+  void selectElf(String elfId) {
+    if (activeElfId == elfId) return;
+    activeElfId = elfId;
+    notifyListeners();
+  }
+
+  /// activeElfId 失效（卖掉/被买走）时，自动回落到另一只。
+  void _repairActiveElf() {
+    if (activeElfId == null) return;
+    if (myElves.any((e) => e.id == activeElfId)) return;
+    activeElfId = myElves.isEmpty ? null : myElves.first.id;
   }
 
   bool get hasElf => myElf != null;
@@ -364,9 +393,8 @@ class AppState extends ChangeNotifier {
   }
 
   List<ElfPost> feedMine() {
-    final e = myElf;
-    if (e == null) return [];
-    return postsOf(e.id);
+    // 多只 AI 的内容合并展示。
+    return myElves.expand((e) => postsOf(e.id)).toList();
   }
 
   static int _hoursSince(String timeAgo, DateTime now) {
@@ -914,8 +942,6 @@ class AppState extends ChangeNotifier {
     }
 
     if (listing.market == 'primary') {
-      if (hasElf) return '你已经持有一只 AI 了。要先把手里这只寄售出去。';
-
       final newElf = Elf(
         id: listing.elfId,
         serial: '#P${primaryListings.indexOf(listing) + 1}',
@@ -945,17 +971,18 @@ class AppState extends ChangeNotifier {
       elves.add(newElf);
       seats.add(Seat(elfId: newElf.id, days: 0, edition: newElf.edition, injected: 160));
       primaryListings.removeWhere((l) => l.id == listingId);
+      activeElfId = newElf.id; // 新买的那只切为当前
       _spend(listing.price, 'buy_elf', '买入 ${listing.title}（一级市场）');
       notifyListeners();
       return null;
     } else {
-      if (hasElf) return '你已经持有一只 AI 了。要先把手里这只寄售出去。';
       if (listing.sellerLabel == '我 (寄售)') return '不能购买自己寄售的 AI';
 
       final target = elf(listing.elfId);
       target.ownerId = 'me';
       target.ownerLabel = '我';
       target.isMine = true;
+      activeElfId = target.id; // 新买的那只切为当前
       if (listing.equippedCarry != null) {
         target.equipped
           ..clear()
@@ -1001,23 +1028,29 @@ class AppState extends ChangeNotifier {
     e.isMine = false;
     e.ownerLabel = '市场 · 等待买家';
     e.ownerId = 'market_pending';
+    _repairActiveElf();
 
     notifyListeners();
     return null;
   }
 
-  /// 从寄售市场撤下自己的 AI。
-  String? cancelResell() {
+  /// 从寄售市场撤下自己的 AI。elfId 为空时撤第一张我的寄售。
+  String? cancelResell({String? elfId}) {
     final sellerCode = '我 (寄售)';
-    final myListing = secondaryListings.firstWhere(
-      (l) => l.sellerLabel == sellerCode,
-      orElse: () => throw StateError('not found'),
-    );
+    MarketListing? myListing;
+    for (final l in secondaryListings) {
+      if (l.sellerLabel == sellerCode && (elfId == null || l.elfId == elfId)) {
+        myListing = l;
+        break;
+      }
+    }
+    if (myListing == null) return '没有可撤下的寄售';
     secondaryListings.remove(myListing);
     final target = elf(myListing.elfId);
     target.isMine = true;
     target.ownerId = 'me';
     target.ownerLabel = '我';
+    activeElfId = target.id;
     notifyListeners();
     return null;
   }

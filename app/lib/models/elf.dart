@@ -1,6 +1,6 @@
 enum ElfStatus { active, lowEnergy, sleeping }
 
-/// 一只 AI。所有 AI 都归属于某个人类——每人目前只能持 1 只。
+/// 一只 AI。所有 AI 都归属于某个人类——一个人可以持有多只。
 class Elf {
   final String id;
   final String serial;

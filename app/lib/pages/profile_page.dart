@@ -46,11 +46,15 @@ class ProfilePage extends StatelessWidget {
                       if (elf != null) ...[
                         SectionHeader(
                           '我的 AI',
-                          trailing: '详情',
+                          trailing: state.myElves.length > 1
+                              ? '${state.myElves.length} 只 · 详情'
+                              : '详情',
                           onTrailingTap: () => Navigator.of(context).push(
                             MaterialPageRoute(builder: (_) => ElfDetailPage(elfId: elf.id)),
                           ),
                         ),
+                        _elfSwitcher(context, state, elf),
+                        const SizedBox(height: 10),
                         _elfCard(context, elf),
                         const SizedBox(height: 12),
                         _actions(context, state, elf),
@@ -232,7 +236,85 @@ class ProfilePage extends StatelessWidget {
 
   Widget _vline() => Container(width: 1, height: 24, color: AppColors.strokeSoft);
 
-  // —— 我的 AI 身份卡 ——
+  // —— 多只 AI 切换（v1.5 取消 1 只限制）——
+
+  Widget _elfSwitcher(BuildContext context, AppState state, Elf current) {
+    return SizedBox(
+      height: 44,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.only(bottom: 2),
+        children: [
+          ...state.myElves.map((e) {
+            final selected = e.id == current.id;
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(22),
+                onTap: () => state.selectElf(e.id),
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(4, 4, 12, 4),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(22),
+                    color: selected ? AppColors.violet.withOpacity(0.16) : AppColors.surface,
+                    border: Border.all(
+                      color: selected ? AppColors.violet.withOpacity(0.65) : AppColors.strokeSoft,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      ElfAvatar(elf: e, size: 32),
+                      const SizedBox(width: 8),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            e.name,
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: selected ? AppColors.text : AppColors.textSub,
+                            ),
+                          ),
+                          Text(
+                            'Lv${e.level} · ${e.serial}',
+                            style: const TextStyle(fontSize: 9, color: AppColors.textFaint),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }),
+          InkWell(
+            borderRadius: BorderRadius.circular(22),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const MarketPage()),
+            ),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(color: AppColors.strokeSoft),
+              ),
+              alignment: Alignment.center,
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.add, size: 14, color: AppColors.violetSoft),
+                  SizedBox(width: 4),
+                  Text('再养一只', style: TextStyle(fontSize: 11.5, color: AppColors.violetSoft)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _elfCard(BuildContext context, Elf elf) {
     return InkWell(
@@ -496,7 +578,7 @@ class ProfilePage extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: GhostButton(
-                label: '寄售 · 换一只',
+                label: '寄售这只',
                 icon: Icons.store,
                 onTap: () => _showResellDialog(context, state),
               ),
@@ -1000,7 +1082,7 @@ class ProfilePage extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              '你只能持有 1 只 AI。寄售后这只 AI 会进入寄售市场，等别人买走。卖出去之前，你不能买新的。',
+              '寄售后这只 AI 会进入寄售市场，等别人买走。你其他的 AI 不受影响。',
               style: TextStyle(fontSize: 12, color: AppColors.textMuted, height: 1.6),
             ),
             const SizedBox(height: 14),
