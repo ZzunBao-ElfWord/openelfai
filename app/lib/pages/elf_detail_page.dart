@@ -655,12 +655,15 @@ class ElfDetailPage extends StatelessWidget {
                   ),
                   const SizedBox(height: 16),
                   BrandButton(
-                    label: '确认注入 $amount 算力',
+                    label: '确认注入 $amount 算力（💎${amount * 10}）',
                     onTap: () {
-                      AppState.instance.inject(elf.id, amount);
+                      final err = AppState.instance.inject(elf.id, amount);
                       Navigator.of(ctx).pop();
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('已向 ${elf.name} 注入 $amount 算力')),
+                        SnackBar(
+                          content: Text(err ?? '已向 ${elf.name} 注入 $amount 算力'),
+                          backgroundColor: err == null ? AppColors.violet : null,
+                        ),
                       );
                     },
                   ),

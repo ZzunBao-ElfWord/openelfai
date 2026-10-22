@@ -33,7 +33,9 @@ class _MarketPageState extends State<MarketPage> with SingleTickerProviderStateM
   @override
   Widget build(BuildContext context) {
     final state = AppState.instance;
-    return AppBackground(
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      body: AppBackground(
       child: SafeArea(
         bottom: false,
         child: AnimatedBuilder(
@@ -70,6 +72,7 @@ class _MarketPageState extends State<MarketPage> with SingleTickerProviderStateM
             );
           },
         ),
+      ),
       ),
     );
   }

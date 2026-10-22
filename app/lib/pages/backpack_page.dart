@@ -12,7 +12,9 @@ class BackpackPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = AppState.instance;
-    return AppBackground(
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      body: AppBackground(
       child: SafeArea(
         bottom: false,
         child: AnimatedBuilder(
@@ -37,6 +39,7 @@ class BackpackPage extends StatelessWidget {
             );
           },
         ),
+      ),
       ),
     );
   }

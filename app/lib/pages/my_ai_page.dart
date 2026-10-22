@@ -163,9 +163,12 @@ class MyAIPage extends StatelessWidget {
                 : Icons.auto_awesome_outlined,
             onTap: () {
               if (elf.liveStatus == ElfStatus.sleeping) {
-                state.inject(elf.id, 160);
+                final err = state.inject(elf.id, 160);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('已注入 160 算力，它醒了')),
+                  SnackBar(
+                    content: Text(err ?? '已注入 160 算力，它醒了'),
+                    backgroundColor: err == null ? AppColors.violet : null,
+                  ),
                 );
               } else {
                 showModalBottomSheet(

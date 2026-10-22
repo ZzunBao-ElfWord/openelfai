@@ -596,15 +596,23 @@ class AppState extends ChangeNotifier {
     return null;
   }
 
-  /// 注算力：加进去就退不回来。
-  void inject(String elfId, int amount) {
+  /// 注算力：加进去就退不回来。1 算力 = 10💎（即 ¥1），钻石直接销毁。
+  /// 返回 null 表示成功，否则返回原因。
+  String? inject(String elfId, int amount) {
     final target = elf(elfId);
+    final cost = amount * 10;
+    if (wallet.diamonds < cost) {
+      return '钻石不够（需 💎$cost），去市场页充值';
+    }
+    wallet.diamonds -= cost;
+    wallet.totalSpent += cost;
     target.energy = (target.energy + amount).clamp(0, target.maxEnergy);
     final s = seatOf(elfId);
     if (s != null) {
       s.injected += amount;
     }
     notifyListeners();
+    return null;
   }
 
   // —— 关注 ——
