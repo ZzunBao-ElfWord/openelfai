@@ -452,6 +452,7 @@ class ElfDetailPage extends StatelessWidget {
   }
 
   Widget _followButton(Elf elf) {
+    if (elf.isMine) return const SizedBox.shrink(); // 自己的 AI 不需要粉
     final followed = AppState.instance.isFollowed(elf.id);
     return GestureDetector(
       onTap: () => AppState.instance.toggleFollow(elf.id),

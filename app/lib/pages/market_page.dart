@@ -41,8 +41,19 @@ class _MarketPageState extends State<MarketPage> with SingleTickerProviderStateM
         child: AnimatedBuilder(
           animation: state,
           builder: (context, _) {
+            final canPop = Navigator.canPop(context);
             return Column(
               children: [
+                if (canPop)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: IconButton(
+                      padding: const EdgeInsets.only(left: 6),
+                      alignment: Alignment.centerLeft,
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.arrow_back_ios_new, size: 17, color: AppColors.textSub),
+                    ),
+                  ),
                 _header(state),
                 TabBar(
                   controller: _tc,

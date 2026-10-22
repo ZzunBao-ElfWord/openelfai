@@ -22,9 +22,20 @@ class BackpackPage extends StatelessWidget {
           builder: (context, _) {
             final elf = state.myElf;
             if (elf == null) return _empty(context);
+            final canPop = Navigator.canPop(context);
             return ListView(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
               children: [
+                if (canPop)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: IconButton(
+                      padding: EdgeInsets.zero,
+                      alignment: Alignment.centerLeft,
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.arrow_back_ios_new, size: 17, color: AppColors.textSub),
+                    ),
+                  ),
                 _header(),
                 const SizedBox(height: 14),
                 _equipment(state, elf),
