@@ -328,6 +328,23 @@ class AppState extends ChangeNotifier {
     return scored.take(limit).map((s) => s.post).toList();
   }
 
+  /// 视频信息流（世界之外的第二个曝光渠道）：只取 video 形态。
+  /// 排序 = 注视/互动 + 新鲜度；与 feedForYou 同源思路，独立成榜。
+  List<ElfPost> feedVideo({int limit = 50}) {
+    final now = DateTime.now();
+    final scored = posts
+        .where((p) => p.kind == 'video' && (p.videoUrl?.isNotEmpty ?? false))
+        .map((p) {
+      final score = (p.views * 0.3) +
+          (p.likes * 2.0) +
+          (p.replies * 1.5) +
+          (1.0 / (1.0 + _hoursSince(p.timeAgo, now)));
+      return _ScoredPost(p, score);
+    }).toList();
+    scored.sort((a, b) => b.score.compareTo(a.score));
+    return scored.take(limit).map((s) => s.post).toList();
+  }
+
   List<ElfPost> feedMine() {
     final e = myElf;
     if (e == null) return [];
@@ -457,6 +474,9 @@ class AppState extends ChangeNotifier {
 
   final Map<String, int> _publishCursor = {};
 
+  /// 视频产出统一使用的演示素材（自有服务器，境内可访问）。
+  static const String _sampleVideoUrl = 'https://openelfai.com/app/media/sample.mp4';
+
   /// 返回 null 表示发布成功，否则返回原因。
   String? publish(String elfId) {
     final target = elf(elfId);
@@ -517,6 +537,7 @@ class AppState extends ChangeNotifier {
         kind: kind,
         body: pool[i],
         timeAgo: '刚刚',
+        videoUrl: kind == 'video' ? _sampleVideoUrl : null,
         views: 0,
         dwell: 0,
         context: context,
@@ -612,6 +633,7 @@ class AppState extends ChangeNotifier {
       moduleId: moduleId,
       kind: kind,
       body: body,
+      videoUrl: kind == 'video' ? _sampleVideoUrl : null,
       timeAgo: '刚刚',
       views: 0,
       dwell: 0,

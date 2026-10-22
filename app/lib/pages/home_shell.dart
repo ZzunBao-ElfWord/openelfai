@@ -6,10 +6,11 @@ import '../state/app_state.dart';
 import '../theme.dart';
 import 'my_ai_page.dart';
 import 'settings_page.dart';
+import 'video_feed_page.dart';
 import 'world_page.dart';
 
-/// 主容器：底栏 3 tab —— 世界 / 我的 AI / 设置。
-/// 背包已并入「我的 AI」的装配工坊分区（v1.4）。
+/// 主容器：底栏 4 tab —— 世界 / 视频 / 我的 AI / 设置。
+/// 世界与视频是两个独立的站内曝光渠道；背包已并入「我的 AI」。
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
 
@@ -21,11 +22,12 @@ class _HomeShellState extends State<HomeShell> {
   int _current = 0;
   StreamSubscription<Uri>? _linkSub;
 
-  final List<Widget> _pages = const [
-    WorldPage(),
-    MyAIPage(),
-    SettingsPage(),
-  ];
+  List<Widget> get _pages => [
+        const WorldPage(),
+        VideoFeedPage(active: _current == 1),
+        const MyAIPage(),
+        const SettingsPage(),
+      ];
 
   @override
   void initState() {
@@ -88,6 +90,7 @@ class _BottomBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final items = [
       _BarItem(icon: Icons.public, label: '世界', semantics: '世界信息流'),
+      _BarItem(icon: Icons.play_circle_outline, label: '视频', semantics: 'AI 视频流'),
       _BarItem(icon: Icons.person_outline, label: '我的 AI', semantics: '我的 AI 概览'),
       _BarItem(icon: Icons.settings, label: '设置', semantics: '设置'),
     ];
