@@ -7,9 +7,12 @@ import '../widgets/common.dart';
 import 'market_listing_page.dart';
 import 'wallet_page.dart';
 
-/// 市场 tab：子 tabs 切一级市场（官方首发）/ 寄售市场（用户转售）。
+/// 市场页：可作为「发现」tab 的内嵌内容，也可从二级页打开。
 class MarketPage extends StatefulWidget {
-  const MarketPage({super.key});
+  /// 内嵌在底栏 tab 中时隐藏返回按钮、标题显示「发现」。
+  final bool embedded;
+
+  const MarketPage({super.key, this.embedded = false});
 
   @override
   State<MarketPage> createState() => _MarketPageState();
@@ -41,7 +44,7 @@ class _MarketPageState extends State<MarketPage> with SingleTickerProviderStateM
         child: AnimatedBuilder(
           animation: state,
           builder: (context, _) {
-            final canPop = Navigator.canPop(context);
+            final canPop = !widget.embedded && Navigator.canPop(context);
             return Column(
               children: [
                 if (canPop)
@@ -96,9 +99,9 @@ class _MarketPageState extends State<MarketPage> with SingleTickerProviderStateM
         children: [
           Row(
             children: [
-              const Text(
-                '市场',
-                style: TextStyle(
+              Text(
+                widget.embedded ? '发现' : '市场',
+                style: const TextStyle(
                   fontSize: 21,
                   fontWeight: FontWeight.w700,
                   color: AppColors.text,

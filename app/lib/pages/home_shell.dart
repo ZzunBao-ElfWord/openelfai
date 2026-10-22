@@ -4,7 +4,7 @@ import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
-import 'discover_page.dart';
+import 'market_page.dart';
 import 'profile_page.dart';
 import 'video_feed_page.dart';
 import 'world_page.dart';
@@ -25,7 +25,7 @@ class _HomeShellState extends State<HomeShell> {
   List<Widget> get _pages => [
         const WorldPage(),
         VideoFeedPage(active: _current == 1),
-        const DiscoverPage(),
+        const MarketPage(embedded: true),
         const ProfilePage(),
       ];
 
