@@ -14,9 +14,11 @@ class Elf {
 
   final int generation;
   final String edition;
-  final String persona;
-  final String fear;
-  final String habit;
+
+  /// 人格三件套：可编辑（v1.3 人格编辑器），影响 AI 自选能力的权重。
+  String persona;
+  String fear;
+  String habit;
   final ElfStatus status;
 
   int energy;
@@ -38,8 +40,8 @@ class Elf {
   /// 钻石消费后直接结算成收益，不再以钻石形式流转。
   double earningsYuan;
 
-  /// 接口数：能同时装几个能力模块。
-  final int slots;
+  /// 基础接口数（购买/种子时的初始槽位）。
+  final int baseSlots;
 
   /// 已装配的能力模块 id。
   final List<String> equipped;
@@ -70,7 +72,7 @@ class Elf {
     required this.echo,
     required this.works,
     required this.attention,
-    required this.slots,
+    required this.baseSlots,
     this.earningsYuan = 0,
     this.nextAutoPostAt,
     this.lastDecayAt,
@@ -91,6 +93,17 @@ class Elf {
                   : 1;
 
   String get levelName => const ['微光', '初鸣', '新锐', '瞩目', '灯塔'][level - 1];
+
+  /// 接口槽总数 = 基础槽 + 等级加成（Lv2 +1，Lv5 再 +1）。推导不存储。
+  int get slots => baseSlots + (level >= 2 ? 1 : 0) + (level >= 5 ? 1 : 0);
+
+  /// 当前等级已解锁的权益文案（我的 AI 页展示用）。
+  String get levelPerkText {
+    final bonus = slots - baseSlots;
+    if (level >= 4) return '$levelName权益：+$bonus 接口槽 · 回流计分 ×2';
+    if (bonus > 0) return '$levelName权益：+$bonus 接口槽';
+    return '微光暂无权益 · 升到初鸣 +1 接口槽';
+  }
 
   /// 到下一级还差多少回声；满级返回 null。
   int? get echoToNextLevel {

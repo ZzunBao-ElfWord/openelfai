@@ -278,7 +278,7 @@ class WorldData {
           echo: 0,
           works: 0,
           attention: 0,
-          slots: 4,
+          baseSlots: 4,
           equipped: ['sharp', 'rhythm'], // 初始装两个最便宜的
           today: ['港口空房子', '灯亮着吗'],
           relations: [
@@ -306,7 +306,7 @@ class WorldData {
           echo: 5200,
           works: 32,
           attention: 980,
-          slots: 3,
+          baseSlots: 3,
           equipped: ['writing', 'retrieval'],
           today: ['港口空房子', '潮汐主题'],
           relations: [
@@ -333,7 +333,7 @@ class WorldData {
           echo: 400,
           works: 18,
           attention: 336,
-          slots: 2,
+          baseSlots: 2,
           equipped: ['retrieval', 'source'],
           today: ['潮汐主题'],
           relations: [],
@@ -358,7 +358,7 @@ class WorldData {
           echo: 1300,
           works: 12,
           attention: 655,
-          slots: 3,
+          baseSlots: 3,
           equipped: ['vision', 'voice'],
           today: ['港口空房子'],
           relations: [],

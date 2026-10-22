@@ -33,6 +33,9 @@ class AppState extends ChangeNotifier {
   final Set<String> collectedPosts = {};
   final Set<String> watchedPosts = {};
 
+  /// 已计过站外回流分的 elfId（v1.3，同一设备对同一 AI 永久只计 1 次）。
+  final Set<String> referralCounted = {};
+
   /// 帖子评论（按 postId 分组）。
   final Map<String, List<PostComment>> comments = {};
 
@@ -79,6 +82,7 @@ class AppState extends ChangeNotifier {
         likedPosts..clear()..addAll(loaded.likedPosts);
         collectedPosts..clear()..addAll(loaded.collectedPosts);
         watchedPosts..clear()..addAll(loaded.watchedPosts);
+        referralCounted..clear()..addAll(loaded.referralCounted);
         comments
           ..clear()
           ..addAll(loaded.comments);
@@ -140,6 +144,7 @@ class AppState extends ChangeNotifier {
     likedPosts.clear();
     collectedPosts.clear();
     watchedPosts.clear();
+    referralCounted.clear();
     _seedComments();
     _rebuildSeq();
     // 给"我的 AI"预装 auto 能力 + 下一次自动发帖时间
@@ -224,6 +229,7 @@ class AppState extends ChangeNotifier {
       likedPosts: likedPosts,
       collectedPosts: collectedPosts,
       watchedPosts: watchedPosts,
+      referralCounted: referralCounted,
       user: currentUser!,
     );
   }
@@ -394,6 +400,42 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  // —— 人格编辑器（v1.3）：人格关键词影响 AI 自选能力的权重 ——
+
+  /// 人格关键词 → 亲和能力模块。匹配 persona + fear + habit 拼接文本。
+  static const Map<String, List<String>> _personaAffinity = {
+    '锐': ['sharp'], '观点': ['sharp'],
+    '长文': ['writing', 'deep'], '文字': ['writing'], '写': ['writing'],
+    '短句': ['rhythm'],
+    '图': ['vision', 'imageedit'], '视觉': ['vision'],
+    '影': ['video'], '视频': ['video'],
+    '声': ['voice', 'music'], '电台': ['voice'], '音乐': ['music'],
+    '研究': ['deep', 'retrieval'], '引用': ['retrieval', 'source'],
+    '记忆': ['memory'], '回忆': ['memory'],
+    '社交': ['mingle'], '搭话': ['mingle'],
+    '思考': ['think'], '推理': ['think'],
+  };
+
+  /// 这只 AI 人格亲和的能力模块集合。
+  Set<String> _affinityModules(Elf e) {
+    final text = '${e.persona} ${e.fear} ${e.habit}';
+    final hit = <String>{};
+    _personaAffinity.forEach((kw, mods) {
+      if (text.contains(kw)) hit.addAll(mods);
+    });
+    return hit;
+  }
+
+  /// 更新我的 AI 的人格三件套（各限 30 字，UI 层已截断）。
+  void updatePersona({required String persona, required String fear, required String habit}) {
+    final e = myElf;
+    if (e == null) return;
+    e.persona = persona.trim();
+    e.fear = fear.trim();
+    e.habit = habit.trim();
+    notifyListeners();
+  }
+
   // —— 发布：把 AI 放进世界争取注意力 ——
 
   static const Map<String, String> _kindOf = {
@@ -424,13 +466,20 @@ class AppState extends ChangeNotifier {
     }
 
     final equipped = modulesOf(elfId);
-    AbilityModule? chosen;
-    for (final m in equipped) {
-      if (WorldData.publishTemplates.containsKey(m.id)) {
-        chosen = m;
-        break;
-      }
-    }
+    // 人格亲和优先（稳定排序：命中者在前，组内保持装配顺序）
+    final affinity = _affinityModules(target);
+    final usable = equipped
+        .where((m) => WorldData.publishTemplates.containsKey(m.id))
+        .toList()
+        .asMap()
+        .entries
+        .toList()
+      ..sort((a, b) {
+        final af = (affinity.contains(a.value.id) ? 0 : 1)
+            .compareTo(affinity.contains(b.value.id) ? 0 : 1);
+        return af != 0 ? af : a.key.compareTo(b.key);
+      });
+    final chosen = usable.isEmpty ? null : usable.first.value;
 
     final cost = chosen?.compute ?? 0;
     if (target.energy < cost) {
@@ -518,8 +567,13 @@ class AppState extends ChangeNotifier {
         continue;
       }
 
-      // 选算力够的第一个（优先 compute 低的）
-      nonAuto.sort((a, b) => (module(a)?.compute ?? 0).compareTo(module(b)?.compute ?? 0));
+      // 人格亲和优先，组内再按 compute 升序
+      final affinity = _affinityModules(e);
+      nonAuto.sort((a, b) {
+        final af = (affinity.contains(a) ? 0 : 1).compareTo(affinity.contains(b) ? 0 : 1);
+        if (af != 0) return af;
+        return (module(a)?.compute ?? 0).compareTo(module(b)?.compute ?? 0);
+      });
       final picked = nonAuto.firstWhere(
         (id) => e.energy >= (module(id)?.compute ?? 0),
         orElse: () => '',
@@ -634,6 +688,22 @@ class AppState extends ChangeNotifier {
       e.attention = (e.attention * pow(0.85, days)).round();
       e.lastDecayAt = now;
     }
+  }
+
+  /// 站外回流计分（v1.3）：deeplink 打开 https://openelfai.com/e/?id=xxx 时调用。
+  /// 同一设备对同一 AI 永久只计 1 次。返回加的分值；已计过/AI 不存在返回 null。
+  int? countReferral(String elfId) {
+    if (referralCounted.contains(elfId)) return null;
+    Elf? target;
+    for (final e in elves) {
+      if (e.id == elfId) target = e;
+    }
+    if (target == null) return null;
+    referralCounted.add(elfId);
+    final delta = target.level >= 4 ? 20 : 10; // Lv4 权益：回流计分 ×2
+    _bump(target, delta);
+    notifyListeners();
+    return delta;
   }
 
   // —— 评论 ——
@@ -804,7 +874,7 @@ class AppState extends ChangeNotifier {
         echo: 0,
         works: 0,
         attention: 0,
-        slots: listing.title.contains('6') ? 6 : 3,
+        baseSlots: listing.title.contains('6') ? 6 : 3,
         equipped: [],
         today: [],
         relations: [],

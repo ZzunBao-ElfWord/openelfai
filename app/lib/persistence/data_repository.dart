@@ -32,6 +32,7 @@ class DataRepository {
   static const _kLikedPosts = 'openelf.likedPosts';
   static const _kCollectedPosts = 'openelf.collectedPosts';
   static const _kWatchedPosts = 'openelf.watchedPosts';
+  static const _kReferralCounted = 'openelf.referralCounted';
 
   // —— 保存 / 加载 ——
 
@@ -49,6 +50,7 @@ class DataRepository {
     required Set<String> likedPosts,
     required Set<String> collectedPosts,
     required Set<String> watchedPosts,
+    required Set<String> referralCounted,
     required User user,
   }) async {
     final p = await _ensure();
@@ -69,6 +71,7 @@ class DataRepository {
       p.setString(_kLikedPosts, jsonEncode(likedPosts.toList())),
       p.setString(_kCollectedPosts, jsonEncode(collectedPosts.toList())),
       p.setString(_kWatchedPosts, jsonEncode(watchedPosts.toList())),
+      p.setString(_kReferralCounted, jsonEncode(referralCounted.toList())),
     ]);
   }
 
@@ -143,6 +146,7 @@ class DataRepository {
         likedPosts: readSet(_kLikedPosts),
         collectedPosts: readSet(_kCollectedPosts),
         watchedPosts: readSet(_kWatchedPosts),
+        referralCounted: readSet(_kReferralCounted),
         user: user,
       );
     } catch (e) {
@@ -169,6 +173,7 @@ class DataRepository {
       p.remove(_kLikedPosts),
       p.remove(_kCollectedPosts),
       p.remove(_kWatchedPosts),
+      p.remove(_kReferralCounted),
     ]);
     // _kUser 不在这里清——登出由 LocalAuthRepository 自己管
   }
@@ -203,7 +208,7 @@ class DataRepository {
         'earningsYuan': e.earningsYuan,
         'nextAutoPostAt': e.nextAutoPostAt?.toIso8601String(),
         'lastDecayAt': e.lastDecayAt?.toIso8601String(),
-        'slots': e.slots,
+        'baseSlots': e.baseSlots,
         'equipped': e.equipped,
         'today': e.today,
         'relations': e.relations
@@ -242,7 +247,8 @@ class DataRepository {
         lastDecayAt: j['lastDecayAt'] == null
             ? null
             : DateTime.tryParse(j['lastDecayAt'] as String),
-        slots: j['slots'] as int,
+        // v1.3 迁移：slots → baseSlots（等级加成改由 getter 推导）
+        baseSlots: (j['baseSlots'] as int?) ?? (j['slots'] as int),
         equipped: List<String>.from(j['equipped'] as List),
         today: List<String>.from(j['today'] as List),
         relations: (j['relations'] as List)
@@ -398,6 +404,7 @@ class LoadedData {
   final Set<String> likedPosts;
   final Set<String> collectedPosts;
   final Set<String> watchedPosts;
+  final Set<String> referralCounted;
   final User? user;
 
   const LoadedData({
@@ -414,6 +421,7 @@ class LoadedData {
     required this.likedPosts,
     required this.collectedPosts,
     required this.watchedPosts,
+    required this.referralCounted,
     required this.user,
   });
 }

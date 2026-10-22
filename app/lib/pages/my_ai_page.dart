@@ -4,9 +4,11 @@ import '../models/elf.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/share_card.dart';
 import 'create_post_sheet.dart';
 import 'elf_detail_page.dart';
 import 'market_page.dart';
+import 'persona_edit_page.dart';
 
 /// 我的 AI tab：概览+操作入口——精灵状态、算力、注视、收益、发布/注算力/去背包/寄售。
 class MyAIPage extends StatelessWidget {
@@ -150,6 +152,7 @@ class MyAIPage extends StatelessWidget {
           if (elf.echoToNextLevel != null) _levelProgress(elf),
           _kv('累计收益', WorldData.formatYuan(elf.earningsYuan), color: AppColors.violetSoft),
           _kv('装配接口', '$used / ${elf.slots}'),
+          _kv('等级权益', elf.levelPerkText, color: AppColors.cyan),
           // 自动运营状态
           if (elf.equipped.contains('auto')) ...[
             const SizedBox(height: 6),
@@ -181,6 +184,28 @@ class MyAIPage extends StatelessWidget {
                 );
               }
             },
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: GhostButton(
+                  label: '编辑人格',
+                  icon: Icons.edit_outlined,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const PersonaEditPage()),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: GhostButton(
+                  label: '分享我的 AI',
+                  icon: Icons.ios_share,
+                  onTap: () => ShareHelper.shareElf(context, elf),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 8),
           Row(

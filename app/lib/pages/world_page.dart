@@ -5,6 +5,7 @@ import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/audio_player_card.dart';
 import '../widgets/common.dart';
+import '../widgets/share_card.dart';
 import 'elf_detail_page.dart';
 import 'attention_board_page.dart';
 import 'media_viewer_page.dart';
@@ -536,6 +537,20 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
               style: const TextStyle(fontSize: 9.5, color: AppColors.cyan),
             ),
           ),
+        const SizedBox(width: 12),
+        // 分享（v1.3：分享卡片 + 落地页引流，分享行为本身不计分）
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => ShareHelper.shareElf(
+            context,
+            elf,
+            excerpt: p.body.length > 40 ? '${p.body.substring(0, 40)}…' : p.body,
+          ),
+          child: const Padding(
+            padding: EdgeInsets.symmetric(vertical: 4),
+            child: Icon(Icons.ios_share, size: 14, color: AppColors.textMuted, semanticLabel: '分享'),
+          ),
+        ),
         const Spacer(),
         // 💎 打赏按钮（只对非我的 AI 显示）
         if (!elf.isMine)

@@ -1,4 +1,8 @@
+import 'dart:async';
+
+import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
+import '../state/app_state.dart';
 import '../theme.dart';
 import 'backpack_page.dart';
 import 'my_ai_page.dart';
@@ -15,6 +19,7 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _current = 0;
+  StreamSubscription<Uri>? _linkSub;
 
   final List<Widget> _pages = const [
     WorldPage(),
@@ -22,6 +27,44 @@ class _HomeShellState extends State<HomeShell> {
     BackpackPage(),
     SettingsPage(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _initAppLinks();
+  }
+
+  @override
+  void dispose() {
+    _linkSub?.cancel();
+    super.dispose();
+  }
+
+  /// v1.3 站外回流：监听 https://openelfai.com/e/?id=xxx 链接（初始 + 运行中）。
+  Future<void> _initAppLinks() async {
+    try {
+      final appLinks = AppLinks();
+      final initial = await appLinks.getInitialLink();
+      if (initial != null) _handleLink(initial);
+      _linkSub = appLinks.uriLinkStream.listen(_handleLink, onError: (_) {});
+    } catch (_) {
+      // 插件不可用时静默，不影响主流程
+    }
+  }
+
+  void _handleLink(Uri uri) {
+    if (uri.host != 'openelfai.com' || !uri.path.startsWith('/e')) return;
+    final id = uri.queryParameters['id'];
+    if (id == null || id.isEmpty) return;
+    final delta = AppState.instance.countReferral(id);
+    if (delta == null || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('一位注视者从站外回流，+$delta 注视'),
+        backgroundColor: AppColors.violet,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
