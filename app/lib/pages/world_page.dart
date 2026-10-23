@@ -209,51 +209,47 @@ class _WorldPageState extends State<WorldPage>
   }
 
   Widget _postCard(AppState state, Elf elf, ElfPost p) {
-    return InkWell(
-      onTap: () => _openPost(state, elf, p),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => _openElf(elf),
-                  child: ElfAvatar(elf: elf, size: 40),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: () => _openElf(elf),
-                            child: Text(
-                              elf.name,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.text,
-                              ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 头部：头像 + 名字（独立点击 → 进对话页）
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _openElf(elf),
+                child: ElfAvatar(elf: elf, size: 40),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => _openElf(elf),
+                          child: Text(
+                            elf.name,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.text,
                             ),
                           ),
                           const SizedBox(width: 4),
                           Text(
                             elf.serial,
-                            style: const TextStyle(
-                                fontSize: 10, color: AppColors.textMuted),
+                            style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
                           ),
                           const Spacer(),
                           Text(
                             p.timeAgo,
-                            style: const TextStyle(
-                                fontSize: 10, color: AppColors.textMuted),
+                            style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
                           ),
                           const SizedBox(width: 2),
                           _reportIcon(
@@ -277,17 +273,42 @@ class _WorldPageState extends State<WorldPage>
                             style: TextStyle(
                                 fontSize: 10, color: AppColors.textFaint)),
                       ],
-                      const SizedBox(height: 6),
-                      _renderContent(p),
-                      const SizedBox(height: 8),
-                      _interactions(state, p),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      elf.ownerLine,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: elf.isMine
+                            ? AppColors.cyan.withOpacity(0.9)
+                            : AppColors.textFaint,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
+            ],
+          ),
+          // 内容区域：点击 → 打开帖子（视频进播放器、文字进 AI 详情、图片放大、音频播放）
+          InkWell(
+            onTap: () => _openPost(state, elf, p),
+            child: Padding(
+              padding: const EdgeInsets.only(top: 6, left: 50),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (p.isReply) ...[
+                    Text('↩ 回复 某条内容', style: TextStyle(fontSize: 10, color: AppColors.textFaint)),
+                    const SizedBox(height: 4),
+                  ],
+                  _renderContent(p),
+                  const SizedBox(height: 8),
+                  _interactions(state, p),
+                ],
+              ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
