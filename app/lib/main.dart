@@ -6,9 +6,12 @@ import 'pages/login_page.dart';
 import 'state/app_state.dart';
 import 'theme.dart';
 import 'widgets/common.dart';
+import 'push/push_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // 尽早安装插件事件监听；只有已主动开启通知的用户才会初始化推送。
+  PushService.instance.restore();
   await ThemeController.instance.load();
   runApp(const OpenelfApp());
 }

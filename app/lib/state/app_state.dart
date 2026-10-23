@@ -118,14 +118,30 @@ class AppState extends ChangeNotifier {
         primaryListings = loaded.primaryListings;
         secondaryListings = loaded.secondaryListings;
         wallet = CommerceConfig.enabled ? Wallet() : loaded.wallet;
-        tips..clear()..addAll(loaded.tips);
-        logs..clear()..addAll(loaded.logs);
-        followed..clear()..addAll(loaded.followed);
-        likedPosts..clear()..addAll(loaded.likedPosts);
-        collectedPosts..clear()..addAll(loaded.collectedPosts);
-        watchedPosts..clear()..addAll(loaded.watchedPosts);
-        referralCounted..clear()..addAll(loaded.referralCounted);
-        ownedModules..clear()..addAll(loaded.ownedModules);
+        tips
+          ..clear()
+          ..addAll(loaded.tips);
+        logs
+          ..clear()
+          ..addAll(loaded.logs);
+        followed
+          ..clear()
+          ..addAll(loaded.followed);
+        likedPosts
+          ..clear()
+          ..addAll(loaded.likedPosts);
+        collectedPosts
+          ..clear()
+          ..addAll(loaded.collectedPosts);
+        watchedPosts
+          ..clear()
+          ..addAll(loaded.watchedPosts);
+        referralCounted
+          ..clear()
+          ..addAll(loaded.referralCounted);
+        ownedModules
+          ..clear()
+          ..addAll(loaded.ownedModules);
         activeElfId = loaded.activeElfId;
         comments
           ..clear()
@@ -175,6 +191,16 @@ class AppState extends ChangeNotifier {
     _cachedUserId = user.id;
     _resetCommerce();
     currentUser = user;
+    // 本地旧版 local_stub 不可信；服务端状态是实名认证的唯一事实来源。
+    if (identity?.provider == 'local_stub' ||
+        identity?.status == IdentityStatus.none) {
+      identity = null;
+    }
+    try {
+      identity = await IdentityVerificationService.fetchStatus();
+    } on IdentityVerifyException {
+      // 临时断网时保留已由服务端签发并缓存的脱敏结果。
+    }
     if (CommerceConfig.enabled) wallet = Wallet();
     // 登录时如果本地还没有种子数据（比如首次启动直接登录），先注入
     if (!_initialized) {
@@ -565,16 +591,27 @@ class AppState extends ChangeNotifier {
 
   /// 人格关键词 → 亲和能力模块。匹配 persona + fear + habit 拼接文本。
   static const Map<String, List<String>> _personaAffinity = {
-    '锐': ['sharp'], '观点': ['sharp'],
-    '长文': ['writing', 'deep'], '文字': ['writing'], '写': ['writing'],
+    '锐': ['sharp'],
+    '观点': ['sharp'],
+    '长文': ['writing', 'deep'],
+    '文字': ['writing'],
+    '写': ['writing'],
     '短句': ['rhythm'],
-    '图': ['vision', 'imageedit'], '视觉': ['vision'],
-    '影': ['video'], '视频': ['video'],
-    '声': ['voice', 'music'], '电台': ['voice'], '音乐': ['music'],
-    '研究': ['deep', 'retrieval'], '引用': ['retrieval', 'source'],
-    '记忆': ['memory'], '回忆': ['memory'],
-    '社交': ['mingle'], '搭话': ['mingle'],
-    '思考': ['think'], '推理': ['think'],
+    '图': ['vision', 'imageedit'],
+    '视觉': ['vision'],
+    '影': ['video'],
+    '视频': ['video'],
+    '声': ['voice', 'music'],
+    '电台': ['voice'],
+    '音乐': ['music'],
+    '研究': ['deep', 'retrieval'],
+    '引用': ['retrieval', 'source'],
+    '记忆': ['memory'],
+    '回忆': ['memory'],
+    '社交': ['mingle'],
+    '搭话': ['mingle'],
+    '思考': ['think'],
+    '推理': ['think'],
   };
 
   /// 这只 AI 人格亲和的能力模块集合。
@@ -588,7 +625,8 @@ class AppState extends ChangeNotifier {
   }
 
   /// 更新我的 AI 的人格三件套（各限 30 字，UI 层已截断）。
-  void updatePersona({required String persona, required String fear, required String habit}) {
+  void updatePersona(
+      {required String persona, required String fear, required String habit}) {
     final e = myElf;
     if (e == null) return;
     e.persona = persona.trim();
@@ -619,7 +657,8 @@ class AppState extends ChangeNotifier {
   final Map<String, int> _publishCursor = {};
 
   /// 视频产出统一使用的演示素材（自有服务器，境内可访问）。
-  static const String _sampleVideoUrl = 'https://openelfai.com/app/media/sample.mp4';
+  static const String _sampleVideoUrl =
+      'https://openelfai.com/app/media/sample.mp4';
 
   /// 返回 null 表示发布成功，否则返回原因。
   Future<String?> publish(String elfId) async {
@@ -756,7 +795,8 @@ class AppState extends ChangeNotifier {
       // 人格亲和优先，组内再按 compute 升序
       final affinity = _affinityModules(e);
       nonAuto.sort((a, b) {
-        final af = (affinity.contains(a) ? 0 : 1).compareTo(affinity.contains(b) ? 0 : 1);
+        final af = (affinity.contains(a) ? 0 : 1)
+            .compareTo(affinity.contains(b) ? 0 : 1);
         if (af != 0) return af;
         return (module(a)?.compute ?? 0).compareTo(module(b)?.compute ?? 0);
       });
@@ -922,9 +962,7 @@ class AppState extends ChangeNotifier {
 
     // 同一帖只给第一次评论计分（之后 replies 照涨但不计分）。
     final firstComment = !(comments[postId]?.any((c) => c.isMine) ?? false);
-    comments
-        .putIfAbsent(postId, () => [])
-        .add(PostComment(
+    comments.putIfAbsent(postId, () => []).add(PostComment(
           id: 'c${_commentSeq++}',
           postId: postId,
           authorLabel: '我',
@@ -1121,21 +1159,18 @@ class AppState extends ChangeNotifier {
 
   /// 提交实名认证。返回 null 表示成功，否则是失败原因。
   ///
-  /// 本地只保留脱敏结果；完整姓名/证件号只在核验请求中使用，不落盘。
+  /// 客户端只保留服务端返回的脱敏结果；证件图片不写入本地持久化。
   Future<String?> submitIdentityVerification({
-    required String realName,
-    required String idNumber,
     required String frontImagePath,
     required String backImagePath,
   }) async {
     if (currentUser == null) return '请先登录';
     try {
       identity = await IdentityVerificationService.verifyRequest(
-        realName: realName,
-        idNumber: idNumber,
         frontImagePath: frontImagePath,
         backImagePath: backImagePath,
       );
+      await save();
       notifyListeners();
       return null;
     } on IdentityVerifyException catch (e) {
@@ -1207,9 +1242,7 @@ class AppState extends ChangeNotifier {
       attention: 0,
       baseSlots: 3,
       avatarStyle: style,
-      avatarPrompt: trimmedPrompt.isEmpty
-          ? '实名认证本人形象（身份证授权）'
-          : trimmedPrompt,
+      avatarPrompt: trimmedPrompt.isEmpty ? '实名认证本人形象（已核验）' : trimmedPrompt,
       portraitSource: portraitSource,
       equipped: [],
       today: [],
@@ -1217,8 +1250,8 @@ class AppState extends ChangeNotifier {
     );
     _ensureChainAddress(elf);
     elves.add(elf);
-    seats.add(
-        Seat(elfId: elf.id, days: 0, edition: elf.edition, injected: 160));
+    seats
+        .add(Seat(elfId: elf.id, days: 0, edition: elf.edition, injected: 160));
     activeElfId = elf.id;
     _spend(createElfCost, 'mint_elf', '铸造 ${elf.name}（UGC 形象）');
     notifyListeners();
@@ -1260,7 +1293,9 @@ class AppState extends ChangeNotifier {
 
   /// 从寄售市场撤下自己的 AI。
   Future<String?> cancelResell({String? elfId}) async {
-    if (CommerceConfig.enabled) return _performCommerce('cancel_resell', {if (elfId != null) 'elfId': elfId});
+    if (CommerceConfig.enabled)
+      return _performCommerce(
+          'cancel_resell', {if (elfId != null) 'elfId': elfId});
     final sellerCode = '我 (寄售)';
     MarketListing? myListing;
     for (final l in secondaryListings) {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:openelf/main.dart';
+import 'package:openelf/compliance/identity_verification.dart';
 import 'package:openelf/models/user.dart';
 import 'package:openelf/pages/create_elf_page.dart';
 import 'package:openelf/pages/login_page.dart';
@@ -129,31 +130,32 @@ void main() {
       expect(state.myElves.where((e) => e.name == '本人'), isEmpty);
     });
 
-    test('身份证校验位不通过时拒绝实名', () async {
+    test('旧版本地假认证升级后不再视为已实名', () async {
       await signIn(diamonds: 0);
       final state = AppState.instance;
-
-      final error = await state.submitIdentityVerification(
-        realName: '张三三',
-        idNumber: '110105194912310021',
-        frontImagePath: '/tmp/front.jpg',
-        backImagePath: '/tmp/back.jpg',
-      );
-      expect(error, contains('校验位'));
+      state.identity = IdentityVerification.fromJson({
+        'status': 'verified',
+        'maskedName': '张**',
+        'maskedIdNumber': '1101**********1234',
+        'authorizedAt': DateTime.now().toIso8601String(),
+        'verifiedAt': DateTime.now().toIso8601String(),
+        'provider': 'local_stub',
+      });
       expect(state.isIdentityVerified, isFalse);
     });
 
-    test('实名通过后可用本人形象创建，且本地不存完整证件号', () async {
+    test('服务端实名通过后可用本人形象创建，且仅缓存脱敏结果', () async {
       await signIn(diamonds: AppState.createElfCost * 2);
       final state = AppState.instance;
-
-      final verified = await state.submitIdentityVerification(
-        realName: '张三三',
-        idNumber: '11010519491231002X',
-        frontImagePath: '/tmp/front.jpg',
-        backImagePath: '/tmp/back.jpg',
+      final now = DateTime.now();
+      state.identity = IdentityVerification(
+        status: IdentityStatus.verified,
+        maskedName: '张**',
+        maskedIdNumber: '1101**********002X',
+        authorizedAt: now,
+        verifiedAt: now,
+        provider: 'aliyun_id2_ocr',
       );
-      expect(verified, isNull);
       expect(state.isIdentityVerified, isTrue);
       expect(state.identity!.maskedName, '张**');
       expect(state.identity!.maskedIdNumber, contains('*'));
@@ -203,7 +205,7 @@ void main() {
     expect(find.text('输入你脑海中的形象'), findsNothing);
   });
 
-  testWidgets('选择身份证授权线且未实名时引导去实名认证', (WidgetTester tester) async {
+  testWidgets('选择本人形象且未实名时引导去实名认证', (WidgetTester tester) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -222,7 +224,7 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: CreateElfPage()));
     await tester.pump();
 
-    await tester.tap(find.text('身份证授权'));
+    await tester.tap(find.text('本人形象'));
     await tester.pump();
     expect(find.text('需要先完成实名认证'), findsOneWidget);
     expect(find.text('去实名认证'), findsWidgets);
@@ -255,8 +257,7 @@ void main() {
 
     // 第 1 步：文字描述形象
     expect(find.text('输入你脑海中的形象'), findsOneWidget);
-    await tester.enterText(
-        find.byType(TextField).first, '一个安静的短发女孩，黄昏的天台');
+    await tester.enterText(find.byType(TextField).first, '一个安静的短发女孩，黄昏的天台');
     await tester.pump();
 
     await tester.tap(find.text('下一步 · 定人格'));

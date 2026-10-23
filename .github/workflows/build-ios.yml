@@ -15,7 +15,7 @@ jobs:
         working-directory: app
     env:
       BUILD_NAME: 1.0.4
-      BUILD_NUMBER: '6'
+      BUILD_NUMBER: '7'
 
     steps:
       - name: Check out latest integrated source
@@ -72,6 +72,8 @@ jobs:
           team = profile['TeamIdentifier'][0]
           assert entitlements['application-identifier'] == team + '.com.ai.openelf', 'Bundle ID mismatch'
           assert entitlements.get('get-task-allow') is False, 'Development profile rejected'
+          assert entitlements.get('aps-environment') == 'production', 'Profile must enable production APNs'
+          assert team == 'ZJ3YQXTB93', 'Developer team mismatch'
           assert 'ProvisionedDevices' not in profile, 'Ad Hoc profile rejected'
           assert not profile.get('ProvisionsAllDevices'), 'Enterprise profile rejected'
           assert profile['ExpirationDate'].replace(tzinfo=datetime.timezone.utc) > datetime.datetime.now(datetime.timezone.utc), 'Expired provisioning profile'
@@ -90,6 +92,9 @@ jobs:
 
       - name: Resolve current Flutter dependencies
         run: flutter pub get
+
+      - name: Validate branded iOS icons
+        run: python3 scripts/generate_ios_icons.py --check
 
       - name: Build latest iOS release
         run: |

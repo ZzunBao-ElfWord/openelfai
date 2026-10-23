@@ -31,4 +31,10 @@ class ApiConfig {
 
   /// 当前用户（GET）。header: Authorization: Bearer xxx
   static const String mePath = '/api/v1/auth/me';
+
+  /// 查询当前账号的服务端实名认证状态（GET）。
+  static const String identityStatusPath = '/api/v1/identity/status';
+
+  /// 上传身份证正反面并进行 OCR 二要素核验（POST）。
+  static const String identityVerifyPath = '/api/v1/identity/verify';
 }

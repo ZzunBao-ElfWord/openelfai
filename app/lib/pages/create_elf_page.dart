@@ -55,8 +55,7 @@ class _CreateElfPageState extends State<CreateElfPage> {
   }
 
   void _toast(String text) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(text)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
   /// 校验文字描述并进入下一步。
@@ -149,10 +148,7 @@ class _CreateElfPageState extends State<CreateElfPage> {
                     color: AppColors.cyan,
                     fontFamily: 'monospace')),
             const SizedBox(height: 10),
-            Text(
-                _source == 'idCard'
-                    ? '形象来源：本人身份证授权（已实名）。'
-                    : '形象来源：文字描述生成。',
+            Text(_source == 'idCard' ? '形象来源：本人身份证授权（已实名）。' : '形象来源：文字描述生成。',
                 style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
             const SizedBox(height: 4),
             Text('形象已加注「AI 生成」标识；转售时授权记录随 NFT 一起转移。',
@@ -162,8 +158,7 @@ class _CreateElfPageState extends State<CreateElfPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dctx).pop(),
-            child: Text('去看看我的 AI',
-                style: TextStyle(color: AppColors.cyan)),
+            child: Text('去看看我的 AI', style: TextStyle(color: AppColors.cyan)),
           ),
         ],
       ),
@@ -295,8 +290,7 @@ class _CreateElfPageState extends State<CreateElfPage> {
                       color: AppColors.text)),
               const SizedBox(height: 3),
               Text('第 ${_step + 1} / 3 步 · ${titles[_step]}',
-                  style: TextStyle(
-                      fontSize: 10, color: AppColors.textMuted)),
+                  style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
             ],
           ),
           const Spacer(),
@@ -343,8 +337,8 @@ class _CreateElfPageState extends State<CreateElfPage> {
               child: _sourceCard(
                 value: 'idCard',
                 icon: Icons.badge_outlined,
-                title: '身份证授权',
-                desc: '使用本人证件照，需实名',
+                title: '本人形象',
+                desc: '完成实名认证后解锁',
               ),
             ),
           ],
@@ -370,8 +364,8 @@ class _CreateElfPageState extends State<CreateElfPage> {
           color: selected ? null : AppColors.surface,
           gradient: selected ? AppColors.brandGradientSoft : null,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-              color: selected ? AppColors.brand : AppColors.stroke),
+          border:
+              Border.all(color: selected ? AppColors.brand : AppColors.stroke),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -383,9 +377,7 @@ class _CreateElfPageState extends State<CreateElfPage> {
                     color: selected ? AppColors.brand : AppColors.textMuted),
                 const Spacer(),
                 Icon(
-                  selected
-                      ? Icons.check_circle
-                      : Icons.radio_button_unchecked,
+                  selected ? Icons.check_circle : Icons.radio_button_unchecked,
                   size: 15,
                   color: selected ? AppColors.brand : AppColors.textFaint,
                 ),
@@ -446,7 +438,8 @@ class _CreateElfPageState extends State<CreateElfPage> {
                 decoration: InputDecoration(
                   counterText: '',
                   hintText: '输入你脑海中的形象',
-                  hintStyle: TextStyle(fontSize: 14, color: AppColors.textMuted),
+                  hintStyle:
+                      TextStyle(fontSize: 14, color: AppColors.textMuted),
                   border: InputBorder.none,
                 ),
               ),
@@ -467,12 +460,10 @@ class _CreateElfPageState extends State<CreateElfPage> {
                   ),
                   const Spacer(),
                   _ghostChip(
-                    icon: _generating
-                        ? Icons.hourglass_top
-                        : Icons.auto_awesome,
-                    label: _generating
-                        ? '生成中…'
-                        : (_generated ? '重新生成预览' : '生成预览'),
+                    icon:
+                        _generating ? Icons.hourglass_top : Icons.auto_awesome,
+                    label:
+                        _generating ? '生成中…' : (_generated ? '重新生成预览' : '生成预览'),
                     highlight: true,
                     onTap: _generating ? () {} : _generate,
                   ),
@@ -486,7 +477,8 @@ class _CreateElfPageState extends State<CreateElfPage> {
         const SizedBox(height: 14),
         Text(
           '暂不提供任意照片上传。想用自己的形象，请切换到「身份证授权」并完成实名认证。',
-          style: TextStyle(fontSize: 10.5, height: 1.5, color: AppColors.textMuted),
+          style: TextStyle(
+              fontSize: 10.5, height: 1.5, color: AppColors.textMuted),
         ),
       ],
     );
@@ -533,7 +525,7 @@ class _CreateElfPageState extends State<CreateElfPage> {
                         color: AppColors.text)),
                 const SizedBox(height: 6),
                 Text(
-                  '上传身份证并通过核验后，身份证人像面将作为你本人形象的唯一授权来源。我们不提供任意照片上传。',
+                  '上传身份证并通过核验后，将解锁本人形象创建入口。证件照片只用于实名认证，不作为公开内容。',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                       fontSize: 11, height: 1.6, color: AppColors.textSub),
@@ -597,7 +589,7 @@ class _CreateElfPageState extends State<CreateElfPage> {
                             color: AppColors.textMuted,
                             fontFamily: 'monospace')),
                     const SizedBox(height: 4),
-                    Text('已授权使用身份证人像面作为本人形象来源',
+                    Text('实名认证已通过，可使用本人形象创建功能',
                         style: TextStyle(
                             fontSize: 10.5, color: AppColors.textSub)),
                   ],
@@ -610,8 +602,9 @@ class _CreateElfPageState extends State<CreateElfPage> {
         _styleSection(),
         const SizedBox(height: 14),
         Text(
-          '身份证照片仅用于生成这只 AI 的本人形象，不公开；AI 转售后授权记录随 NFT 转移，接收方需重新授权。',
-          style: TextStyle(fontSize: 10.5, height: 1.5, color: AppColors.textMuted),
+          '身份证照片只用于实名认证，不会随 AI 或 NFT 转移；实名状态仅绑定当前账号。',
+          style: TextStyle(
+              fontSize: 10.5, height: 1.5, color: AppColors.textMuted),
         ),
       ],
     );
@@ -741,8 +734,9 @@ class _CreateElfPageState extends State<CreateElfPage> {
           color: AppColors.surfaceHigh,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-              color:
-                  highlight ? AppColors.cyan.withOpacity(0.45) : AppColors.stroke),
+              color: highlight
+                  ? AppColors.cyan.withOpacity(0.45)
+                  : AppColors.stroke),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -826,8 +820,7 @@ class _CreateElfPageState extends State<CreateElfPage> {
             decoration: InputDecoration(
               counterText: '',
               hintText: hint,
-              hintStyle:
-                  TextStyle(fontSize: 12.5, color: AppColors.textFaint),
+              hintStyle: TextStyle(fontSize: 12.5, color: AppColors.textFaint),
               filled: true,
               fillColor: AppColors.surface,
               contentPadding:
@@ -885,7 +878,9 @@ class _CreateElfPageState extends State<CreateElfPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _nameCtrl.text.trim().isEmpty ? '未命名' : _nameCtrl.text.trim(),
+                      _nameCtrl.text.trim().isEmpty
+                          ? '未命名'
+                          : _nameCtrl.text.trim(),
                       style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
@@ -898,12 +893,12 @@ class _CreateElfPageState extends State<CreateElfPage> {
                     const SizedBox(height: 6),
                     Text(
                       byIdCard
-                          ? '本人身份证授权 · ${identity?.maskedName ?? ''}'
+                          ? '本人实名认证 · ${identity?.maskedName ?? ''}'
                           : _promptCtrl.text.trim(),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          fontSize: 10.5, color: AppColors.textSub),
+                      style:
+                          TextStyle(fontSize: 10.5, color: AppColors.textSub),
                     ),
                   ],
                 ),
@@ -921,7 +916,7 @@ class _CreateElfPageState extends State<CreateElfPage> {
         _checkRow('名称与描述', '本地敏感词初筛通过'),
         _checkRow(
           '形象来源',
-          byIdCard ? '本人身份证 · 已实名' : '文字描述生成 · 无真人照片',
+          byIdCard ? '本人实名认证 · 已通过' : '文字描述生成 · 无真人照片',
         ),
         _checkRow('生成内容标识', '铸造后自动加注「AI 生成」'),
         const SizedBox(height: 14),
@@ -933,8 +928,7 @@ class _CreateElfPageState extends State<CreateElfPage> {
               children: [
                 Checkbox(
                   value: _accepted[i],
-                  onChanged: (v) =>
-                      setState(() => _accepted[i] = v ?? false),
+                  onChanged: (v) => setState(() => _accepted[i] = v ?? false),
                   activeColor: AppColors.cyan,
                   checkColor: AppColors.onBrand,
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -973,8 +967,7 @@ class _CreateElfPageState extends State<CreateElfPage> {
                       color: enough ? AppColors.cyan : AppColors.danger)),
               const SizedBox(width: 10),
               Text('余额 💎$balance',
-                  style: TextStyle(
-                      fontSize: 10.5, color: AppColors.textMuted)),
+                  style: TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
             ],
           ),
         ),
@@ -1001,8 +994,7 @@ class _CreateElfPageState extends State<CreateElfPage> {
           Expanded(
             child: Text(note,
                 textAlign: TextAlign.right,
-                style: TextStyle(
-                    fontSize: 10, color: AppColors.textMuted)),
+                style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
           ),
         ],
       ),
@@ -1039,7 +1031,8 @@ class _CreateElfPageState extends State<CreateElfPage> {
           child: FilledButton(
             style: FilledButton.styleFrom(
               backgroundColor: enabled ? AppColors.cyan : AppColors.surfaceHigh,
-              foregroundColor: enabled ? AppColors.onBrand : AppColors.textFaint,
+              foregroundColor:
+                  enabled ? AppColors.onBrand : AppColors.textFaint,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14)),
             ),
@@ -1075,8 +1068,8 @@ class _CreateElfPageState extends State<CreateElfPage> {
                     }
                   },
             child: Text(label,
-                style: const TextStyle(
-                    fontSize: 14, fontWeight: FontWeight.w700)),
+                style:
+                    const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
           ),
         ),
       ),

@@ -16,6 +16,9 @@ android {
 
     defaultConfig {
         applicationId = "com.openelf.app"
+        manifestPlaceholders["JPUSH_PKGNAME"] = "com.openelf.app"
+        manifestPlaceholders["JPUSH_APPKEY"] = "3439c18b0c3021ae5e29ba92"
+        manifestPlaceholders["JPUSH_CHANNEL"] = "developer-default"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

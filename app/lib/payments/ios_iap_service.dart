@@ -175,10 +175,13 @@ class IosIapService extends ChangeNotifier {
         }
         if (result.notFoundIDs.isNotEmpty) error = '部分商品暂不可购买';
       }
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('═══ IAP LOAD ERROR ═══');
+      debugPrint('错误: $e');
+      debugPrint('堆栈: $st');
       _products.clear();
       _accountToken = null;
-      error = '充值暂不可用，请稍后刷新';
+      error = '充值暂不可用: $e';
     } finally {
       loading = false;
       notifyListeners();

@@ -41,6 +41,15 @@ fi
 codesign --force --sign "$IOS_SIGNING_IDENTITY" --entitlements "$ENTITLEMENTS_PATH" \
   --timestamp=none --generate-entitlement-der "$APP_PATH"
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+codesign -d --entitlements :- "$APP_PATH" > "$RUNNER_TEMP/openelf-signed-entitlements.plist"
+python3 - <<'PY'
+import os, plistlib
+with open(os.environ['RUNNER_TEMP'] + '/openelf-signed-entitlements.plist', 'rb') as f:
+    entitlements = plistlib.load(f)
+assert entitlements.get('aps-environment') == 'production', 'Signed IPA must enable production APNs'
+assert entitlements.get('application-identifier') == 'ZJ3YQXTB93.com.ai.openelf', 'Signed application ID mismatch'
+print('Verified production APNs entitlement in signed app')
+PY
 SIGNATURE="$(codesign -d --verbose=4 "$APP_PATH" 2>&1)"
 printf '%s\n' "$SIGNATURE" | grep -E '^Authority=(Apple Distribution:|iPhone Distribution:)'
 

@@ -8,10 +8,9 @@ import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 
-/// 实名认证：上传身份证 + 姓名/证件号核验。
+/// 实名认证：上传身份证正反面并通过服务端进行 OCR 二要素核验。
 ///
-/// 这是「本人形象」创建线的唯一图片入口——产品不开放任意照片上传，
-/// 身份证照片仅用于核验本人身份，并作为本人形象生成的授权来源。
+/// 证件照片仅用于本次身份核验；应用不将照片持久化为内容素材。
 class IdentityVerifyPage extends StatefulWidget {
   const IdentityVerifyPage({super.key});
 
@@ -21,8 +20,6 @@ class IdentityVerifyPage extends StatefulWidget {
 
 class _IdentityVerifyPageState extends State<IdentityVerifyPage> {
   final _picker = ImagePicker();
-  final _nameCtrl = TextEditingController();
-  final _idCtrl = TextEditingController();
 
   String? _frontPath;
   String? _backPath;
@@ -31,14 +28,11 @@ class _IdentityVerifyPageState extends State<IdentityVerifyPage> {
 
   @override
   void dispose() {
-    _nameCtrl.dispose();
-    _idCtrl.dispose();
     super.dispose();
   }
 
   void _toast(String text) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(text)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
   Future<void> _pick(bool front) async {
@@ -79,8 +73,6 @@ class _IdentityVerifyPageState extends State<IdentityVerifyPage> {
     }
     setState(() => _submitting = true);
     final error = await AppState.instance.submitIdentityVerification(
-      realName: _nameCtrl.text,
-      idNumber: _idCtrl.text,
       frontImagePath: _frontPath!,
       backImagePath: _backPath!,
     );
@@ -147,9 +139,8 @@ class _IdentityVerifyPageState extends State<IdentityVerifyPage> {
                   Expanded(
                     child: SingleChildScrollView(
                       padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
-                      child: verified
-                          ? _verifiedCard(identity!)
-                          : _form(identity),
+                      child:
+                          verified ? _verifiedCard(identity!) : _form(identity),
                     ),
                   ),
                   if (!verified) _footer(identity),
@@ -243,16 +234,15 @@ class _IdentityVerifyPageState extends State<IdentityVerifyPage> {
                       fontFamily: 'monospace')),
               const SizedBox(height: 10),
               Text(
-                  '核验时间 ${_formatTime(identity.verifiedAt)} · ${identity.provider}',
-                  style:
-                      TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
+                  '核验时间 ${_formatTime(identity.verifiedAt)} · ${identity.providerLabel}',
+                  style: TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
             ],
           ),
         ),
         const SizedBox(height: 16),
-        _noteRow(Icons.badge_outlined, '身份证人像面仅用于生成「本人形象」AI，不公开、不进入信息流。'),
+        _noteRow(Icons.badge_outlined, '身份证照片仅用于本次实名核验，不公开、不进入信息流。'),
         _noteRow(Icons.lock_outline, '本地只保留脱敏姓名与证件号，完整号码未留存。'),
-        _noteRow(Icons.sync_alt, '授权记录随 AI NFT 转售转移，接收方需重新完成本人授权。'),
+        _noteRow(Icons.person_outline, '实名状态只绑定当前账号，不随 AI 或 NFT 转移。'),
       ],
     );
   }
@@ -277,11 +267,9 @@ class _IdentityVerifyPageState extends State<IdentityVerifyPage> {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  '上传身份证完成实名核验后，才能使用「身份证授权」这条线创建以你本人为原型的 AI。我们不提供任意照片上传。',
+                  '上传身份证正反面后，将通过阿里云信息核验确认姓名与身份证号真实一致。认证完成后才能使用本人授权功能。',
                   style: TextStyle(
-                      fontSize: 11,
-                      height: 1.6,
-                      color: AppColors.textSub),
+                      fontSize: 11, height: 1.6, color: AppColors.textSub),
                 ),
               ),
             ],
@@ -317,19 +305,6 @@ class _IdentityVerifyPageState extends State<IdentityVerifyPage> {
           ],
         ),
         const SizedBox(height: 20),
-        _field(
-          label: '姓名',
-          hint: '与身份证上的姓名一致',
-          controller: _nameCtrl,
-          maxLength: 20,
-        ),
-        _field(
-          label: '身份证号',
-          hint: '18 位，最后一位可为 X',
-          controller: _idCtrl,
-          maxLength: 18,
-          upperCase: true,
-        ),
         const SizedBox(height: 4),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -346,7 +321,7 @@ class _IdentityVerifyPageState extends State<IdentityVerifyPage> {
               child: Padding(
                 padding: const EdgeInsets.only(top: 8, right: 4),
                 child: Text(
-                  '我授权 OpenElf 采集并核验我的身份证信息，并在创建「本人形象」AI 时使用身份证人像面作为形象生成来源。',
+                  '我已阅读并同意 OpenElf 为实名认证目的采集身份证正反面，并将证件图片提交至阿里云信息核验服务。',
                   style: TextStyle(
                       fontSize: 10.5, height: 1.55, color: AppColors.textSub),
                 ),
@@ -356,8 +331,9 @@ class _IdentityVerifyPageState extends State<IdentityVerifyPage> {
         ),
         const SizedBox(height: 10),
         Text(
-          '核验服务接入前为本地校验：格式、校验位与出生日期。正式上线后将接入公安实名核验服务。',
-          style: TextStyle(fontSize: 10, height: 1.5, color: AppColors.textMuted),
+          '应用不会额外保存证件图片；服务端只保存认证状态、脱敏姓名和脱敏证件号。',
+          style:
+              TextStyle(fontSize: 10, height: 1.5, color: AppColors.textMuted),
         ),
       ],
     );
@@ -388,12 +364,12 @@ class _IdentityVerifyPageState extends State<IdentityVerifyPage> {
                       size: 22, color: AppColors.textMuted),
                   const SizedBox(height: 6),
                   Text(label,
-                      style: TextStyle(
-                          fontSize: 11.5, color: AppColors.textSub)),
+                      style:
+                          TextStyle(fontSize: 11.5, color: AppColors.textSub)),
                   const SizedBox(height: 2),
                   Text('点击上传',
-                      style: TextStyle(
-                          fontSize: 10, color: AppColors.textMuted)),
+                      style:
+                          TextStyle(fontSize: 10, color: AppColors.textMuted)),
                 ],
               )
             : Stack(
@@ -421,52 +397,6 @@ class _IdentityVerifyPageState extends State<IdentityVerifyPage> {
     );
   }
 
-  Widget _field({
-    required String label,
-    required String hint,
-    required TextEditingController controller,
-    int? maxLength,
-    bool upperCase = false,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label,
-              style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
-          const SizedBox(height: 6),
-          TextField(
-            controller: controller,
-            maxLength: maxLength,
-            maxLines: 1,
-            textCapitalization: upperCase
-                ? TextCapitalization.characters
-                : TextCapitalization.none,
-            style: TextStyle(fontSize: 13, color: AppColors.text),
-            decoration: InputDecoration(
-              counterText: '',
-              hintText: hint,
-              hintStyle: TextStyle(fontSize: 12.5, color: AppColors.textFaint),
-              filled: true,
-              fillColor: AppColors.surface,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: AppColors.stroke),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: AppColors.stroke),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _footer(IdentityVerification? identity) {
     final enabled = !_submitting;
     return SafeArea(
@@ -478,8 +408,7 @@ class _IdentityVerifyPageState extends State<IdentityVerifyPage> {
           height: 48,
           child: FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor:
-                  enabled ? AppColors.cyan : AppColors.surfaceHigh,
+              backgroundColor: enabled ? AppColors.cyan : AppColors.surfaceHigh,
               foregroundColor:
                   enabled ? AppColors.onBrand : AppColors.textFaint,
               shape: RoundedRectangleBorder(
@@ -487,8 +416,8 @@ class _IdentityVerifyPageState extends State<IdentityVerifyPage> {
             ),
             onPressed: enabled ? _submit : null,
             child: Text(_submitting ? '核验中…' : '提交核验',
-                style: const TextStyle(
-                    fontSize: 14, fontWeight: FontWeight.w700)),
+                style:
+                    const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
           ),
         ),
       ),

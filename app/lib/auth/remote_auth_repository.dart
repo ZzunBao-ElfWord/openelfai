@@ -166,6 +166,7 @@ class RemoteAuthRepository implements AuthRepository {
   Future<Map<String, dynamic>> authenticatedRequest(
     String path, {
     Map<String, dynamic>? body,
+    Duration? timeout,
   }) async {
     Future<Map<String, dynamic>> send() async {
       final token = await _secure.read(key: _kAccessToken);
@@ -173,8 +174,8 @@ class RemoteAuthRepository implements AuthRepository {
         throw const AuthException('UNAUTHORIZED', '请先登录');
       }
       return body == null
-          ? _get(path, accessToken: token)
-          : _post(path, body, accessToken: token);
+          ? _get(path, accessToken: token, timeout: timeout)
+          : _post(path, body, accessToken: token, timeout: timeout);
     }
 
     try {
@@ -185,14 +186,18 @@ class RemoteAuthRepository implements AuthRepository {
     }
   }
 
-  Future<Map<String, dynamic>> _get(String path, {String? accessToken}) async {
+  Future<Map<String, dynamic>> _get(
+    String path, {
+    String? accessToken,
+    Duration? timeout,
+  }) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}$path');
     http.Response response;
 
     try {
       response = await _http
           .get(uri, headers: _headers(accessToken: accessToken))
-          .timeout(ApiConfig.timeout);
+          .timeout(timeout ?? ApiConfig.timeout);
     } on TimeoutException {
       throw const AuthException('NETWORK_ERROR', '网络超时，请稍后重试');
     } on http.ClientException {
@@ -208,6 +213,7 @@ class RemoteAuthRepository implements AuthRepository {
     String path,
     Map<String, dynamic> body, {
     String? accessToken,
+    Duration? timeout,
   }) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}$path');
     http.Response response;
@@ -219,7 +225,7 @@ class RemoteAuthRepository implements AuthRepository {
             headers: _headers(accessToken: accessToken),
             body: jsonEncode(body),
           )
-          .timeout(ApiConfig.timeout);
+          .timeout(timeout ?? ApiConfig.timeout);
     } on TimeoutException {
       throw const AuthException('NETWORK_ERROR', '网络超时，请稍后重试');
     } on http.ClientException {

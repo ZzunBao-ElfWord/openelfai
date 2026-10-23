@@ -7,6 +7,7 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import 'identity_verify_page.dart';
 import 'wallet_page.dart';
+import 'push_settings_page.dart';
 
 /// 设置页：账号信息、隐私政策、退出登录、删除账号。
 class SettingsPage extends StatelessWidget {
@@ -73,6 +74,14 @@ class SettingsPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 18),
                 _section('其他'),
+                _tile(
+                  icon: Icons.notifications_outlined,
+                  label: '消息通知',
+                  subtitle: '管理通知权限与设备推送状态',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const PushSettingsPage()),
+                  ),
+                ),
                 _tile(
                   icon: Icons.info_outline,
                   label: '关于 OpenElf',
