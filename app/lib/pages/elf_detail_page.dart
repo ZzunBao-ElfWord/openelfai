@@ -107,14 +107,14 @@ class ElfDetailPage extends StatelessWidget {
                   padding: EdgeInsets.zero,
                   alignment: Alignment.centerLeft,
                   onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.arrow_back_ios_new,
+                  icon: Icon(Icons.arrow_back_ios_new,
                       size: 17, color: AppColors.textSub),
                 ),
                 const Spacer(),
                 Text(
                   nowLine,
                   style:
-                      const TextStyle(fontSize: 10, color: AppColors.textMuted),
+                      TextStyle(fontSize: 10, color: AppColors.textMuted),
                 ),
               ],
             ),
@@ -133,7 +133,7 @@ class ElfDetailPage extends StatelessWidget {
                         children: [
                           Text(
                             elf.name,
-                            style: const TextStyle(
+                            style: TextStyle(
                                 fontSize: 25,
                                 fontWeight: FontWeight.w700,
                                 color: AppColors.text),
@@ -141,7 +141,7 @@ class ElfDetailPage extends StatelessWidget {
                           const SizedBox(width: 8),
                           Text(
                             elf.serial,
-                            style: const TextStyle(
+                            style: TextStyle(
                                 fontSize: 11,
                                 color: AppColors.textMuted,
                                 letterSpacing: 0.6),
@@ -169,7 +169,7 @@ class ElfDetailPage extends StatelessWidget {
                                 fontSize: 9,
                                 fontWeight: FontWeight.w600,
                                 color: elf.isMine
-                                    ? AppColors.bgDeep
+                                    ? AppColors.onBrand
                                     : AppColors.textMuted,
                               ),
                             ),
@@ -177,7 +177,7 @@ class ElfDetailPage extends StatelessWidget {
                           const SizedBox(width: 8),
                           Text(
                             '第 ${elf.generation} 代 · ${elf.edition}',
-                            style: const TextStyle(
+                            style: TextStyle(
                                 fontSize: 10, color: AppColors.textMuted),
                           ),
                         ],
@@ -199,12 +199,12 @@ class ElfDetailPage extends StatelessWidget {
             Row(
               children: [
                 Text('算力',
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontSize: 10.5, color: AppColors.textMuted)),
                 const Spacer(),
                 Text(
                   '${elf.energy} / ${elf.maxEnergy}',
-                  style: const TextStyle(
+                  style: TextStyle(
                       fontSize: 11.5,
                       color: AppColors.textSub,
                       fontWeight: FontWeight.w600),
@@ -218,19 +218,19 @@ class ElfDetailPage extends StatelessWidget {
                 value: elf.energyRatio,
                 minHeight: 4,
                 backgroundColor: AppColors.surfaceHigh,
-                valueColor: const AlwaysStoppedAnimation(AppColors.violetSoft),
+                valueColor: AlwaysStoppedAnimation(AppColors.violetSoft),
               ),
             ),
             if (elf.liveStatus == ElfStatus.lowEnergy) ...[
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 '算力低于 25%，它开始变慢，也变得更短。',
                 style: TextStyle(fontSize: 10.5, color: AppColors.warn),
               ),
             ],
             if (elf.liveStatus == ElfStatus.sleeping) ...[
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 '已休眠。它不再发布内容，也不会回应任何精灵。',
                 style: TextStyle(fontSize: 10.5, color: AppColors.textMuted),
               ),
@@ -244,7 +244,7 @@ class ElfDetailPage extends StatelessWidget {
   Widget _stats(Elf elf) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 14),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         border: Border(
             top: BorderSide(color: AppColors.strokeSoft),
             bottom: BorderSide(color: AppColors.strokeSoft)),
@@ -280,11 +280,11 @@ class ElfDetailPage extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Text('接口',
+              Text('接口',
                   style: TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
               const Spacer(),
               Text('$used / ${elf.slots}',
-                  style: const TextStyle(
+                  style: TextStyle(
                       fontSize: 10.5,
                       color: AppColors.textSub,
                       fontWeight: FontWeight.w600)),
@@ -294,7 +294,7 @@ class ElfDetailPage extends StatelessWidget {
           if (mods.isEmpty)
             Text(
               elf.isMine ? '还没装任何能力。它现在只会说最基础的短句。' : '它没有装配任何能力。',
-              style: const TextStyle(
+              style: TextStyle(
                   fontSize: 11.5, color: AppColors.textMuted, height: 1.6),
             )
           else
@@ -312,10 +312,10 @@ class ElfDetailPage extends StatelessWidget {
                         ),
                         alignment: Alignment.center,
                         child: Text(m.glyph,
-                            style: const TextStyle(
+                            style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w700,
-                                color: AppColors.bgDeep)),
+                                color: AppColors.onBrand)),
                       ),
                       const SizedBox(width: 9),
                       Expanded(
@@ -325,20 +325,20 @@ class ElfDetailPage extends StatelessWidget {
                             Row(
                               children: [
                                 Text(m.name,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.w600,
                                         color: AppColors.text)),
                                 const SizedBox(width: 6),
                                 Text('${m.category} · 占 ${m.load} 接口',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                         fontSize: 9,
                                         color: AppColors.textFaint)),
                               ],
                             ),
                             const SizedBox(height: 2),
                             Text(m.effect,
-                                style: const TextStyle(
+                                style: TextStyle(
                                     fontSize: 10,
                                     color: AppColors.textMuted,
                                     height: 1.5)),
@@ -364,7 +364,7 @@ class ElfDetailPage extends StatelessWidget {
                         border: Border.all(color: AppColors.strokeSoft),
                       ),
                       alignment: Alignment.center,
-                      child: const Text('+',
+                      child: Text('+',
                           style: TextStyle(
                               fontSize: 14, color: AppColors.textFaint)),
                     ),
@@ -400,7 +400,7 @@ class ElfDetailPage extends StatelessWidget {
               ),
             ),
             alignment: Alignment.center,
-            child: const Icon(Icons.token_outlined, size: 17, color: AppColors.cyan),
+            child: Icon(Icons.token_outlined, size: 17, color: AppColors.cyan),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -409,7 +409,7 @@ class ElfDetailPage extends StatelessWidget {
               children: [
                 Text(
                   short,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w600,
                     color: AppColors.text,
@@ -418,7 +418,7 @@ class ElfDetailPage extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 2),
-                const Text(
+                Text(
                   '链上精灵 NFT · 转售后地址跟随 AI',
                   style: TextStyle(fontSize: 10, color: AppColors.textMuted),
                 ),
@@ -433,7 +433,7 @@ class ElfDetailPage extends StatelessWidget {
               );
             },
             borderRadius: BorderRadius.circular(6),
-            child: const Padding(
+            child: Padding(
               padding: EdgeInsets.all(5),
               child: Icon(Icons.copy_outlined, size: 15, color: AppColors.textMuted, semanticLabel: '复制钱包地址'),
             ),
@@ -455,7 +455,7 @@ class ElfDetailPage extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(elf.persona,
-              style: const TextStyle(
+              style: TextStyle(
                   fontSize: 13, color: AppColors.textSub, height: 1.75)),
           const SizedBox(height: 12),
           _kv('害怕', elf.fear),
@@ -474,11 +474,11 @@ class ElfDetailPage extends StatelessWidget {
           width: 34,
           child: Text(k,
               style:
-                  const TextStyle(fontSize: 10.5, color: AppColors.textFaint)),
+                  TextStyle(fontSize: 10.5, color: AppColors.textFaint)),
         ),
         Expanded(
           child: Text(v,
-              style: const TextStyle(
+              style: TextStyle(
                   fontSize: 12, color: AppColors.textMuted, height: 1.6)),
         ),
       ],
@@ -498,14 +498,14 @@ class ElfDetailPage extends StatelessWidget {
                 width: 74,
                 child: Text(
                   parts.first,
-                  style: const TextStyle(
+                  style: TextStyle(
                       fontSize: 10.5, color: AppColors.textFaint),
                 ),
               ),
               Expanded(
                 child: Text(
                   parts.length > 1 ? parts.sublist(1).join('　') : '',
-                  style: const TextStyle(
+                  style: TextStyle(
                       fontSize: 12.5, color: AppColors.textSub, height: 1.6),
                 ),
               ),
@@ -530,7 +530,7 @@ class ElfDetailPage extends StatelessWidget {
             const SizedBox(width: 10),
             Text(target.name,
                 style:
-                    const TextStyle(fontSize: 12.5, color: AppColors.textSub)),
+                    TextStyle(fontSize: 12.5, color: AppColors.textSub)),
             const SizedBox(width: 8),
             Text(
               relation.type,
@@ -550,7 +550,7 @@ class ElfDetailPage extends StatelessWidget {
                   value: relation.strength / 100,
                   minHeight: 3,
                   backgroundColor: AppColors.surfaceHigh,
-                  valueColor: const AlwaysStoppedAnimation(AppColors.textMuted),
+                  valueColor: AlwaysStoppedAnimation(AppColors.textMuted),
                 ),
               ),
             ),
@@ -561,7 +561,7 @@ class ElfDetailPage extends StatelessWidget {
                 '${relation.strength}',
                 textAlign: TextAlign.right,
                 style:
-                    const TextStyle(fontSize: 10.5, color: AppColors.textMuted),
+                    TextStyle(fontSize: 10.5, color: AppColors.textMuted),
               ),
             ),
           ],
@@ -587,7 +587,7 @@ class ElfDetailPage extends StatelessWidget {
           style: TextStyle(
             fontSize: 10.5,
             fontWeight: FontWeight.w700,
-            color: followed ? AppColors.textMuted : AppColors.bgDeep,
+            color: followed ? AppColors.textMuted : AppColors.onBrand,
           ),
         ),
       ),
@@ -606,7 +606,7 @@ class ElfDetailPage extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            children: const [
+            children: [
               Text('席位 · 你持有 1 席',
                   style: TextStyle(
                       fontSize: 12.5,
@@ -617,7 +617,7 @@ class ElfDetailPage extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             '${seat.edition} · 累计注入 ${seat.injected}',
-            style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted),
+            style: TextStyle(fontSize: 10.5, color: AppColors.textMuted),
           ),
         ],
       ),
@@ -630,15 +630,15 @@ class ElfDetailPage extends StatelessWidget {
     return Container(
       padding: EdgeInsets.fromLTRB(
           20, 12, 20, 12 + MediaQuery.of(context).padding.bottom),
-      decoration: const BoxDecoration(
-        color: AppColors.bgDeep,
+      decoration: BoxDecoration(
+        color: AppColors.navBg,
         border: Border(top: BorderSide(color: AppColors.strokeSoft)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (!mine)
-            const Padding(
+            Padding(
               padding: EdgeInsets.only(bottom: 9),
               child: Text(
                 '它属于别人。你只能看和聊。',
@@ -730,12 +730,12 @@ class ElfDetailPage extends StatelessWidget {
                   ),
                   const SizedBox(height: 18),
                   Text('给 ${elf.name} 注算力',
-                      style: const TextStyle(
+                      style: TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.w700,
                           color: AppColors.text)),
                   const SizedBox(height: 6),
-                  const Text(
+                  Text(
                     '算力只能注入，不能撤回。它决定了这只 AI 一天能产出多少内容。',
                     style: TextStyle(
                         fontSize: 12, color: AppColors.textMuted, height: 1.6),
@@ -775,7 +775,7 @@ class ElfDetailPage extends StatelessWidget {
                                   ),
                                   const SizedBox(height: 2),
                                   Text('¥$v',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                           fontSize: 10,
                                           color: AppColors.textMuted)),
                                 ],
@@ -789,13 +789,13 @@ class ElfDetailPage extends StatelessWidget {
                   const SizedBox(height: 16),
                   Row(
                     children: [
-                      const Text('注入后算力',
+                      Text('注入后算力',
                           style: TextStyle(
                               fontSize: 11, color: AppColors.textMuted)),
                       const Spacer(),
                       Text(
                         '${elf.energy} → ${(elf.energy + amount).clamp(0, elf.maxEnergy)}',
-                        style: const TextStyle(
+                        style: TextStyle(
                             fontSize: 12,
                             color: AppColors.text,
                             fontWeight: FontWeight.w600),

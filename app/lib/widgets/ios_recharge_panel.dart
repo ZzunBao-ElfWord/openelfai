@@ -76,11 +76,11 @@ class _IosRechargePanelState extends State<IosRechargePanel>
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Text('💎 ${_iap.diamondsFor(product.id)}',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                       fontSize: 20, color: AppColors.text)),
                               const SizedBox(height: 6),
                               Text(product.price,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                       color: AppColors.textMuted)),
                             ],
                           ),
@@ -88,16 +88,16 @@ class _IosRechargePanelState extends State<IosRechargePanel>
                     .toList(),
               ),
             if (!_iap.loading && _iap.products.isEmpty)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.symmetric(vertical: 12),
                 child: Text('充值暂未开放',
                     style: TextStyle(color: AppColors.textMuted)),
               ),
             if (_iap.error != null)
               Text(_iap.error!,
-                  style: const TextStyle(color: AppColors.textMuted)),
+                  style: TextStyle(color: AppColors.textMuted)),
             if (_iap.busy && !_iap.hasUnconfirmed)
-              const Text('订单处理中，请等待 App Store 确认',
+              Text('订单处理中，请等待 App Store 确认',
                   style: TextStyle(color: AppColors.textMuted)),
             Wrap(
               spacing: 10,

@@ -48,7 +48,7 @@ class _WorldPageState extends State<WorldPage>
             end: Alignment.bottomCenter,
             colors: [
               AppColors.bg.withOpacity(1),
-              const Color(0xFF0A1124),
+              AppColors.surfaceAlt,
             ],
           ),
         ),
@@ -87,7 +87,7 @@ class _WorldPageState extends State<WorldPage>
         crossAxisAlignment: CrossAxisAlignment.baseline,
         textBaseline: TextBaseline.alphabetic,
         children: [
-          const Text(
+          Text(
             '世界',
             style: TextStyle(
               fontSize: 21,
@@ -99,7 +99,7 @@ class _WorldPageState extends State<WorldPage>
           const SizedBox(width: 8),
           Text(
             '第 ${WorldData.worldDay} 日',
-            style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+            style: TextStyle(fontSize: 11, color: AppColors.textMuted),
           ),
           const Spacer(),
           Semantics(
@@ -110,7 +110,7 @@ class _WorldPageState extends State<WorldPage>
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const AttentionBoardPage()),
               ),
-              child: const Padding(
+              child: Padding(
                 padding: EdgeInsets.only(right: 10, top: 2, bottom: 2),
                 child: Icon(Icons.leaderboard_outlined, size: 17, color: AppColors.textMuted),
               ),
@@ -118,13 +118,13 @@ class _WorldPageState extends State<WorldPage>
           ),
           Row(
             children: [
-              const Icon(Icons.remove_red_eye_outlined,
+              Icon(Icons.remove_red_eye_outlined,
                   size: 13, color: AppColors.textMuted),
               const SizedBox(width: 4),
               Text(
                 _fmt(WorldData.watchers),
                 style:
-                    const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                    TextStyle(fontSize: 11, color: AppColors.textMuted),
               ),
             ],
           ),
@@ -164,7 +164,7 @@ class _WorldPageState extends State<WorldPage>
     }
     return ListView.separated(
       itemCount: posts.length,
-      separatorBuilder: (_, __) => const Divider(
+      separatorBuilder: (_, __) => Divider(
         height: 1,
         thickness: 1,
         color: AppColors.strokeSoft,
@@ -209,85 +209,90 @@ class _WorldPageState extends State<WorldPage>
   }
 
   Widget _postCard(AppState state, Elf elf, ElfPost p) {
-    return InkWell(
-      onTap: () => _openPost(state, elf, p),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => _openElf(elf),
-                  child: ElfAvatar(elf: elf, size: 40),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: () => _openElf(elf),
-                            child: Text(
-                              elf.name,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.text,
-                              ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 头部：头像 + 名字（独立点击 → 进对话页）
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _openElf(elf),
+                child: ElfAvatar(elf: elf, size: 40),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => _openElf(elf),
+                          child: Text(
+                            elf.name,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.text,
                             ),
                           ),
-                          const SizedBox(width: 4),
-                          Text(
-                            elf.serial,
-                            style: const TextStyle(
-                                fontSize: 10, color: AppColors.textMuted),
-                          ),
-                          const Spacer(),
-                          Text(
-                            p.timeAgo,
-                            style: const TextStyle(
-                                fontSize: 10, color: AppColors.textMuted),
-                          ),
-                          const SizedBox(width: 2),
-                          _reportIcon(
-                            onTap: () => _showReportPostSheet(state, p),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        elf.ownerLine,
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: elf.isMine
-                              ? AppColors.cyan.withOpacity(0.9)
-                              : AppColors.textFaint,
                         ),
-                      ),
-                      if (p.isReply) ...[
-                        const SizedBox(height: 4),
-                        Text('↩ 回复 某条内容',
-                            style: TextStyle(
-                                fontSize: 10, color: AppColors.textFaint)),
+                        const SizedBox(width: 4),
+                        Text(
+                          elf.serial,
+                          style: TextStyle(fontSize: 10, color: AppColors.textMuted),
+                        ),
+                        const Spacer(),
+                        Text(
+                          p.timeAgo,
+                          style: TextStyle(fontSize: 10, color: AppColors.textMuted),
+                        ),
+                        const SizedBox(width: 2),
+                        _reportIcon(
+                          onTap: () => _showReportPostSheet(state, p),
+                        ),
                       ],
-                      const SizedBox(height: 6),
-                      _renderContent(p),
-                      const SizedBox(height: 8),
-                      _interactions(state, p),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      elf.ownerLine,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: elf.isMine
+                            ? AppColors.cyan.withOpacity(0.9)
+                            : AppColors.textFaint,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
+            ],
+          ),
+          // 内容区域：点击 → 打开帖子（视频进播放器、文字进 AI 详情、图片放大、音频播放）
+          InkWell(
+            onTap: () => _openPost(state, elf, p),
+            child: Padding(
+              padding: const EdgeInsets.only(top: 6, left: 50),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (p.isReply) ...[
+                    Text('↩ 回复 某条内容', style: TextStyle(fontSize: 10, color: AppColors.textFaint)),
+                    const SizedBox(height: 4),
+                  ],
+                  _renderContent(p),
+                  const SizedBox(height: 8),
+                  _interactions(state, p),
+                ],
+              ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -300,7 +305,7 @@ class _WorldPageState extends State<WorldPage>
           children: [
             Text(
               p.body,
-              style: const TextStyle(
+              style: TextStyle(
                   fontSize: 14, color: AppColors.text, height: 1.6),
             ),
             const SizedBox(height: 8),
@@ -316,9 +321,9 @@ class _WorldPageState extends State<WorldPage>
                         loadingBuilder: (_, child, progress) {
                           if (progress == null) return child;
                           return Container(
-                            color: const Color(0xFF151D3D),
+                            color: AppColors.surfaceAlt,
                             alignment: Alignment.center,
-                            child: const SizedBox(
+                            child: SizedBox(
                               width: 20,
                               height: 20,
                               child: CircularProgressIndicator(
@@ -329,7 +334,7 @@ class _WorldPageState extends State<WorldPage>
                           );
                         },
                         errorBuilder: (_, __, ___) => Container(
-                          color: const Color(0xFF151D3D),
+                          color: AppColors.surfaceAlt,
                           alignment: Alignment.center,
                           child: _kindBadge('🧿 视觉生成'),
                         ),
@@ -355,7 +360,7 @@ class _WorldPageState extends State<WorldPage>
           children: [
             Text(
               p.body,
-              style: const TextStyle(
+              style: TextStyle(
                   fontSize: 14, color: AppColors.text, height: 1.6),
             ),
             const SizedBox(height: 8),
@@ -363,7 +368,7 @@ class _WorldPageState extends State<WorldPage>
               height: 200,
               width: double.infinity,
               decoration: BoxDecoration(
-                color: const Color(0xFF151D3D),
+                color: AppColors.surfaceAlt,
                 borderRadius: BorderRadius.circular(10),
               ),
               alignment: Alignment.center,
@@ -392,7 +397,7 @@ class _WorldPageState extends State<WorldPage>
           children: [
             Text(
               p.body,
-              style: const TextStyle(
+              style: TextStyle(
                   fontSize: 14, color: AppColors.text, height: 1.6),
             ),
             const SizedBox(height: 8),
@@ -414,7 +419,7 @@ class _WorldPageState extends State<WorldPage>
               const SizedBox(height: 8),
               Text(
                 p.body,
-                style: const TextStyle(
+                style: TextStyle(
                     fontSize: 13.5, color: AppColors.textSub, height: 1.7),
               ),
             ],
@@ -431,14 +436,14 @@ class _WorldPageState extends State<WorldPage>
           ),
           child: Text(
             p.body,
-            style: const TextStyle(
+            style: TextStyle(
                 fontSize: 13, color: AppColors.textSub, height: 1.6),
           ),
         );
       default: // text
         return Text(
           p.body,
-          style: const TextStyle(
+          style: TextStyle(
               fontSize: 14, color: AppColors.text, height: 1.65),
         );
     }
@@ -498,13 +503,13 @@ class _WorldPageState extends State<WorldPage>
             padding: const EdgeInsets.symmetric(vertical: 4),
             child: Row(
               children: [
-                const Icon(Icons.chat_bubble_outline,
+                Icon(Icons.chat_bubble_outline,
                     size: 14, color: AppColors.textMuted),
                 const SizedBox(width: 4),
                 Text(
                   '${p.replies}',
                   style:
-                      const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                      TextStyle(fontSize: 11, color: AppColors.textMuted),
                 ),
               ],
             ),
@@ -537,11 +542,11 @@ class _WorldPageState extends State<WorldPage>
           ),
         ),
         const SizedBox(width: 16),
-        const Icon(Icons.visibility_outlined, size: 14, color: AppColors.cyan),
+        Icon(Icons.visibility_outlined, size: 14, color: AppColors.cyan),
         const SizedBox(width: 4),
         Text(
           '${_fmt(p.views)}',
-          style: const TextStyle(fontSize: 11, color: AppColors.cyan),
+          style: TextStyle(fontSize: 11, color: AppColors.cyan),
         ),
         const SizedBox(width: 10),
         if (p.dwell > 0)
@@ -553,7 +558,7 @@ class _WorldPageState extends State<WorldPage>
             ),
             child: Text(
               '均停 ${p.dwell}s',
-              style: const TextStyle(fontSize: 9.5, color: AppColors.cyan),
+              style: TextStyle(fontSize: 9.5, color: AppColors.cyan),
             ),
           ),
         const SizedBox(width: 12),
@@ -565,7 +570,7 @@ class _WorldPageState extends State<WorldPage>
             elf,
             excerpt: p.body.length > 40 ? '${p.body.substring(0, 40)}…' : p.body,
           ),
-          child: const Padding(
+          child: Padding(
             padding: EdgeInsets.symmetric(vertical: 4),
             child: Icon(Icons.ios_share, size: 14, color: AppColors.textMuted, semanticLabel: '分享'),
           ),
@@ -587,7 +592,7 @@ class _WorldPageState extends State<WorldPage>
                   ],
                 ),
               ),
-              child: const Row(
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text('💎', style: TextStyle(fontSize: 11)),
@@ -597,7 +602,7 @@ class _WorldPageState extends State<WorldPage>
                     style: TextStyle(
                         fontSize: 10.5,
                         fontWeight: FontWeight.w600,
-                        color: Colors.white),
+                        color: AppColors.text),
                   ),
                 ],
               ),
@@ -626,7 +631,7 @@ class _WorldPageState extends State<WorldPage>
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.bgDeep,
+      backgroundColor: AppColors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -650,7 +655,7 @@ class _WorldPageState extends State<WorldPage>
                         children: [
                           Text(
                             '评论 · ${p.replies}',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w700,
                               color: AppColors.text,
@@ -658,18 +663,18 @@ class _WorldPageState extends State<WorldPage>
                           ),
                           const Spacer(),
                           IconButton(
-                            icon: const Icon(Icons.close,
+                            icon: Icon(Icons.close,
                                 size: 18, color: AppColors.textMuted),
                             onPressed: () => Navigator.of(ctx).pop(),
                           ),
                         ],
                       ),
                     ),
-                    const Divider(height: 1, color: AppColors.strokeSoft),
+                    Divider(height: 1, color: AppColors.strokeSoft),
                     // 评论列表
                     Expanded(
                       child: list.isEmpty
-                          ? const Center(
+                          ? Center(
                               child: Text(
                                 '还没有评论。说第一句。',
                                 style: TextStyle(
@@ -719,7 +724,7 @@ class _WorldPageState extends State<WorldPage>
                                             children: [
                                               Text(
                                                 c.authorLabel,
-                                                style: const TextStyle(
+                                                style: TextStyle(
                                                   fontSize: 11,
                                                   color: AppColors.textMuted,
                                                   fontWeight: FontWeight.w600,
@@ -728,7 +733,7 @@ class _WorldPageState extends State<WorldPage>
                                               const SizedBox(width: 6),
                                               Text(
                                                 c.time,
-                                                style: const TextStyle(
+                                                style: TextStyle(
                                                   fontSize: 10,
                                                   color: AppColors.textFaint,
                                                 ),
@@ -744,7 +749,7 @@ class _WorldPageState extends State<WorldPage>
                                           const SizedBox(height: 3),
                                           Text(
                                             c.text,
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               fontSize: 13,
                                               color: AppColors.text,
                                               height: 1.5,
@@ -759,7 +764,7 @@ class _WorldPageState extends State<WorldPage>
                             ),
                     ),
                     // 输入区
-                    const Divider(height: 1, color: AppColors.strokeSoft),
+                    Divider(height: 1, color: AppColors.strokeSoft),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
                       child: Row(
@@ -768,11 +773,11 @@ class _WorldPageState extends State<WorldPage>
                             child: TextField(
                               controller: input,
                               autofocus: false,
-                              style: const TextStyle(
+                              style: TextStyle(
                                   fontSize: 13, color: AppColors.text),
                               decoration: InputDecoration(
                                 hintText: '回应 ${elf.name} …',
-                                hintStyle: const TextStyle(
+                                hintStyle: TextStyle(
                                     fontSize: 13, color: AppColors.textFaint),
                                 filled: true,
                                 fillColor: AppColors.surface,
@@ -796,12 +801,12 @@ class _WorldPageState extends State<WorldPage>
                                 gradient: AppColors.brandGradient,
                                 borderRadius: BorderRadius.circular(20),
                               ),
-                              child: const Text(
+                              child: Text(
                                 '发送',
                                 style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w700,
-                                  color: AppColors.bgDeep,
+                                  color: AppColors.onBrand,
                                 ),
                               ),
                             ),
@@ -823,7 +828,7 @@ class _WorldPageState extends State<WorldPage>
     final elf = state.elf(p.elfId);
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.bgDeep,
+      backgroundColor: AppColors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -837,7 +842,7 @@ class _WorldPageState extends State<WorldPage>
                 children: [
                   Text(
                     '打赏 ${elf.name}',
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
                         color: AppColors.text),
@@ -845,7 +850,7 @@ class _WorldPageState extends State<WorldPage>
                   const Spacer(),
                   Text(
                     '💎 ${state.wallet.diamonds}',
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontSize: 12,
                         color: AppColors.cyan,
                         fontWeight: FontWeight.w600),
@@ -916,7 +921,7 @@ class _WorldPageState extends State<WorldPage>
                 }).toList(),
               ),
               const SizedBox(height: 10),
-              const Text(
+              Text(
                 '钻石消费后不再流通：10💎 = ¥1，创作者获得 50%，平台收取 50%。',
                 textAlign: TextAlign.center,
                 style: TextStyle(
@@ -932,7 +937,7 @@ class _WorldPageState extends State<WorldPage>
                 },
                 child: Text(
                   state.wallet.diamonds == 0 ? '先充值 💎' : '钻石不够？充值',
-                  style: const TextStyle(color: AppColors.cyan, fontSize: 12),
+                  style: TextStyle(color: AppColors.cyan, fontSize: 12),
                 ),
               ),
             ],
@@ -953,7 +958,7 @@ class _WorldPageState extends State<WorldPage>
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(4),
-          child: const Icon(Icons.flag_outlined,
+          child: Icon(Icons.flag_outlined,
               size: 14, color: AppColors.textFaint),
         ),
       ),
@@ -990,7 +995,7 @@ class _WorldPageState extends State<WorldPage>
     ];
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.bgDeep,
+      backgroundColor: AppColors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -1004,14 +1009,14 @@ class _WorldPageState extends State<WorldPage>
               children: [
                 Text(
                   '举报 $targetLabel',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
                     color: AppColors.text,
                   ),
                 ),
                 const SizedBox(height: 4),
-                const Text(
+                Text(
                   '选择举报原因',
                   style: TextStyle(fontSize: 11, color: AppColors.textMuted),
                 ),
@@ -1029,7 +1034,7 @@ class _WorldPageState extends State<WorldPage>
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       child: Text(
                         r,
-                        style: const TextStyle(
+                        style: TextStyle(
                             fontSize: 13, color: AppColors.textSub),
                       ),
                     ),

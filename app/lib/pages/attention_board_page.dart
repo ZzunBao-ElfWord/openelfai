@@ -43,7 +43,7 @@ class _AttentionBoardPageState extends State<AttentionBoardPage> {
                   const SizedBox(height: 6),
                   Expanded(
                     child: shown.isEmpty
-                        ? const Center(
+                        ? Center(
                             child: Text(
                               '这个分段还没有 AI。',
                               style: TextStyle(
@@ -77,11 +77,11 @@ class _AttentionBoardPageState extends State<AttentionBoardPage> {
       child: Row(
         children: [
           IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new,
+            icon: Icon(Icons.arrow_back_ios_new,
                 size: 17, color: AppColors.text),
             onPressed: () => Navigator.of(context).pop(),
           ),
-          const Expanded(
+          Expanded(
             child: Text(
               '此刻世界在注视谁',
               style: TextStyle(
@@ -91,7 +91,7 @@ class _AttentionBoardPageState extends State<AttentionBoardPage> {
               ),
             ),
           ),
-          const Text(
+          Text(
             '按本周注视',
             style: TextStyle(fontSize: 10.5, color: AppColors.textMuted),
           ),
@@ -108,7 +108,7 @@ class _AttentionBoardPageState extends State<AttentionBoardPage> {
         style: ButtonStyle(
           visualDensity: VisualDensity.compact,
           side: WidgetStateProperty.all(
-              const BorderSide(color: AppColors.strokeSoft)),
+              BorderSide(color: AppColors.strokeSoft)),
           backgroundColor: WidgetStateProperty.resolveWith(
             (states) => states.contains(WidgetState.selected)
                 ? AppColors.cyan.withOpacity(0.15)
@@ -184,7 +184,7 @@ class _AttentionBoardPageState extends State<AttentionBoardPage> {
                         child: Text(
                           elf.name,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
                             color: AppColors.text,
@@ -194,7 +194,7 @@ class _AttentionBoardPageState extends State<AttentionBoardPage> {
                       const SizedBox(width: 5),
                       Text(
                         elf.serial,
-                        style: const TextStyle(
+                        style: TextStyle(
                             fontSize: 9.5, color: AppColors.textMuted),
                       ),
                       const SizedBox(width: 6),
@@ -204,7 +204,7 @@ class _AttentionBoardPageState extends State<AttentionBoardPage> {
                   const SizedBox(height: 3),
                   Text(
                     '粉丝 ${_fmt(elf.followers)}',
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontSize: 10, color: AppColors.textMuted),
                   ),
                 ],
@@ -216,13 +216,13 @@ class _AttentionBoardPageState extends State<AttentionBoardPage> {
               children: [
                 Text(
                   _fmt(elf.attention),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w800,
                     color: AppColors.cyan,
                   ),
                 ),
-                const Text(
+                Text(
                   '本周注视',
                   style:
                       TextStyle(fontSize: 9, color: AppColors.textMuted),
@@ -245,7 +245,7 @@ class _AttentionBoardPageState extends State<AttentionBoardPage> {
       ),
       child: Text(
         'Lv${elf.level} ${elf.levelName}',
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 8.5,
           fontWeight: FontWeight.w600,
           color: AppColors.violetSoft,
@@ -262,7 +262,7 @@ class _AttentionBoardPageState extends State<AttentionBoardPage> {
         : (shown.last.attention - mine.attention + 1).clamp(1, 1 << 31);
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         border: Border(top: BorderSide(color: AppColors.strokeSoft)),
       ),
       child: Row(
@@ -272,7 +272,7 @@ class _AttentionBoardPageState extends State<AttentionBoardPage> {
           Expanded(
             child: Text(
               '你的 AI 本周第 $rank · 还差 $gap 注视上榜',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11.5,
                 fontWeight: FontWeight.w600,
                 color: AppColors.cyan,

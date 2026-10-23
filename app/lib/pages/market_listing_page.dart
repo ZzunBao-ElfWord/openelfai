@@ -53,14 +53,14 @@ class MarketListingPage extends StatelessWidget {
                       if (listing.edition != null)
                         Text(
                           listing.edition!,
-                          style: const TextStyle(
+                          style: TextStyle(
                               fontSize: 11, color: AppColors.textMuted),
                         ),
                       if (!isPrimary && listing.sellerLabel != null) ...[
                         const SizedBox(width: 8),
                         Text(
                           '卖家 ${listing.sellerLabel}',
-                          style: const TextStyle(
+                          style: TextStyle(
                               fontSize: 11, color: AppColors.textMuted),
                         ),
                       ],
@@ -71,7 +71,7 @@ class MarketListingPage extends StatelessWidget {
                   // 副标题
                   Text(
                     listing.subtitle,
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontSize: 14, color: AppColors.textSub, height: 1.6),
                   ),
                   const SizedBox(height: 18),
@@ -106,7 +106,7 @@ class MarketListingPage extends StatelessWidget {
                                 alignment: Alignment.center,
                                 child: Text(
                                   m?.glyph ?? '?',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w700,
                                     color: AppColors.violetSoft,
@@ -116,7 +116,7 @@ class MarketListingPage extends StatelessWidget {
                               const SizedBox(width: 6),
                               Text(
                                 m?.name ?? mid,
-                                style: const TextStyle(
+                                style: TextStyle(
                                     fontSize: 11, color: AppColors.textSub),
                               ),
                             ],
@@ -133,18 +133,18 @@ class MarketListingPage extends StatelessWidget {
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(10),
-                        color: const Color(0xFF1A2040),
+                        color: AppColors.surfaceAlt,
                       ),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.info_outline,
+                          Icon(Icons.info_outline,
                               size: 16, color: AppColors.textMuted),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               listing.note!,
-                              style: const TextStyle(
+                              style: TextStyle(
                                   fontSize: 12,
                                   color: AppColors.textSub,
                                   height: 1.6),
@@ -168,7 +168,7 @@ class MarketListingPage extends StatelessWidget {
                       children: [
                         Text(
                           '💎 ${listing.price}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.w700,
                             color: AppColors.cyan,
@@ -177,13 +177,13 @@ class MarketListingPage extends StatelessWidget {
                         const SizedBox(width: 8),
                         Text(
                           '钻石',
-                          style: const TextStyle(
+                          style: TextStyle(
                               fontSize: 11, color: AppColors.textMuted),
                         ),
                         const SizedBox(width: 8),
                         Text(
                           isPrimary ? '官方定价' : '卖家出价',
-                          style: const TextStyle(
+                          style: TextStyle(
                               fontSize: 11, color: AppColors.textMuted),
                         ),
                       ],
@@ -225,7 +225,7 @@ class MarketListingPage extends StatelessWidget {
                       child: Center(
                         child: Text(
                           '💎${state.wallet.diamonds} / 要 💎${listing.price}，差 💎${listing.price - state.wallet.diamonds}',
-                          style: const TextStyle(fontSize: 11, color: AppColors.violetSoft),
+                          style: TextStyle(fontSize: 11, color: AppColors.violetSoft),
                         ),
                       ),
                     ),
@@ -261,7 +261,7 @@ class MarketListingPage extends StatelessWidget {
           colors: [
             isPrimary
                 ? AppColors.violet.withOpacity(0.25)
-                : const Color(0xFF1A2040),
+                : AppColors.surfaceAlt,
             AppColors.bg,
           ],
         ),
@@ -277,7 +277,7 @@ class MarketListingPage extends StatelessWidget {
                   padding: EdgeInsets.zero,
                   alignment: Alignment.centerLeft,
                   onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.arrow_back_ios_new,
+                  icon: Icon(Icons.arrow_back_ios_new,
                       size: 17, color: AppColors.textSub),
                 ),
               ],
@@ -300,10 +300,10 @@ class MarketListingPage extends StatelessWidget {
                   alignment: Alignment.center,
                   child: Text(
                     listing.title[0],
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 32,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.bgDeep,
+                      color: AppColors.onBrand,
                     ),
                   ),
                 ),
@@ -314,7 +314,7 @@ class MarketListingPage extends StatelessWidget {
                     children: [
                       Text(
                         listing.title,
-                        style: const TextStyle(
+                        style: TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.w700,
                             color: AppColors.text),
@@ -322,7 +322,7 @@ class MarketListingPage extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(
                         isPrimary ? '官方首发' : '用户转售',
-                        style: const TextStyle(
+                        style: TextStyle(
                             fontSize: 11, color: AppColors.textMuted),
                       ),
                     ],

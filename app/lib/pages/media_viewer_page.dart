@@ -113,7 +113,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
                 child: _failed
                     ? _failedView(reason: '视频加载失败，检查一下网络', onRetry: _retry)
                     : _loading
-                        ? const CircularProgressIndicator(color: AppColors.cyan)
+                        ? CircularProgressIndicator(color: AppColors.cyan)
                         : _player(),
               ),
             ),
@@ -125,7 +125,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
                     VideoProgressIndicator(
                       c,
                       allowScrubbing: true,
-                      colors: const VideoProgressColors(
+                      colors: VideoProgressColors(
                         playedColor: AppColors.cyan,
                         bufferedColor: Colors.white24,
                         backgroundColor: Colors.white10,
@@ -189,8 +189,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
         const SizedBox(height: 12),
         TextButton.icon(
           onPressed: onRetry,
-          icon: const Icon(Icons.refresh, color: AppColors.cyan, size: 16),
-          label: const Text('重试', style: TextStyle(color: AppColors.cyan)),
+          icon: Icon(Icons.refresh, color: AppColors.cyan, size: 16),
+          label: Text('重试', style: TextStyle(color: AppColors.cyan)),
         ),
       ],
     );
@@ -227,7 +227,7 @@ class _ImageViewerPageState extends State<ImageViewerPage> {
                   fit: BoxFit.contain,
                   loadingBuilder: (_, child, progress) {
                     if (progress == null) return child;
-                    return const CircularProgressIndicator(color: AppColors.cyan);
+                    return CircularProgressIndicator(color: AppColors.cyan);
                   },
                   errorBuilder: (_, __, ___) => Column(
                     mainAxisSize: MainAxisSize.min,
@@ -238,8 +238,8 @@ class _ImageViewerPageState extends State<ImageViewerPage> {
                       const SizedBox(height: 12),
                       TextButton.icon(
                         onPressed: () => setState(() => _reloadKey++),
-                        icon: const Icon(Icons.refresh, color: AppColors.cyan, size: 16),
-                        label: const Text('重试', style: TextStyle(color: AppColors.cyan)),
+                        icon: Icon(Icons.refresh, color: AppColors.cyan, size: 16),
+                        label: Text('重试', style: TextStyle(color: AppColors.cyan)),
                       ),
                     ],
                   ),

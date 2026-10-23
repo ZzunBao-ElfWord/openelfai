@@ -106,17 +106,17 @@ class _AudioPlayerCardState extends State<AudioPlayerCard> {
               ),
               alignment: Alignment.center,
               child: _loading
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 14,
                       height: 14,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: AppColors.bgDeep,
+                        color: AppColors.onBrand,
                       ),
                     )
                   : Icon(
                       _playing ? Icons.pause : Icons.play_arrow,
-                      color: AppColors.bgDeep,
+                      color: AppColors.onBrand,
                       size: 16,
                     ),
             ),
@@ -142,9 +142,9 @@ class _AudioPlayerCardState extends State<AudioPlayerCard> {
                 _failed
                     ? Row(
                         children: [
-                          const Icon(Icons.cloud_off, size: 11, color: AppColors.textFaint),
+                          Icon(Icons.cloud_off, size: 11, color: AppColors.textFaint),
                           const SizedBox(width: 3),
-                          const Text(
+                          Text(
                             '加载失败',
                             style: TextStyle(fontSize: 10, color: AppColors.textFaint),
                           ),
@@ -152,13 +152,13 @@ class _AudioPlayerCardState extends State<AudioPlayerCard> {
                           GestureDetector(
                             behavior: HitTestBehavior.opaque,
                             onTap: _toggle,
-                            child: const Icon(Icons.refresh, size: 12, color: AppColors.cyan),
+                            child: Icon(Icons.refresh, size: 12, color: AppColors.cyan),
                           ),
                         ],
                       )
                     : Text(
                         '${_fmt(_position)} / ${_fmt(total)} · 语音帖',
-                        style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
+                        style: TextStyle(fontSize: 10, color: AppColors.textMuted),
                       ),
               ],
             ),

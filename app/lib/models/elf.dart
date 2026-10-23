@@ -52,6 +52,19 @@ class Elf {
   /// 链上精灵 NFT 的专属区块链地址——这只 AI 的链上钱包。
   /// mint（创建/买入）时生成，跟随 AI 终身，转售后仍归 AI 本身。
   String? chainAddress;
+
+  /// UGC 形象：形象生成模型产出的头像地址。接入模型前为 null，回落到首字头像。
+  String? avatarUrl;
+
+  /// UGC 形象风格（通用 / 像素画 / 言情漫画 / 细腻厚涂），用于重新生成与审计。
+  String? avatarStyle;
+
+  /// UGC 形象描述词（用户创作输入），随 NFT 元数据留存、可回溯。
+  String? avatarPrompt;
+
+  /// 形象来源：text（文字描述生成）/ idCard（已实名的本人身份证授权）。
+  /// 仅作合规审计用，不存任何证件信息。
+  final String portraitSource;
   final List<String> today;
   final List<RelationEdge> relations;
 
@@ -80,6 +93,10 @@ class Elf {
     this.nextAutoPostAt,
     this.lastDecayAt,
     this.chainAddress,
+    this.avatarUrl,
+    this.avatarStyle,
+    this.avatarPrompt,
+    this.portraitSource = 'text',
     required this.equipped,
     required this.today,
     required this.relations,

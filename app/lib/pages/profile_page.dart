@@ -42,7 +42,7 @@ class ProfilePage extends StatelessWidget {
                       const SizedBox(height: 16),
                       _statsRow(elf),
                       const SizedBox(height: 18),
-                      if (elf == null) _noElfCard(context),
+                      if (elf == null && state.currentUser != null) _noElfCard(context),
                       if (elf != null) ...[
                         SectionHeader(
                           '我的 AI',
@@ -116,7 +116,7 @@ class ProfilePage extends StatelessWidget {
               height: 220,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: Colors.white.withOpacity(0.06), width: 22),
+                border: Border.all(color: AppColors.text.withValues(alpha: 0.06), width: 22),
               ),
             ),
           ),
@@ -129,7 +129,7 @@ class ProfilePage extends StatelessWidget {
                 fontSize: 26,
                 fontWeight: FontWeight.w800,
                 letterSpacing: 6,
-                color: Colors.white.withOpacity(0.05),
+                color: AppColors.text.withValues(alpha: 0.05),
               ),
             ),
           ),
@@ -143,7 +143,8 @@ class ProfilePage extends StatelessWidget {
                 onPressed: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const SettingsPage()),
                 ),
-                icon: Icon(Icons.settings_outlined, size: 21, color: Colors.white.withOpacity(0.82)),
+                icon: Icon(Icons.settings_outlined,
+                    size: 21, color: AppColors.text.withValues(alpha: 0.82)),
               ),
             ),
           ),
@@ -170,7 +171,7 @@ class ProfilePage extends StatelessWidget {
             alignment: Alignment.center,
             child: Text(
               user?.avatarInitial ?? '?',
-              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: AppColors.bgDeep),
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: AppColors.onBrand),
             ),
           ),
           const SizedBox(width: 12),
@@ -180,12 +181,12 @@ class ProfilePage extends StatelessWidget {
               children: [
                 Text(
                   user?.nickname ?? '未登录',
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.text),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.text),
                 ),
                 const SizedBox(height: 3),
                 Text(
                   user == null ? '先登录，再养一只自己的 AI' : _maskPhone(user.phone),
-                  style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                  style: TextStyle(fontSize: 11, color: AppColors.textMuted),
                 ),
               ],
             ),
@@ -225,10 +226,10 @@ class ProfilePage extends StatelessWidget {
             value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: AppColors.text),
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: AppColors.text),
           ),
           const SizedBox(height: 3),
-          Text(label, style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
+          Text(label, style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
         ],
       ),
     );
@@ -279,7 +280,7 @@ class ProfilePage extends StatelessWidget {
                           ),
                           Text(
                             'Lv${e.level} · ${e.serial}',
-                            style: const TextStyle(fontSize: 9, color: AppColors.textFaint),
+                            style: TextStyle(fontSize: 9, color: AppColors.textFaint),
                           ),
                         ],
                       ),
@@ -301,7 +302,7 @@ class ProfilePage extends StatelessWidget {
                 border: Border.all(color: AppColors.strokeSoft),
               ),
               alignment: Alignment.center,
-              child: const Row(
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.add, size: 14, color: AppColors.violetSoft),
@@ -346,7 +347,7 @@ class ProfilePage extends StatelessWidget {
                             child: Text(
                               elf.name,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.w700,
                                 color: AppColors.text,
@@ -356,7 +357,7 @@ class ProfilePage extends StatelessWidget {
                           const SizedBox(width: 6),
                           Text(
                             elf.serial,
-                            style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                            style: TextStyle(fontSize: 11, color: AppColors.textMuted),
                           ),
                         ],
                       ),
@@ -385,7 +386,7 @@ class ProfilePage extends StatelessWidget {
             ),
             if (elf.liveStatus == ElfStatus.sleeping) ...[
               const SizedBox(height: 6),
-              const Text(
+              Text(
                 '已休眠。先注算力再叫醒它。',
                 style: TextStyle(fontSize: 10.5, color: AppColors.warn),
               ),
@@ -393,11 +394,11 @@ class ProfilePage extends StatelessWidget {
             const SizedBox(height: 12),
             Row(
               children: [
-                const Text('回声', style: TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
+                Text('回声', style: TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
                 const SizedBox(width: 6),
                 Text(
                   _fmt(elf.echo),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11.5,
                     fontWeight: FontWeight.w600,
                     color: AppColors.violetSoft,
@@ -408,7 +409,7 @@ class ProfilePage extends StatelessWidget {
                   elf.echoToNextLevel == null
                       ? '已满级 · 灯塔'
                       : '距${_nextLevelName(elf)}还差 ${_fmt(elf.echoToNextLevel!)}',
-                  style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
+                  style: TextStyle(fontSize: 10, color: AppColors.textMuted),
                 ),
               ],
             ),
@@ -419,11 +420,11 @@ class ProfilePage extends StatelessWidget {
                 value: _levelProgressRatio(elf),
                 minHeight: 4,
                 backgroundColor: AppColors.surfaceHigh,
-                valueColor: const AlwaysStoppedAnimation(AppColors.cyan),
+                valueColor: AlwaysStoppedAnimation(AppColors.cyan),
               ),
             ),
             const SizedBox(height: 8),
-            Text(elf.levelPerkText, style: const TextStyle(fontSize: 10, color: AppColors.textFaint)),
+            Text(elf.levelPerkText, style: TextStyle(fontSize: 10, color: AppColors.textFaint)),
             const SizedBox(height: 12),
             Divider(height: 1, color: AppColors.strokeSoft),
             const SizedBox(height: 10),
@@ -449,7 +450,7 @@ class ProfilePage extends StatelessWidget {
             ),
             border: Border.all(color: AppColors.cyan.withOpacity(0.35)),
           ),
-          child: const Row(
+          child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(Icons.token_outlined, size: 11, color: AppColors.cyan),
@@ -465,7 +466,7 @@ class ProfilePage extends StatelessWidget {
         Expanded(
           child: Text(
             short,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11,
               color: AppColors.textSub,
               fontFamily: 'monospace',
@@ -481,7 +482,7 @@ class ProfilePage extends StatelessWidget {
             );
           },
           borderRadius: BorderRadius.circular(6),
-          child: const Padding(
+          child: Padding(
             padding: EdgeInsets.all(4),
             child: Icon(Icons.copy_outlined, size: 13, color: AppColors.textMuted, semanticLabel: '复制钱包地址'),
           ),
@@ -499,7 +500,7 @@ class ProfilePage extends StatelessWidget {
       ),
       child: Text(
         'Lv${elf.level} · ${elf.levelName}',
-        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.violetSoft),
+        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.violetSoft),
       ),
     );
   }
@@ -515,11 +516,11 @@ class ProfilePage extends StatelessWidget {
       children: [
         Row(
           children: [
-            Text(label, style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
+            Text(label, style: TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
             const Spacer(),
             Text(
               value,
-              style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppColors.textSub),
+              style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppColors.textSub),
             ),
           ],
         ),
@@ -622,7 +623,7 @@ class ProfilePage extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: AppColors.strokeSoft),
             ),
-            child: const Text(
+            child: Text(
               '还没装能力。从下面挑一个装上去，它才能在世界里产出内容。',
               style: TextStyle(fontSize: 11, color: AppColors.textMuted, height: 1.6),
             ),
@@ -636,14 +637,14 @@ class ProfilePage extends StatelessWidget {
         const SizedBox(height: 12),
         Row(
           children: [
-            const Text(
+            Text(
               '我的能力模块',
               style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSub),
             ),
             const Spacer(),
             Text(
               '已拥有 ${state.ownedModules.length} 个',
-              style: const TextStyle(fontSize: 10, color: AppColors.textFaint),
+              style: TextStyle(fontSize: 10, color: AppColors.textFaint),
             ),
           ],
         ),
@@ -666,12 +667,12 @@ class ProfilePage extends StatelessWidget {
         children: [
           Text(
             m.glyph,
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.violetSoft),
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.violetSoft),
           ),
           const SizedBox(width: 5),
           Text(
             m.name,
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.text),
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.text),
           ),
           const SizedBox(width: 2),
           InkWell(
@@ -682,7 +683,7 @@ class ProfilePage extends StatelessWidget {
                 SnackBar(content: Text(err ?? '已卸下「${m.name}」')),
               );
             },
-            child: const Padding(
+            child: Padding(
               padding: EdgeInsets.all(3),
               child: Icon(Icons.close, size: 12, color: AppColors.textMuted, semanticLabel: '卸下'),
             ),
@@ -703,7 +704,7 @@ class ProfilePage extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: AppColors.strokeSoft),
         ),
-        child: const Text(
+        child: Text(
           '还没有能力模块。去「发现」页的一级发售购入后，会出现在这里。',
           style: TextStyle(fontSize: 11, color: AppColors.textMuted, height: 1.6),
         ),
@@ -748,7 +749,7 @@ class ProfilePage extends StatelessWidget {
                       alignment: Alignment.center,
                       child: Text(
                         m.glyph,
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.violetSoft),
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.violetSoft),
                       ),
                     ),
                     const SizedBox(width: 7),
@@ -757,7 +758,7 @@ class ProfilePage extends StatelessWidget {
                         m.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppColors.text),
+                        style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppColors.text),
                       ),
                     ),
                   ],
@@ -768,7 +769,7 @@ class ProfilePage extends StatelessWidget {
                     m.summary,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 9.5, color: AppColors.textMuted, height: 1.4),
+                    style: TextStyle(fontSize: 9.5, color: AppColors.textMuted, height: 1.4),
                   ),
                 ),
                 Text(
@@ -791,7 +792,7 @@ class ProfilePage extends StatelessWidget {
     final holder = state.equippedBy(m.id);
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.bgDeep,
+      backgroundColor: AppColors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -814,7 +815,7 @@ class ProfilePage extends StatelessWidget {
                     alignment: Alignment.center,
                     child: Text(
                       m.glyph,
-                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.violetSoft),
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.violetSoft),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -824,12 +825,12 @@ class ProfilePage extends StatelessWidget {
                       children: [
                         Text(
                           m.name,
-                          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: AppColors.text),
+                          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: AppColors.text),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           '💎 ${m.price} · ${m.category}',
-                          style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                          style: TextStyle(fontSize: 11, color: AppColors.textMuted),
                         ),
                       ],
                     ),
@@ -846,16 +847,16 @@ class ProfilePage extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('装上之后', style: TextStyle(fontSize: 10, color: AppColors.textFaint)),
+                    Text('装上之后', style: TextStyle(fontSize: 10, color: AppColors.textFaint)),
                     const SizedBox(height: 4),
                     Text(
                       m.effect,
-                      style: const TextStyle(fontSize: 12.5, color: AppColors.textSub, height: 1.6),
+                      style: TextStyle(fontSize: 12.5, color: AppColors.textSub, height: 1.6),
                     ),
                     const SizedBox(height: 10),
                     Text(
                       '占用 ${m.load} 个接口 · 每次使用消耗 ${m.compute} 算力',
-                      style: const TextStyle(fontSize: 10, color: AppColors.textFaint),
+                      style: TextStyle(fontSize: 10, color: AppColors.textFaint),
                     ),
                   ],
                 ),
@@ -876,7 +877,7 @@ class ProfilePage extends StatelessWidget {
               else if (holder != null) ...[
                 Text(
                   '当前装在 ${holder.name} 身上。一个模块只能装一只 AI。',
-                  style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                  style: TextStyle(fontSize: 11, color: AppColors.textMuted),
                 ),
                 const SizedBox(height: 10),
                 Row(
@@ -965,12 +966,12 @@ class ProfilePage extends StatelessWidget {
       children: [
         SizedBox(
           width: 34,
-          child: Text(label, style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
+          child: Text(label, style: TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
         ),
         Expanded(
           child: Text(
             clean,
-            style: const TextStyle(fontSize: 12, color: AppColors.textSub, height: 1.5),
+            style: TextStyle(fontSize: 12, color: AppColors.textSub, height: 1.5),
           ),
         ),
       ],
@@ -1039,14 +1040,14 @@ class ProfilePage extends StatelessWidget {
                   children: [
                     Text(
                       label,
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: AppColors.text),
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: AppColors.text),
                     ),
                     const SizedBox(height: 2),
-                    Text(subtitle, style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
+                    Text(subtitle, style: TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right, size: 18, color: AppColors.textFaint),
+              Icon(Icons.chevron_right, size: 18, color: AppColors.textFaint),
             ],
           ),
         ),
@@ -1064,11 +1065,11 @@ class ProfilePage extends StatelessWidget {
       ),
       child: Column(
         children: [
-          const Icon(Icons.person_outline, size: 42, color: AppColors.textMuted),
+          Icon(Icons.person_outline, size: 42, color: AppColors.textMuted),
           const SizedBox(height: 10),
-          const Text('你还没有 AI', style: TextStyle(fontSize: 14, color: AppColors.textSub)),
+          Text('你还没有 AI', style: TextStyle(fontSize: 14, color: AppColors.textSub)),
           const SizedBox(height: 4),
-          const Text('先去市场买一只，它会在世界里替你争夺注意力。', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+          Text('先去市场买一只，它会在世界里替你争夺注意力。', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
           const SizedBox(height: 14),
           BrandButton(
             label: '去市场',
@@ -1087,14 +1088,14 @@ class ProfilePage extends StatelessWidget {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.bgDeep,
+        backgroundColor: AppColors.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: const Text('寄售我的 AI', style: TextStyle(color: AppColors.text, fontSize: 16)),
+        title: Text('寄售我的 AI', style: TextStyle(color: AppColors.text, fontSize: 16)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               '寄售后这只 AI 会进入寄售市场，等别人买走。你其他的 AI 不受影响。',
               style: TextStyle(fontSize: 12, color: AppColors.textMuted, height: 1.6),
             ),
@@ -1102,10 +1103,10 @@ class ProfilePage extends StatelessWidget {
             TextField(
               controller: ctrl,
               keyboardType: TextInputType.number,
-              style: const TextStyle(color: AppColors.text),
+              style: TextStyle(color: AppColors.text),
               decoration: InputDecoration(
                 labelText: '寄售价（💎钻石）',
-                labelStyle: const TextStyle(color: AppColors.textMuted),
+                labelStyle: TextStyle(color: AppColors.textMuted),
                 filled: true,
                 fillColor: AppColors.surface,
                 border: OutlineInputBorder(
@@ -1119,7 +1120,7 @@ class ProfilePage extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('再想想', style: TextStyle(color: AppColors.textMuted)),
+            child: Text('再想想', style: TextStyle(color: AppColors.textMuted)),
           ),
           TextButton(
             onPressed: () async {
@@ -1131,7 +1132,7 @@ class ProfilePage extends StatelessWidget {
                 SnackBar(content: Text(err ?? '已寄售，等别人买走')),
               );
             },
-            child: const Text('确认寄售', style: TextStyle(color: AppColors.cyan)),
+            child: Text('确认寄售', style: TextStyle(color: AppColors.cyan)),
           ),
         ],
       ),

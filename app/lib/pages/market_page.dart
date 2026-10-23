@@ -53,7 +53,7 @@ class _MarketPageState extends State<MarketPage> with SingleTickerProviderStateM
                       padding: const EdgeInsets.only(left: 6),
                       alignment: Alignment.centerLeft,
                       onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.arrow_back_ios_new, size: 17, color: AppColors.textSub),
+                      icon: Icon(Icons.arrow_back_ios_new, size: 17, color: AppColors.textSub),
                     ),
                   ),
                 _header(state),
@@ -100,7 +100,7 @@ class _MarketPageState extends State<MarketPage> with SingleTickerProviderStateM
             children: [
               Text(
                 widget.embedded ? '发现' : '市场',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 21,
                   fontWeight: FontWeight.w700,
                   color: AppColors.text,
@@ -108,7 +108,7 @@ class _MarketPageState extends State<MarketPage> with SingleTickerProviderStateM
                 ),
               ),
               const SizedBox(width: 8),
-              const Icon(Icons.store, size: 16, color: AppColors.textMuted),
+              Icon(Icons.store, size: 16, color: AppColors.textMuted),
               const Spacer(),
               // 💎 钻石余额 + 充值入口（放在市场页）
               InkWell(
@@ -134,14 +134,14 @@ class _MarketPageState extends State<MarketPage> with SingleTickerProviderStateM
                       const SizedBox(width: 4),
                       Text(
                         '${state.wallet.diamonds}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
                           color: AppColors.cyan,
                         ),
                       ),
                       const SizedBox(width: 5),
-                      const Icon(Icons.add, size: 12, color: AppColors.violetSoft),
+                      Icon(Icons.add, size: 12, color: AppColors.violetSoft),
                     ],
                   ),
                 ),
@@ -171,7 +171,7 @@ class _MarketPageState extends State<MarketPage> with SingleTickerProviderStateM
         _sectionTitle('AI · 官方首发', '可以同时持有多只，每只带专属链上钱包'),
         const SizedBox(height: 8),
         if (listings.isEmpty)
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(vertical: 20),
             child: Center(
               child: Text('暂时没有新 AI 上架。', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
@@ -215,10 +215,10 @@ class _MarketPageState extends State<MarketPage> with SingleTickerProviderStateM
       children: [
         Text(
           title,
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.text),
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.text),
         ),
         const SizedBox(height: 2),
-        Text(subtitle, style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
+        Text(subtitle, style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
       ],
     );
   }
@@ -254,7 +254,7 @@ class _MarketPageState extends State<MarketPage> with SingleTickerProviderStateM
                     alignment: Alignment.center,
                     child: Text(
                       m.glyph,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
                         color: AppColors.violetSoft,
@@ -267,7 +267,7 @@ class _MarketPageState extends State<MarketPage> with SingleTickerProviderStateM
                       m.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12.5,
                         fontWeight: FontWeight.w700,
                         color: AppColors.text,
@@ -282,7 +282,7 @@ class _MarketPageState extends State<MarketPage> with SingleTickerProviderStateM
                   m.effect,
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 10, color: AppColors.textMuted, height: 1.45),
+                  style: TextStyle(fontSize: 10, color: AppColors.textMuted, height: 1.45),
                 ),
               ),
               const SizedBox(height: 6),
@@ -290,7 +290,7 @@ class _MarketPageState extends State<MarketPage> with SingleTickerProviderStateM
                 children: [
                   Text(
                     '${m.load} 接口',
-                    style: const TextStyle(fontSize: 9, color: AppColors.textFaint),
+                    style: TextStyle(fontSize: 9, color: AppColors.textFaint),
                   ),
                   const Spacer(),
                   if (owned)
@@ -300,7 +300,7 @@ class _MarketPageState extends State<MarketPage> with SingleTickerProviderStateM
                         borderRadius: BorderRadius.circular(6),
                         color: AppColors.violet.withOpacity(0.16),
                       ),
-                      child: const Text(
+                      child: Text(
                         '已拥有',
                         style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.violetSoft),
                       ),
@@ -308,7 +308,7 @@ class _MarketPageState extends State<MarketPage> with SingleTickerProviderStateM
                   else
                     Text(
                       '💎 ${state.modulePrice(m.id)}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
                         color: AppColors.cyan,
@@ -327,7 +327,7 @@ class _MarketPageState extends State<MarketPage> with SingleTickerProviderStateM
     final owned = state.ownedModules.contains(m.id);
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.bgDeep,
+      backgroundColor: AppColors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -350,7 +350,7 @@ class _MarketPageState extends State<MarketPage> with SingleTickerProviderStateM
                     alignment: Alignment.center,
                     child: Text(
                       m.glyph,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w700,
                         color: AppColors.violetSoft,
@@ -364,12 +364,12 @@ class _MarketPageState extends State<MarketPage> with SingleTickerProviderStateM
                       children: [
                         Text(
                           m.name,
-                          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: AppColors.text),
+                          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: AppColors.text),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           '${m.track} 赛道 · ${m.load} 接口 · 每次使用 ${m.compute} 算力',
-                          style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted),
+                          style: TextStyle(fontSize: 10.5, color: AppColors.textMuted),
                         ),
                       ],
                     ),
@@ -386,12 +386,12 @@ class _MarketPageState extends State<MarketPage> with SingleTickerProviderStateM
                 ),
                 child: Text(
                   m.effect,
-                  style: const TextStyle(fontSize: 12.5, color: AppColors.textSub, height: 1.6),
+                  style: TextStyle(fontSize: 12.5, color: AppColors.textSub, height: 1.6),
                 ),
               ),
               const SizedBox(height: 16),
               if (owned)
-                const Center(
+                Center(
                   child: Padding(
                     padding: EdgeInsets.symmetric(vertical: 10),
                     child: Text(
@@ -428,7 +428,7 @@ class _MarketPageState extends State<MarketPage> with SingleTickerProviderStateM
       return Center(
         child: Text(
           isPrimary ? '暂时没有新 AI 上架。' : '还没人挂单。',
-          style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+          style: TextStyle(fontSize: 12, color: AppColors.textMuted),
         ),
       );
     }
@@ -459,7 +459,7 @@ class _MarketPageState extends State<MarketPage> with SingleTickerProviderStateM
             end: Alignment.bottomRight,
             colors: isPrimary
                 ? [AppColors.violet.withOpacity(0.18), AppColors.cyan.withOpacity(0.08)]
-                : [const Color(0xFF1A2040), const Color(0xFF0F1630)],
+                : [AppColors.surfaceAlt, AppColors.surface],
           ),
         ),
         child: Column(
@@ -479,10 +479,10 @@ class _MarketPageState extends State<MarketPage> with SingleTickerProviderStateM
                   alignment: Alignment.center,
                   child: Text(
                     l.title[0],
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.bgDeep,
+                      color: AppColors.onBrand,
                     ),
                   ),
                 ),
@@ -495,14 +495,14 @@ class _MarketPageState extends State<MarketPage> with SingleTickerProviderStateM
                 children: [
                   Text(
                     l.title,
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.text),
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.text),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     l.subtitle,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 10, color: AppColors.textMuted, height: 1.4),
+                    style: TextStyle(fontSize: 10, color: AppColors.textMuted, height: 1.4),
                   ),
                   const SizedBox(height: 8),
                   Row(
@@ -527,7 +527,7 @@ class _MarketPageState extends State<MarketPage> with SingleTickerProviderStateM
                       const Spacer(),
                       Text(
                         '💎 ${l.price}',
-                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.cyan),
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.cyan),
                       ),
                     ],
                   ),

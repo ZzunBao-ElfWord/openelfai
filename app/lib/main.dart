@@ -7,27 +7,62 @@ import 'state/app_state.dart';
 import 'theme.dart';
 import 'widgets/common.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.light,
-    systemNavigationBarColor: AppColors.bgDeep,
-    systemNavigationBarIconBrightness: Brightness.light,
-  ));
+  await ThemeController.instance.load();
   runApp(const OpenelfApp());
 }
 
-class OpenelfApp extends StatelessWidget {
+class OpenelfApp extends StatefulWidget {
   const OpenelfApp({super.key});
 
   @override
+  State<OpenelfApp> createState() => _OpenelfAppState();
+}
+
+class _OpenelfAppState extends State<OpenelfApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangePlatformBrightness() {
+    // 跟随系统时，系统切换明暗要同步刷新全局色板与所有已建页面。
+    if (mounted && ThemeController.instance.mode == ThemeMode.system) {
+      ThemeController.instance.applySystemBrightness();
+      setState(() {});
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'OpenElf',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.dark,
-      home: const SplashScreen(),
+    return AnimatedBuilder(
+      animation: ThemeController.instance,
+      builder: (context, _) {
+        final mode = ThemeController.instance.mode;
+        final palette = ThemeController.resolve(mode) == Brightness.dark
+            ? darkPalette
+            : lightPalette;
+        // 先落色板再建树，保证本帧所有 AppColors 引用都取到新主题。
+        AppColors.use(palette);
+        SystemChrome.setSystemUIOverlayStyle(AppTheme.overlayFor(palette));
+        return MaterialApp(
+          title: 'OpenElf',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.light,
+          darkTheme: AppTheme.dark,
+          themeMode: mode,
+          home: const SplashScreen(),
+        );
+      },
     );
   }
 }
@@ -140,7 +175,7 @@ class _SplashScreenState extends State<SplashScreen> {
                   ),
                 ),
                 const SizedBox(height: 10),
-                const Text(
+                Text(
                   '我的 AI，我做主',
                   style: TextStyle(
                     fontSize: 13,
@@ -150,7 +185,7 @@ class _SplashScreenState extends State<SplashScreen> {
                 ),
                 const SizedBox(height: 30),
                 if (!_done)
-                  const SizedBox(
+                  SizedBox(
                     width: 16,
                     height: 16,
                     child: CircularProgressIndicator(
