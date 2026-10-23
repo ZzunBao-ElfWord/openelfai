@@ -65,7 +65,7 @@ jobs:
           printf '%s' "$IOS_PROFILE_BASE64" | base64 --decode > "$profile_path"
           security cms -D -i "$profile_path" -o "$RUNNER_TEMP/openelf-profile.plist"
           python3 - <<'PY'
-          import datetime, hashlib, os, plistlib
+          import datetime, hashlib, os, plistlib, subprocess
           with open(os.environ['RUNNER_TEMP'] + '/openelf-profile.plist', 'rb') as f:
               profile = plistlib.load(f)
           entitlements = profile['Entitlements']
@@ -74,10 +74,13 @@ jobs:
           assert entitlements.get('get-task-allow') is False, 'Development profile rejected'
           assert 'ProvisionedDevices' not in profile, 'Ad Hoc profile rejected'
           assert not profile.get('ProvisionsAllDevices'), 'Enterprise profile rejected'
-          assert profile['ExpirationDate'] > datetime.datetime.utcnow(), 'Expired provisioning profile'
+          assert profile['ExpirationDate'].replace(tzinfo=datetime.timezone.utc) > datetime.datetime.now(datetime.timezone.utc), 'Expired provisioning profile'
           certificates = profile['DeveloperCertificates']
-          assert len(certificates) == 1, 'Expected a single App Store distribution certificate'
-          fingerprint = hashlib.sha1(certificates[0]).hexdigest().upper()
+          identities = subprocess.check_output(['security', 'find-identity', '-v', '-p', 'codesigning'], text=True)
+          matches = [hashlib.sha1(cert).hexdigest().upper() for cert in certificates
+                     if hashlib.sha1(cert).hexdigest().upper() in identities]
+          assert len(matches) == 1, 'Expected one imported valid identity included in the App Store profile'
+          fingerprint = matches[0]
           with open(os.environ['GITHUB_ENV'], 'a') as f:
               f.write('IOS_SIGNING_IDENTITY=' + fingerprint + '\n')
           with open(os.environ['RUNNER_TEMP'] + '/openelf-entitlements.plist', 'wb') as f:
