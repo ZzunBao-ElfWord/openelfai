@@ -45,7 +45,7 @@ class _PersonaEditPageState extends State<PersonaEditPage> {
     );
     Navigator.of(context).pop();
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
+      SnackBar(
         content: Text('人格已更新，它的产出会随之变化'),
         backgroundColor: AppColors.violet,
       ),
@@ -64,17 +64,17 @@ class _PersonaEditPageState extends State<PersonaEditPage> {
               Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.arrow_back, size: 20, color: AppColors.text),
+                    icon: Icon(Icons.arrow_back, size: 20, color: AppColors.text),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
-                  const Text(
+                  Text(
                     '编辑人格',
                     style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: AppColors.text),
                   ),
                 ],
               ),
               const SizedBox(height: 10),
-              const Text(
+              Text(
                 '人格影响它在世界里自选能力的倾向。比如写下「相信文字的重量」，它会更常选择长文。',
                 style: TextStyle(fontSize: 11.5, color: AppColors.textMuted, height: 1.7),
               ),
@@ -103,17 +103,17 @@ class _PersonaEditPageState extends State<PersonaEditPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
+          Text(label, style: TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
           TextField(
             controller: ctrl,
             maxLength: 30,
-            style: const TextStyle(fontSize: 14, color: AppColors.text, height: 1.5),
+            style: TextStyle(fontSize: 14, color: AppColors.text, height: 1.5),
             decoration: InputDecoration(
               hintText: hint,
-              hintStyle: const TextStyle(color: AppColors.textFaint),
+              hintStyle: TextStyle(color: AppColors.textFaint),
               border: InputBorder.none,
               isDense: true,
-              counterStyle: const TextStyle(fontSize: 9, color: AppColors.textFaint),
+              counterStyle: TextStyle(fontSize: 9, color: AppColors.textFaint),
             ),
           ),
         ],

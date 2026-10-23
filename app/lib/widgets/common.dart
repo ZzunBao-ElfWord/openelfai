@@ -9,8 +9,9 @@ class AppBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = AppColors.palette;
     return Container(
-      color: AppColors.bg,
+      color: p.bg,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -19,7 +20,10 @@ class AppBackground extends StatelessWidget {
             left: -140,
             child: IgnorePointer(
               ignoring: true,
-              child: _Glow(color: AppColors.violet.withOpacity(0.20), size: 420),
+              child: _Glow(
+                color: p.glowA.withValues(alpha: p.glowAOpacity),
+                size: 420,
+              ),
             ),
           ),
           Positioned(
@@ -27,7 +31,10 @@ class AppBackground extends StatelessWidget {
             right: -160,
             child: IgnorePointer(
               ignoring: true,
-              child: _Glow(color: AppColors.cyan.withOpacity(0.16), size: 460),
+              child: _Glow(
+                color: p.glowB.withValues(alpha: p.glowBOpacity),
+                size: 460,
+              ),
             ),
           ),
           child,
@@ -61,16 +68,16 @@ class GradientBorderBox extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
   final double radius;
-  final Gradient gradient;
-  final Color fill;
+  final Gradient? gradient;
+  final Color? fill;
 
   const GradientBorderBox({
     super.key,
     required this.child,
     this.padding = const EdgeInsets.all(1),
     this.radius = 16,
-    this.gradient = AppColors.brandGradient,
-    this.fill = AppColors.surface,
+    this.gradient,
+    this.fill,
   });
 
   @override
@@ -78,12 +85,12 @@ class GradientBorderBox extends StatelessWidget {
     return Container(
       padding: padding,
       decoration: BoxDecoration(
-        gradient: gradient,
+        gradient: gradient ?? AppColors.brandGradient,
         borderRadius: BorderRadius.circular(radius),
       ),
       child: Container(
         decoration: BoxDecoration(
-          color: fill,
+          color: fill ?? AppColors.surface,
           borderRadius: BorderRadius.circular(radius - padding.horizontal > 0 ? radius - padding.horizontal * 2 : 0),
         ),
         child: child,
@@ -113,15 +120,15 @@ class BrandButton extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         if (icon != null) ...[
-          Icon(icon, size: 16, color: AppColors.bgDeep),
+          Icon(icon, size: 16, color: AppColors.onBrand),
           const SizedBox(width: 7),
         ],
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w700,
-            color: AppColors.bgDeep,
+            color: AppColors.onBrand,
             letterSpacing: 0.2,
           ),
         ),
@@ -176,7 +183,7 @@ class GhostButton extends StatelessWidget {
               ],
               Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                   color: AppColors.textSub,
@@ -205,14 +212,31 @@ class ElfAvatar extends StatelessWidget {
         gradient: AppColors.brandGradient,
       ),
       alignment: Alignment.center,
-      child: Text(
-        elf.initial,
-        style: TextStyle(
-          fontSize: size * 0.45,
-          fontWeight: FontWeight.w700,
-          color: AppColors.bgDeep,
-        ),
-      ),
+      clipBehavior: Clip.antiAlias,
+      child: elf.avatarUrl == null
+          ? Text(
+              elf.initial,
+              style: TextStyle(
+                fontSize: size * 0.45,
+                fontWeight: FontWeight.w700,
+                color: AppColors.onBrand,
+              ),
+            )
+          : Image.network(
+              elf.avatarUrl!,
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+              // 形象图加载失败仍回落到首字头像，避免出现空框。
+              errorBuilder: (_, __, ___) => Text(
+                elf.initial,
+                style: TextStyle(
+                  fontSize: size * 0.45,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.onBrand,
+                ),
+              ),
+            ),
     );
   }
 }
@@ -262,14 +286,14 @@ class SectionHeader extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.baseline,
         textBaseline: TextBaseline.alphabetic,
         children: [
-          Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.text)),
+          Text(title, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.text)),
           const Spacer(),
           if (trailing != null)
             GestureDetector(
               onTap: onTrailingTap,
               child: Text(
                 trailing!,
-                style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                style: TextStyle(fontSize: 11, color: AppColors.textMuted),
               ),
             ),
         ],
@@ -290,7 +314,7 @@ class StatTile extends StatelessWidget {
       children: [
         Text(
           value,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w700,
             color: AppColors.text,
@@ -298,7 +322,7 @@ class StatTile extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 2),
-        Text(label, style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
+        Text(label, style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
       ],
     );
   }

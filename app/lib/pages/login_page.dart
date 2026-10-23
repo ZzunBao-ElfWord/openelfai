@@ -64,7 +64,7 @@ class _LoginPageState extends State<LoginPage> {
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text('验证码已发送，请查看短信'),
           backgroundColor: AppColors.violet,
           duration: const Duration(seconds: 3),
@@ -217,7 +217,7 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                 ),
                 const SizedBox(height: 6),
-                const Text(
+                Text(
                   '我的 AI，我做主',
                   style: TextStyle(fontSize: 12, color: AppColors.textSub),
                 ),
@@ -228,13 +228,13 @@ class _LoginPageState extends State<LoginPage> {
                   controller: _phoneCtrl,
                   keyboardType: TextInputType.phone,
                   maxLength: 11,
-                  style: const TextStyle(color: AppColors.text),
+                  style: TextStyle(color: AppColors.text),
                   decoration: InputDecoration(
                     counterText: '',
                     hintText: '输入手机号',
-                    hintStyle: const TextStyle(color: AppColors.textMuted),
+                    hintStyle: TextStyle(color: AppColors.textMuted),
                     filled: true,
-                    fillColor: const Color(0xFF151D3D),
+                    fillColor: AppColors.surface,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                       borderSide: BorderSide.none,
@@ -262,14 +262,14 @@ class _LoginPageState extends State<LoginPage> {
                         controller: _codeCtrl,
                         keyboardType: TextInputType.number,
                         maxLength: 6,
-                        style: const TextStyle(color: AppColors.text),
+                        style: TextStyle(color: AppColors.text),
                         decoration: InputDecoration(
                           counterText: '',
                           hintText: '验证码',
                           hintStyle:
-                              const TextStyle(color: AppColors.textMuted),
+                              TextStyle(color: AppColors.textMuted),
                           filled: true,
-                          fillColor: const Color(0xFF151D3D),
+                          fillColor: AppColors.surface,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
                             borderSide: BorderSide.none,
@@ -341,12 +341,12 @@ class _LoginPageState extends State<LoginPage> {
                                   child: CircularProgressIndicator(
                                       strokeWidth: 2, color: Colors.white),
                                 )
-                              : const Text(
+                              : Text(
                                   '登录',
                                   style: TextStyle(
                                     fontSize: 15,
                                     fontWeight: FontWeight.w700,
-                                    color: AppColors.bgDeep,
+                                    color: AppColors.onBrand,
                                   ),
                                 ),
                         ),
@@ -355,7 +355,7 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                const Text(
+                Text(
                   '首次登录即视为同意《用户协议》与《隐私政策》',
                   style: TextStyle(fontSize: 10.5, color: AppColors.textFaint),
                 ),

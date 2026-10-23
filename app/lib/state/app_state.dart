@@ -2,6 +2,8 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import '../auth/auth_repository.dart';
+import '../compliance/ai_creation_policy.dart';
+import '../compliance/identity_verification.dart';
 import '../config/iap_config.dart';
 import '../config/commerce_config.dart';
 import '../data/world_data.dart';
@@ -52,6 +54,13 @@ class AppState extends ChangeNotifier {
   final List<Map<String, String>> reports = [];
 
   User? currentUser;
+
+  /// 实名认证结果（仅存脱敏信息）。null 表示未认证。
+  IdentityVerification? identity;
+
+  /// 本地持久化数据是否已加载，以及它属于哪个账号（用于换号登录时清缓存）。
+  bool _localDataLoaded = false;
+  String? _cachedUserId;
   bool _initialized = false;
   String? _paymentMode;
   int _paymentVersion = -1;
@@ -100,6 +109,8 @@ class AppState extends ChangeNotifier {
       await _data.init();
       final loaded = await _data.load();
       if (loaded != null) {
+        _localDataLoaded = true;
+        _cachedUserId = loaded.user?.id;
         // 有本地缓存，覆盖种子
         elves = loaded.elfs;
         posts = loaded.posts;
@@ -120,6 +131,7 @@ class AppState extends ChangeNotifier {
           ..clear()
           ..addAll(loaded.comments);
         currentUser = loaded.user;
+        identity = loaded.identity;
         _rebuildSeq();
         // 迁移：带 auto 能力但 nextAutoPostAt 为 null 的老数据
         for (final e in elves) {
@@ -154,6 +166,13 @@ class AppState extends ChangeNotifier {
 
   /// 登录后调用。设用户 + 本地持久化。
   Future<void> onLogin(User user) async {
+    // 本地缓存若属于另一个账号（会话过期后换号登录），先清掉，
+    // 否则新账号会直接看到上一个账号的 AI 与流水。
+    final owner = _cachedUserId ?? currentUser?.id;
+    if (_localDataLoaded && owner != user.id) {
+      await _resetToGuest();
+    }
+    _cachedUserId = user.id;
     _resetCommerce();
     currentUser = user;
     if (CommerceConfig.enabled) wallet = Wallet();
@@ -169,12 +188,31 @@ class AppState extends ChangeNotifier {
 
   /// 登出。清用户 + 清本地持久化数据（种子不变）。
   Future<void> onLogout() async {
+    await _resetToGuest();
+    notifyListeners();
+  }
+
+  /// 清掉当前账号的一切本地痕迹，回落到访客态（种子世界里没有「我的 AI」）。
+  Future<void> _resetToGuest() async {
     _resetCommerce();
     await _data.clear();
     await _data.init();
     _injectSeeds();
+    // 登出后种子里的 AI 也不能再算「我的」：否则上一账号的 AI 会留在本地。
+    for (final e in elves) {
+      if (!e.isMine) continue;
+      e.isMine = false;
+      e.ownerId = 'guest';
+      e.ownerLabel = '世界里的创作者';
+    }
+    activeElfId = null;
+    ownedModules.clear();
+    _chats.clear();
+    reports.clear();
+    identity = null;
     currentUser = null;
-    notifyListeners();
+    _localDataLoaded = false;
+    _cachedUserId = null;
   }
 
   void _injectSeeds() {
@@ -192,6 +230,7 @@ class AppState extends ChangeNotifier {
     collectedPosts.clear();
     watchedPosts.clear();
     referralCounted.clear();
+    identity = null;
     _seedComments();
     _rebuildSeq();
     // 给"我的 AI"预装 auto 能力 + 下一次自动发帖时间
@@ -287,6 +326,7 @@ class AppState extends ChangeNotifier {
       referralCounted: referralCounted,
       ownedModules: ownedModules,
       activeElfId: activeElfId,
+      identity: identity,
       user: currentUser!,
     );
   }
@@ -1073,6 +1113,116 @@ class AppState extends ChangeNotifier {
       notifyListeners();
       return null;
     }
+  }
+
+  // —— 实名认证（身份证二要素）——
+
+  bool get isIdentityVerified => identity?.verified ?? false;
+
+  /// 提交实名认证。返回 null 表示成功，否则是失败原因。
+  ///
+  /// 本地只保留脱敏结果；完整姓名/证件号只在核验请求中使用，不落盘。
+  Future<String?> submitIdentityVerification({
+    required String realName,
+    required String idNumber,
+    required String frontImagePath,
+    required String backImagePath,
+  }) async {
+    if (currentUser == null) return '请先登录';
+    try {
+      identity = await IdentityVerificationService.verifyRequest(
+        realName: realName,
+        idNumber: idNumber,
+        frontImagePath: frontImagePath,
+        backImagePath: backImagePath,
+      );
+      notifyListeners();
+      return null;
+    } on IdentityVerifyException catch (e) {
+      return e.message;
+    }
+  }
+
+  // —— UGC：捏形象铸造 AI NFT ——
+
+  /// 铸造一只 UGC AI 的钻石费用（10 钻石 = 1 元）。
+  static const int createElfCost = 200;
+
+  /// 创建并铸造一只属于自己的 AI。返回 null 表示成功，否则是失败原因。
+  ///
+  /// 合规顺序：登录 → 长度 → 敏感词初筛 → 扣费 → 生成链上地址 → 归入「我的 AI」。
+  /// 形象图暂由 [avatarUrl] 留空（客户端用首字头像），接入形象生成模型后填真实图。
+  Future<String?> createElf({
+    required String name,
+    required String prompt,
+    required String style,
+    required String persona,
+    required String fear,
+    required String habit,
+    String portraitSource = 'text',
+  }) async {
+    if (currentUser == null) return '请先登录';
+    final trimmedName = name.trim();
+    final trimmedPrompt = prompt.trim();
+    if (trimmedName.isEmpty) return '先给这只 AI 起个名字';
+    if (trimmedName.runes.length > AiCreationPolicy.maxNameLength) {
+      return '名字最多 ${AiCreationPolicy.maxNameLength} 个字';
+    }
+    // 两条形象来源线：文字描述 / 已实名的身份证本人授权。
+    if (portraitSource == 'idCard') {
+      if (!isIdentityVerified) return '请先完成实名认证，再使用本人形象';
+    } else if (trimmedPrompt.isEmpty) {
+      return '先描述你想要的形象';
+    }
+    if (trimmedPrompt.runes.length > AiCreationPolicy.maxPromptLength) {
+      return '形象描述最多 ${AiCreationPolicy.maxPromptLength} 个字';
+    }
+    final blocked = AiCreationPolicy.checkTexts(
+        [trimmedName, trimmedPrompt, persona, fear, habit]);
+    if (blocked != null) return blocked;
+    if (wallet.diamonds < createElfCost) {
+      return '钻石不够。铸造要 💎$createElfCost，你有 💎${wallet.diamonds}';
+    }
+
+    final serialNo = elves.where((e) => e.id.startsWith('ugc')).length + 1;
+    final elf = Elf(
+      id: 'ugc${DateTime.now().millisecondsSinceEpoch}',
+      serial: '#U${serialNo.toString().padLeft(3, '0')}',
+      name: trimmedName,
+      initial: String.fromCharCode(trimmedName.runes.first),
+      ownerId: 'me',
+      ownerLabel: '我',
+      isMine: true,
+      generation: 1,
+      edition: 'UGC · 初版',
+      persona: persona.trim().isEmpty ? '还没写' : persona.trim(),
+      fear: fear.trim().isEmpty ? '还没写' : fear.trim(),
+      habit: habit.trim().isEmpty ? '还没写' : habit.trim(),
+      status: ElfStatus.active,
+      energy: 160,
+      maxEnergy: 320,
+      followers: 0,
+      echo: 0,
+      works: 0,
+      attention: 0,
+      baseSlots: 3,
+      avatarStyle: style,
+      avatarPrompt: trimmedPrompt.isEmpty
+          ? '实名认证本人形象（身份证授权）'
+          : trimmedPrompt,
+      portraitSource: portraitSource,
+      equipped: [],
+      today: [],
+      relations: [],
+    );
+    _ensureChainAddress(elf);
+    elves.add(elf);
+    seats.add(
+        Seat(elfId: elf.id, days: 0, edition: elf.edition, injected: 160));
+    activeElfId = elf.id;
+    _spend(createElfCost, 'mint_elf', '铸造 ${elf.name}（UGC 形象）');
+    notifyListeners();
+    return null;
   }
 
   /// 把我的 AI 送进寄售市场。返回 null 表示成功。

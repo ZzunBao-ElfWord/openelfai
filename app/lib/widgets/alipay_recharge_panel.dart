@@ -42,11 +42,11 @@ class _AlipayRechargePanelState extends State<AlipayRechargePanel>
                   _service.mode == 'sandbox'
                       ? '支付宝沙箱测试 · 非真实收款'
                       : '安卓充值 · 仅支持支付宝',
-                  style: const TextStyle(
+                  style: TextStyle(
                       color: AppColors.textMuted, fontSize: 12)),
               if (_service.loading) const LinearProgressIndicator(),
               if (!_service.loading && _service.products.isEmpty)
-                const Padding(
+                Padding(
                     padding: EdgeInsets.symmetric(vertical: 14),
                     child: Text('支付宝充值配置中，暂不能付款',
                         style: TextStyle(color: AppColors.textMuted))),
@@ -92,7 +92,7 @@ class _AlipayRechargePanelState extends State<AlipayRechargePanel>
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   Text('💎 ${p['diamonds']}',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                           fontSize: 20, color: AppColors.text)),
                                   const SizedBox(height: 6),
                                   Text(
@@ -103,10 +103,10 @@ class _AlipayRechargePanelState extends State<AlipayRechargePanel>
                 ),
               if (_service.error != null)
                 Text(_service.error!,
-                    style: const TextStyle(
+                    style: TextStyle(
                         color: AppColors.textMuted, fontSize: 12)),
               if (_service.hasPending)
-                const Text('有待确认订单。取消收银台不等于订单已关闭；未支付订单到期后请刷新。',
+                Text('有待确认订单。取消收银台不等于订单已关闭；未支付订单到期后请刷新。',
                     style: TextStyle(color: AppColors.textMuted, fontSize: 11)),
               TextButton(
                   onPressed: _service.busy || _service.loading

@@ -30,7 +30,7 @@ class WalletPage extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('充值钻石',
+                    Text('充值钻石',
                         style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
@@ -89,7 +89,7 @@ class WalletPage extends StatelessWidget {
                   padding: EdgeInsets.zero,
                   alignment: Alignment.centerLeft,
                   onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.arrow_back_ios_new,
+                  icon: Icon(Icons.arrow_back_ios_new,
                       size: 17, color: AppColors.textSub),
                 ),
               ],
@@ -103,7 +103,7 @@ class WalletPage extends StatelessWidget {
                 const SizedBox(width: 8),
                 Text(
                   '${state.wallet.diamonds}',
-                  style: const TextStyle(
+                  style: TextStyle(
                       fontSize: 34,
                       fontWeight: FontWeight.w700,
                       color: AppColors.cyan),
@@ -111,7 +111,7 @@ class WalletPage extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 4),
-            const Text(
+            Text(
               '钻石余额 · 购买 AI / 能力包 / 打赏 / 注算力',
               style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
             ),
@@ -132,7 +132,7 @@ class WalletPage extends StatelessWidget {
             if (state.wallet.refundDebt > 0)
               Text('退款欠额：${state.wallet.refundDebt} 钻石。消费已暂停，下次充值优先补足欠额。',
                   style: const TextStyle(color: Colors.orange, fontSize: 12)),
-            const Text(
+            Text(
               '消费后钻石不再流通：10💎 = ¥1，创作者获得 50%，平台收取 50%。',
               style: TextStyle(fontSize: 10.5, color: AppColors.textFaint),
             ),
@@ -147,10 +147,10 @@ class WalletPage extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label,
-            style: const TextStyle(fontSize: 10, color: AppColors.textFaint)),
+            style: TextStyle(fontSize: 10, color: AppColors.textFaint)),
         const SizedBox(height: 2),
         Text(value,
-            style: const TextStyle(
+            style: TextStyle(
                 fontSize: 12.5,
                 fontWeight: FontWeight.w600,
                 color: AppColors.textSub)),
@@ -168,12 +168,12 @@ class WalletPage extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.lock_outline, size: 20, color: AppColors.textMuted),
+          Icon(Icons.lock_outline, size: 20, color: AppColors.textMuted),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
+              children: [
                 Text(
                   '充值即将开放',
                   style: TextStyle(
@@ -201,7 +201,7 @@ class WalletPage extends StatelessWidget {
       child: Row(
         children: [
           Text(text,
-              style: const TextStyle(
+              style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
                   color: AppColors.text)),
@@ -227,13 +227,13 @@ class WalletPage extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style:
-                      const TextStyle(fontSize: 12, color: AppColors.textSub),
+                      TextStyle(fontSize: 12, color: AppColors.textSub),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   l.time,
                   style:
-                      const TextStyle(fontSize: 10, color: AppColors.textFaint),
+                      TextStyle(fontSize: 10, color: AppColors.textFaint),
                 ),
               ],
             ),

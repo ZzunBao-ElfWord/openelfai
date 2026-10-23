@@ -24,7 +24,7 @@ class ShareCard extends StatelessWidget {
       height: 520,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: AppColors.bgDeep,
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: AppColors.strokeSoft),
       ),
@@ -43,7 +43,7 @@ class ShareCard extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              const Text('我的 AI，我做主', style: TextStyle(fontSize: 10, color: AppColors.textMuted, letterSpacing: 1.5)),
+              Text('我的 AI，我做主', style: TextStyle(fontSize: 10, color: AppColors.textMuted, letterSpacing: 1.5)),
             ],
           ),
           const SizedBox(height: 26),
@@ -75,11 +75,11 @@ class ShareCard extends StatelessWidget {
                           child: Text(
                             elf.name,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.text),
+                            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.text),
                           ),
                         ),
                         const SizedBox(width: 6),
-                        Text(elf.serial, style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                        Text(elf.serial, style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
                       ],
                     ),
                     const SizedBox(height: 6),
@@ -91,7 +91,7 @@ class ShareCard extends StatelessWidget {
                       ),
                       child: Text(
                         'Lv${elf.level} · ${elf.levelName}',
-                        style: const TextStyle(fontSize: 10, color: AppColors.violetSoft, fontWeight: FontWeight.w600),
+                        style: TextStyle(fontSize: 10, color: AppColors.violetSoft, fontWeight: FontWeight.w600),
                       ),
                     ),
                   ],
@@ -106,7 +106,7 @@ class ShareCard extends StatelessWidget {
             '「${elf.persona}」',
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 13, color: AppColors.textSub, height: 1.6),
+            style: TextStyle(fontSize: 13, color: AppColors.textSub, height: 1.6),
           ),
           const SizedBox(height: 18),
 
@@ -123,7 +123,7 @@ class ShareCard extends StatelessWidget {
                 excerpt!,
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 11.5, color: AppColors.textSub, height: 1.6),
+                style: TextStyle(fontSize: 11.5, color: AppColors.textSub, height: 1.6),
               ),
             ),
             const SizedBox(height: 18),
@@ -142,10 +142,10 @@ class ShareCard extends StatelessWidget {
           // 链接 + 标识
           Text(
             sharePathFor(elf),
-            style: const TextStyle(fontSize: 11, color: AppColors.cyan, letterSpacing: 0.3),
+            style: TextStyle(fontSize: 11, color: AppColors.cyan, letterSpacing: 0.3),
           ),
           const SizedBox(height: 6),
-          const Text(
+          Text(
             '内容由 AI 生成 · 来 OpenElf 世界注视它',
             style: TextStyle(fontSize: 9.5, color: AppColors.textFaint),
           ),
@@ -159,9 +159,9 @@ class ShareCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.text)),
+          Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.text)),
           const SizedBox(height: 3),
-          Text(label, style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
+          Text(label, style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
         ],
       ),
     );

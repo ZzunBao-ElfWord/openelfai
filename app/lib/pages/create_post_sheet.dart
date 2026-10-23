@@ -45,8 +45,8 @@ class _CreatePostSheetState extends State<CreatePostSheet> {
     final all = state.modules.where((m) => m.id != 'auto').toList();
 
     return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.bgDeep,
+      decoration: BoxDecoration(
+        color: AppColors.surface,
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       child: SafeArea(
@@ -59,7 +59,7 @@ class _CreatePostSheetState extends State<CreatePostSheet> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _header(),
-              const Divider(height: 1, color: AppColors.strokeSoft),
+              Divider(height: 1, color: AppColors.strokeSoft),
               ConstrainedBox(
                 constraints: BoxConstraints(
                   maxHeight: MediaQuery.of(context).size.height * 0.42,
@@ -94,7 +94,7 @@ class _CreatePostSheetState extends State<CreatePostSheet> {
               children: [
                 Text(
                   '让 ${widget.elf.name} 创作',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.text,
                   ),
                 ),
@@ -107,7 +107,7 @@ class _CreatePostSheetState extends State<CreatePostSheet> {
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.close, size: 18, color: AppColors.textMuted),
+            icon: Icon(Icons.close, size: 18, color: AppColors.textMuted),
             onPressed: () => Navigator.of(context).pop(),
           ),
         ],
@@ -130,7 +130,7 @@ class _CreatePostSheetState extends State<CreatePostSheet> {
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
         child: Text(
           _trackLabels[track] ?? track,
-          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSub),
+          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSub),
         ),
       ));
       list.addAll(byTrack[track]!.map((m) => _moduleTile(m)));
@@ -144,7 +144,7 @@ class _CreatePostSheetState extends State<CreatePostSheet> {
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Text(
           '未装（去「我的 AI」装配）',
-          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textFaint),
+          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textFaint),
         ),
       ));
       list.addAll(notInstalled.map((m) => _moduleTile(m, installed: false)));
@@ -186,7 +186,7 @@ class _CreatePostSheetState extends State<CreatePostSheet> {
                 m.glyph,
                 style: TextStyle(
                   fontSize: 15, fontWeight: FontWeight.w700,
-                  color: selected ? AppColors.bgDeep : AppColors.violetSoft,
+                  color: selected ? AppColors.onBrand : AppColors.violetSoft,
                 ),
               ),
             ),
@@ -206,13 +206,13 @@ class _CreatePostSheetState extends State<CreatePostSheet> {
                   const SizedBox(height: 2),
                   Text(
                     '算力 ${m.compute} · ${m.summary}',
-                    style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted),
+                    style: TextStyle(fontSize: 10.5, color: AppColors.textMuted),
                   ),
                 ],
               ),
             ),
             if (selected)
-              const Icon(Icons.check_circle, size: 18, color: AppColors.cyan),
+              Icon(Icons.check_circle, size: 18, color: AppColors.cyan),
           ],
         ),
       ),
@@ -226,9 +226,9 @@ class _CreatePostSheetState extends State<CreatePostSheet> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.backpack_outlined, size: 40, color: AppColors.textFaint),
+            Icon(Icons.backpack_outlined, size: 40, color: AppColors.textFaint),
             const SizedBox(height: 12),
-            const Text(
+            Text(
               '先给它装一个能力包，再指挥它创作',
               style: TextStyle(fontSize: 12, color: AppColors.textMuted),
             ),
@@ -250,10 +250,10 @@ class _CreatePostSheetState extends State<CreatePostSheet> {
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       child: TextField(
         controller: _topicCtrl,
-        style: const TextStyle(fontSize: 12.5, color: AppColors.text),
+        style: TextStyle(fontSize: 12.5, color: AppColors.text),
         decoration: InputDecoration(
           hintText: '给个方向（可选，空着也行）',
-          hintStyle: const TextStyle(fontSize: 11.5, color: AppColors.textFaint),
+          hintStyle: TextStyle(fontSize: 11.5, color: AppColors.textFaint),
           filled: true,
           fillColor: AppColors.surface,
           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -276,7 +276,7 @@ class _CreatePostSheetState extends State<CreatePostSheet> {
               _selectedModuleId == null
                   ? '先选一个能力'
                   : '算力消耗：${state.module(_selectedModuleId!)?.compute ?? 0} · AI 剩余 ${widget.elf.energy}',
-              style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+              style: TextStyle(fontSize: 11, color: AppColors.textMuted),
             ),
           ),
           const SizedBox(width: 8),

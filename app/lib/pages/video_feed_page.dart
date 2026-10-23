@@ -474,7 +474,7 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
       );
     }
     if (_loading || _vc == null || !_vc!.value.isInitialized) {
-      return const Center(child: CircularProgressIndicator(color: AppColors.cyan));
+      return Center(child: CircularProgressIndicator(color: AppColors.cyan));
     }
     final c = _vc!;
     return Stack(
@@ -536,9 +536,9 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.play_circle_outline, size: 58, color: AppColors.textMuted),
+              Icon(Icons.play_circle_outline, size: 58, color: AppColors.textMuted),
               const SizedBox(height: 14),
-              const Text(
+              Text(
                 '视频流还是空的。',
                 style: TextStyle(fontSize: 14, color: AppColors.textSub),
               ),
@@ -548,7 +548,7 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                     ? '先去市场买一只 AI，再给它装上「视频生成」。'
                     : '给它装上「视频生成」，然后在「我的 AI」里让它创作，视频会出现在这里。',
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted, height: 1.7),
+                style: TextStyle(fontSize: 11.5, color: AppColors.textMuted, height: 1.7),
               ),
               const SizedBox(height: 16),
               GhostButton(
@@ -579,7 +579,7 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.bgDeep,
+      backgroundColor: AppColors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -600,20 +600,20 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                         children: [
                           Text(
                             '评论 · ${p.replies}',
-                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.text),
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.text),
                           ),
                           const Spacer(),
                           IconButton(
-                            icon: const Icon(Icons.close, size: 18, color: AppColors.textMuted),
+                            icon: Icon(Icons.close, size: 18, color: AppColors.textMuted),
                             onPressed: () => Navigator.of(ctx).pop(),
                           ),
                         ],
                       ),
                     ),
-                    const Divider(height: 1, color: AppColors.strokeSoft),
+                    Divider(height: 1, color: AppColors.strokeSoft),
                     Expanded(
                       child: list.isEmpty
-                          ? const Center(
+                          ? Center(
                               child: Text(
                                 '还没有评论。说第一句。',
                                 style: TextStyle(fontSize: 12, color: AppColors.textMuted),
@@ -655,7 +655,7 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                                             children: [
                                               Text(
                                                 c.authorLabel,
-                                                style: const TextStyle(
+                                                style: TextStyle(
                                                   fontSize: 11,
                                                   color: AppColors.textMuted,
                                                   fontWeight: FontWeight.w600,
@@ -664,14 +664,14 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                                               const SizedBox(width: 6),
                                               Text(
                                                 c.time,
-                                                style: const TextStyle(fontSize: 10, color: AppColors.textFaint),
+                                                style: TextStyle(fontSize: 10, color: AppColors.textFaint),
                                               ),
                                             ],
                                           ),
                                           const SizedBox(height: 3),
                                           Text(
                                             c.text,
-                                            style: const TextStyle(fontSize: 13, color: AppColors.text, height: 1.5),
+                                            style: TextStyle(fontSize: 13, color: AppColors.text, height: 1.5),
                                           ),
                                         ],
                                       ),
@@ -681,7 +681,7 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                               },
                             ),
                     ),
-                    const Divider(height: 1, color: AppColors.strokeSoft),
+                    Divider(height: 1, color: AppColors.strokeSoft),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
                       child: Row(
@@ -689,10 +689,10 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                           Expanded(
                             child: TextField(
                               controller: input,
-                              style: const TextStyle(fontSize: 13, color: AppColors.text),
+                              style: TextStyle(fontSize: 13, color: AppColors.text),
                               decoration: InputDecoration(
                                 hintText: '回应 ${elf.name} …',
-                                hintStyle: const TextStyle(fontSize: 13, color: AppColors.textFaint),
+                                hintStyle: TextStyle(fontSize: 13, color: AppColors.textFaint),
                                 filled: true,
                                 fillColor: AppColors.surface,
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -713,12 +713,12 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                                 gradient: AppColors.brandGradient,
                                 borderRadius: BorderRadius.circular(20),
                               ),
-                              child: const Text(
+                              child: Text(
                                 '发送',
                                 style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w700,
-                                  color: AppColors.bgDeep,
+                                  color: AppColors.onBrand,
                                 ),
                               ),
                             ),
@@ -742,7 +742,7 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
     const tiers = [10, 50, 100];
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.bgDeep,
+      backgroundColor: AppColors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -758,12 +758,12 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                 children: [
                   Text(
                     '打赏 ${elf.name}',
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.text),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.text),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     '创作者拿 50% 收益。你有 💎${_state.wallet.diamonds}',
-                    style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                    style: TextStyle(fontSize: 11, color: AppColors.textMuted),
                   ),
                   const SizedBox(height: 14),
                   Row(

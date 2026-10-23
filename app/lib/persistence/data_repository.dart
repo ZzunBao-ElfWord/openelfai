@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../compliance/identity_verification.dart';
 import '../models/elf.dart';
 import '../models/user.dart';
 
@@ -34,6 +35,7 @@ class DataRepository {
   static const _kReferralCounted = 'openelf.referralCounted';
   static const _kOwnedModules = 'openelf.ownedModules';
   static const _kActiveElfId = 'openelf.activeElfId';
+  static const _kIdentity = 'openelf.identity';
 
   // —— 保存 / 加载 ——
 
@@ -54,6 +56,7 @@ class DataRepository {
     required Set<String> referralCounted,
     required Set<String> ownedModules,
     String? activeElfId,
+    IdentityVerification? identity,
     required User user,
   }) async {
     final p = await _ensure();
@@ -85,6 +88,10 @@ class DataRepository {
         p.setString(_kActiveElfId, activeElfId)
       else
         p.remove(_kActiveElfId),
+      if (identity != null)
+        p.setString(_kIdentity, jsonEncode(identity.toJson()))
+      else
+        p.remove(_kIdentity),
     ]);
   }
 
@@ -141,6 +148,11 @@ class DataRepository {
       final user = userRaw != null
           ? User.fromJson(Map<String, dynamic>.from(jsonDecode(userRaw)))
           : null;
+      final identityRaw = p.getString(_kIdentity);
+      final identity = identityRaw != null
+          ? IdentityVerification.fromJson(
+              Map<String, dynamic>.from(jsonDecode(identityRaw)))
+          : null;
       // v1.2 新增字段：老数据缺失时迁移为空集
       Set<String> readSet(String key) {
         final raw = p.getString(key) ?? '[]';
@@ -164,6 +176,7 @@ class DataRepository {
         referralCounted: readSet(_kReferralCounted),
         ownedModules: readSet(_kOwnedModules),
         activeElfId: p.getString(_kActiveElfId),
+        identity: identity,
         user: user,
       );
     } catch (e) {
@@ -193,6 +206,7 @@ class DataRepository {
       p.remove(_kReferralCounted),
       p.remove(_kOwnedModules),
       p.remove(_kActiveElfId),
+      p.remove(_kIdentity),
     ]);
     // _kUser 不在这里清——登出由 LocalAuthRepository 自己管
   }
@@ -237,6 +251,10 @@ class DataRepository {
         'nextAutoPostAt': e.nextAutoPostAt?.toIso8601String(),
         'lastDecayAt': e.lastDecayAt?.toIso8601String(),
         'chainAddress': e.chainAddress,
+        'avatarUrl': e.avatarUrl,
+        'avatarStyle': e.avatarStyle,
+        'avatarPrompt': e.avatarPrompt,
+        'portraitSource': e.portraitSource,
         'baseSlots': e.baseSlots,
         'equipped': e.equipped,
         'today': e.today,
@@ -278,6 +296,10 @@ class DataRepository {
             ? null
             : DateTime.tryParse(j['lastDecayAt'] as String),
         chainAddress: j['chainAddress'] as String?,
+        avatarUrl: j['avatarUrl'] as String?,
+        avatarStyle: j['avatarStyle'] as String?,
+        avatarPrompt: j['avatarPrompt'] as String?,
+        portraitSource: j['portraitSource'] as String? ?? 'text',
         // v1.3 迁移：slots → baseSlots（等级加成改由 getter 推导）
         baseSlots: (j['baseSlots'] as int?) ?? (j['slots'] as int),
         equipped: List<String>.from(j['equipped'] as List),
@@ -438,6 +460,7 @@ class LoadedData {
   final Set<String> referralCounted;
   final Set<String> ownedModules;
   final String? activeElfId;
+  final IdentityVerification? identity;
   final User? user;
 
   const LoadedData({
@@ -457,6 +480,7 @@ class LoadedData {
     required this.referralCounted,
     required this.ownedModules,
     this.activeElfId,
+    this.identity,
     required this.user,
   });
 }

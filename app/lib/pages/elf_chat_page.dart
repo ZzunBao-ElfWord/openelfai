@@ -6,6 +6,7 @@ import '../models/elf.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/share_card.dart';
+import 'elf_detail_page.dart';
 
 /// 沉浸式对话页：全屏 AI 氛围图做底 + 对白叠加在图内下半部 + 悬浮输入条。
 /// 视觉参考：猫箱（Moke）对话页，已按参考图苏语嫣版复刻。
@@ -71,21 +72,21 @@ class _ElfChatPageState extends State<ElfChatPage> {
     final elf = _state.elf(widget.elfId);
     final msgs = _state.chatOf(widget.elfId);
     final sleeping = elf.liveStatus == ElfStatus.sleeping;
-    final color = context; // 取语义色便捷
+
+    final keyboard = MediaQuery.of(context).viewInsets.bottom;
 
     return Scaffold(
-      backgroundColor: color.cBg,
-      resizeToAvoidBottomInset: true,
+      // 对话页是沉浸式「剧场」：两套主题下都保持黑底，保证人物剪影与对白可读。
+      backgroundColor: darkPalette.bg,
+      // 键盘弹出时只抬起底栏，背景保持全屏不压缩（否则人物剪影会被压扁）
+      resizeToAvoidBottomInset: false,
       body: Stack(
         fit: StackFit.expand,
         children: [
           // 1) AI 氛围背景
           const RepaintBoundary(child: CustomPaint(painter: _ElfScenePainter())),
-          // 2) 对白区域暗化遮罩（参考图：从名字行下方开始到底部身份行，渐变让文字可读）
-          Positioned(
-            left: 0, right: 0,
-            top: 180,
-            bottom: 170,
+          // 2) 顶部 & 底部压暗遮罩：让状态栏图标与底部对白可读
+          Positioned.fill(
             child: IgnorePointer(
               child: Container(
                 decoration: BoxDecoration(
@@ -93,12 +94,13 @@ class _ElfChatPageState extends State<ElfChatPage> {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
+                      Colors.black.withOpacity(0.42),
                       Colors.black.withOpacity(0.0),
-                      Colors.black.withOpacity(0.30),
-                      Colors.black.withOpacity(0.65),
-                      Colors.black.withOpacity(0.85),
+                      Colors.black.withOpacity(0.0),
+                      Colors.black.withOpacity(0.55),
+                      Colors.black.withOpacity(0.94),
                     ],
-                    stops: const [0, 0.25, 0.60, 1],
+                    stops: const [0, 0.16, 0.52, 0.80, 1],
                   ),
                 ),
               ),
@@ -123,33 +125,36 @@ class _ElfChatPageState extends State<ElfChatPage> {
             ),
           ),
           // 4) 顶栏（返回 + 搜索 + 音量）
-          SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
-              child: Row(
-                children: [
-                  _glassIcon(
-                    icon: Icons.arrow_back_ios_new,
-                    semantic: '返回',
-                    size: 17,
-                    onTap: () => Navigator.of(context).pop(),
-                  ),
-                  const Spacer(),
-                  _glassIcon(
-                    icon: Icons.search,
-                    semantic: '搜索',
-                    size: 19,
-                    onTap: () => _toast('搜索即将开放'),
-                  ),
-                  const SizedBox(width: 8),
-                  _glassIcon(
-                    icon: Icons.volume_up_outlined,
-                    semantic: '音量',
-                    size: 19,
-                    onTap: () => _toast('音量即将开放'),
-                  ),
-                ],
+          Positioned(
+            top: 0, left: 0, right: 0,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
+                child: Row(
+                  children: [
+                    _plainIcon(
+                      icon: Icons.arrow_back_ios_new,
+                      semantic: '返回',
+                      size: 17,
+                      onTap: () => Navigator.of(context).pop(),
+                    ),
+                    const Spacer(),
+                    _plainIcon(
+                      icon: Icons.search,
+                      semantic: '搜索',
+                      size: 22,
+                      onTap: () => _toast('搜索即将开放'),
+                    ),
+                    const SizedBox(width: 18),
+                    _plainIcon(
+                      icon: Icons.volume_up_outlined,
+                      semantic: '音量',
+                      size: 22,
+                      onTap: () => _toast('音量即将开放'),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -157,11 +162,11 @@ class _ElfChatPageState extends State<ElfChatPage> {
           Positioned(
             top: 120,
             left: 0, right: 0,
-            child: Center(child: _nameLine(elf, color)),
+            child: Center(child: _nameLine(elf, context)),
           ),
           // 6) 对白消息列表（图片内下半部，向上滚动看历史）
           Positioned(
-            left: 24, right: 24, bottom: 200, top: 200,
+            left: 24, right: 24, top: 200, bottom: 200 + keyboard,
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: () => FocusScope.of(context).unfocus(),
@@ -174,9 +179,9 @@ class _ElfChatPageState extends State<ElfChatPage> {
               ),
             ),
           ),
-          // 7) 底部身份行 + 输入条
+          // 7) 底部身份行 + 输入条（键盘弹出时整体上移）
           Positioned(
-            left: 0, right: 0, bottom: 0,
+            left: 0, right: 0, bottom: keyboard,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -195,28 +200,32 @@ class _ElfChatPageState extends State<ElfChatPage> {
   Widget _nameLine(Elf elf, BuildContext color) {
     return Column(
       children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              elf.name,
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => ElfDetailPage(elfId: elf.id)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                elf.name,
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                  shadows: [Shadow(blurRadius: 12, color: Colors.black54)],
+                ),
+              ),
+              const SizedBox(width: 5),
+              const Icon(
+                Icons.chevron_right_rounded,
+                size: 21,
                 color: Colors.white,
-                shadows: const [Shadow(blurRadius: 12, color: Colors.black54)],
+                semanticLabel: '查看 AI 主页',
               ),
-            ),
-            const SizedBox(width: 8),
-            Container(
-              width: 7, height: 7,
-              decoration: BoxDecoration(
-                color: const Color(0xFFFF5A6B),
-                shape: BoxShape.circle,
-                boxShadow: [BoxShadow(color: const Color(0xFFFF5A6B).withOpacity(0.6), blurRadius: 6)],
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
         const SizedBox(height: 2),
         // 红色下划线
@@ -322,9 +331,9 @@ class _ElfChatPageState extends State<ElfChatPage> {
           const Spacer(),
           _identityAction(icon: Icons.favorite_border, label: _fmt(elf.followers), onTap: () {}),
           const SizedBox(width: 14),
-          _identityAction(icon: Icons.chat_bubble_outline, label: elf.echo.toString(), onTap: () {}),
+          _identityAction(icon: Icons.chat_bubble_outline, label: _fmt(elf.echo), onTap: () {}),
           const SizedBox(width: 14),
-          _identityAction(icon: Icons.star_border, label: elf.works.toString(), onTap: () {}),
+          _identityAction(icon: Icons.star_border, label: _fmt(elf.works), onTap: () {}),
           const SizedBox(width: 14),
           _identityAction(icon: Icons.ios_share, label: '分享', onTap: () => _share(elf)),
           const SizedBox(width: 14),
@@ -358,74 +367,85 @@ class _ElfChatPageState extends State<ElfChatPage> {
     final hasText = _input.text.trim().isNotEmpty;
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.34),
-          borderRadius: BorderRadius.circular(28),
-          border: Border.all(color: Colors.white.withOpacity(0.14)),
-        ),
-        child: Row(
-          children: [
-            _barIcon(
-              icon: Icons.phone_outlined,
-              semantic: '语音通话',
-              onTap: () => _toast('通话功能即将开放'),
-            ),
-            Expanded(
-              child: TextField(
-                controller: _input,
-                enabled: !sleeping,
-                textInputAction: TextInputAction.send,
-                onSubmitted: (_) => _send(),
-                style: const TextStyle(fontSize: 14, color: Colors.white),
-                cursorColor: Colors.white,
-                decoration: InputDecoration(
-                  isDense: true,
-                  hintText: sleeping ? '它休眠中，无法回应' : '自由输入...',
-                  hintStyle: TextStyle(
-                    fontSize: 14,
-                    color: Colors.white.withOpacity(sleeping ? 0.28 : 0.42),
+      child: Row(
+        children: [
+          // 输入胶囊
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.10),
+                borderRadius: BorderRadius.circular(26),
+                border: Border.all(color: Colors.white.withOpacity(0.16)),
+              ),
+              child: Row(
+                children: [
+                  _barIcon(
+                    icon: Icons.phone_outlined,
+                    semantic: '语音通话',
+                    onTap: () => _toast('通话功能即将开放'),
                   ),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                ),
+                  Expanded(
+                    child: TextField(
+                      controller: _input,
+                      enabled: !sleeping,
+                      textInputAction: TextInputAction.send,
+                      onSubmitted: (_) => _send(),
+                      style: const TextStyle(fontSize: 14, color: Colors.white),
+                      cursorColor: Colors.white,
+                      decoration: InputDecoration(
+                        isDense: true,
+                        hintText: sleeping ? '它休眠中，无法回应' : '自由输入...',
+                        hintStyle: TextStyle(
+                          fontSize: 14,
+                          color: Colors.white.withOpacity(sleeping ? 0.28 : 0.55),
+                        ),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+                      ),
+                    ),
+                  ),
+                  _barIcon(
+                    icon: Icons.mic_none,
+                    semantic: '语音输入',
+                    onTap: () => _toast('语音输入即将开放'),
+                  ),
+                ],
               ),
             ),
-            _barIcon(
-              icon: Icons.mic_none,
-              semantic: '语音输入',
-              onTap: () => _toast('语音输入即将开放'),
-            ),
-            const SizedBox(width: 4),
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: sleeping
-                  ? null
-                  : () {
-                      if (hasText) {
-                        _send();
-                      } else {
-                        _share(_state.elf(widget.elfId));
-                      }
-                    },
-              child: Container(
-                width: 40, height: 40,
-                decoration: BoxDecoration(
-                  gradient: hasText && !sleeping ? const LinearGradient(colors: [Color(0xFFFF5A6B), Color(0xFFFF8B7F)]) : null,
-                  color: hasText && !sleeping ? null : Colors.white.withOpacity(0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  hasText ? Icons.arrow_upward : Icons.add,
-                  size: 19,
-                  color: hasText && !sleeping ? Colors.white : Colors.white.withOpacity(0.8),
-                  semanticLabel: hasText ? '发送' : '更多操作',
-                ),
+          ),
+          const SizedBox(width: 10),
+          // 圆形主按钮：无文字时是「+」，有文字时变红色发送箭头
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: sleeping
+                ? null
+                : () {
+                    if (hasText) {
+                      _send();
+                    } else {
+                      _share(_state.elf(widget.elfId));
+                    }
+                  },
+            child: Container(
+              width: 44, height: 44,
+              decoration: BoxDecoration(
+                gradient: hasText && !sleeping
+                    ? const LinearGradient(colors: [Color(0xFFFF5A6B), Color(0xFFFF8B7F)])
+                    : null,
+                color: hasText && !sleeping ? null : Colors.white.withOpacity(0.14),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white.withOpacity(0.18)),
+              ),
+              child: Icon(
+                hasText ? Icons.arrow_upward : Icons.add,
+                size: 21,
+                color: Colors.white,
+                semanticLabel: hasText ? '发送' : '更多操作',
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -441,7 +461,8 @@ class _ElfChatPageState extends State<ElfChatPage> {
     );
   }
 
-  Widget _glassIcon({
+  /// 参考图顶栏是无底色的纯白图标（只有投影），不是玻璃球。
+  Widget _plainIcon({
     required IconData icon,
     required String semantic,
     required VoidCallback onTap,
@@ -450,14 +471,15 @@ class _ElfChatPageState extends State<ElfChatPage> {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
-      child: Container(
-        width: 38, height: 38,
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.28),
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.white.withOpacity(0.10)),
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Icon(
+          icon,
+          size: size,
+          color: Colors.white,
+          semanticLabel: semantic,
+          shadows: const [Shadow(blurRadius: 10, color: Colors.black87)],
         ),
-        child: Icon(icon, size: size, color: Colors.white, semanticLabel: semantic),
       ),
     );
   }
