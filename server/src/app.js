@@ -12,6 +12,11 @@ const { createCommerceService } = require('./commerce');
 const { createAlipayGateway } = require('./alipay_gateway');
 const { createAlipayService } = require('./alipay');
 const { createCaptchaVerifier } = require('./captcha');
+const {
+  IdentityError,
+  createAliyunIdentityProvider,
+  decodeImage,
+} = require('./identity');
 const { createSmsProvider, SmsError } = require('./sms');
 const {
   generateRefreshToken,
@@ -73,6 +78,8 @@ async function buildApp(options = {}) {
   const db = options.db || (await createPool(config));
   const sms = options.sms || createSmsProvider(config);
   const captcha = options.captcha || createCaptchaVerifier(config.captcha);
+  const identityProvider =
+    options.identityProvider || createAliyunIdentityProvider(config.identity);
   const appleVerifier = options.appleVerifier || (config.appleIap.enabled
     ? await createAppleVerifier(config.appleIap) : null);
   const paymentStore = options.paymentStore || createPaymentStore(db);
@@ -262,6 +269,92 @@ async function buildApp(options = {}) {
     ok: true,
     time: new Date().toISOString(),
   }));
+
+  // —— 身份证 OCR 二要素核验 ——
+
+  function publicIdentity(row) {
+    if (!row || row.status !== 'verified') return { status: 'none' };
+    return {
+      status: 'verified',
+      maskedName: row.masked_name,
+      maskedIdNumber: row.masked_id_number,
+      provider: row.provider,
+      verifiedAt: row.verified_at,
+    };
+  }
+
+  app.get('/api/v1/identity/status', async (request) => {
+    const { user } = await authenticate(request);
+    const [rows] = await db.execute(
+      'SELECT * FROM identity_verifications WHERE user_id = ?',
+      [user.id],
+    );
+    return { identity: publicIdentity(rows[0]) };
+  });
+
+  app.post(
+    '/api/v1/identity/verify',
+    {
+      bodyLimit: 6 * 1024 * 1024,
+      config: { rateLimit: { max: 3, timeWindow: '1 hour' } },
+    },
+    async (request) => {
+      const { user } = await authenticate(request);
+      if (request.body?.consent !== true) {
+        throw fail(400, 'IDENTITY_CONSENT_REQUIRED', '请先阅读并同意实名认证授权声明');
+      }
+
+      const [existingRows] = await db.execute(
+        'SELECT * FROM identity_verifications WHERE user_id = ?',
+        [user.id],
+      );
+      if (existingRows[0]?.status === 'verified') {
+        return { identity: publicIdentity(existingRows[0]) };
+      }
+
+      const frontImage = decodeImage(request.body?.frontImageBase64, '人像面');
+      const backImage = decodeImage(request.body?.backImageBase64, '国徽面');
+
+      let result;
+      try {
+        result = await identityProvider.verify({ frontImage, backImage });
+      } catch (error) {
+        if (error instanceof IdentityError) throw error;
+        throw fail(502, 'IDENTITY_PROVIDER_ERROR', '实名认证服务暂时不可用，请稍后重试');
+      }
+
+      const now = new Date().toISOString();
+      await db.execute(
+        `INSERT INTO identity_verifications
+          (user_id, status, masked_name, masked_id_number, provider,
+           provider_request_id, verified_at, updated_at)
+         VALUES (?, 'verified', ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE
+          status = VALUES(status), masked_name = VALUES(masked_name),
+          masked_id_number = VALUES(masked_id_number), provider = VALUES(provider),
+          provider_request_id = VALUES(provider_request_id),
+          verified_at = VALUES(verified_at), updated_at = VALUES(updated_at)`,
+        [
+          user.id,
+          result.maskedName,
+          result.maskedIdNumber,
+          result.provider,
+          result.requestId || null,
+          now,
+          now,
+        ],
+      );
+      return {
+        identity: publicIdentity({
+          status: 'verified',
+          masked_name: result.maskedName,
+          masked_id_number: result.maskedIdNumber,
+          provider: result.provider,
+          verified_at: now,
+        }),
+      };
+    },
+  );
 
   // 内购默认关闭。商品未在 App Store Connect 建立、服务端未准备好前不会展示购买按钮。
   app.get('/api/v1/ios/products', async (request) => {

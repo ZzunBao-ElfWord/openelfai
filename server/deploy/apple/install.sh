@@ -65,6 +65,9 @@ done
 for file in app config db apple_iap apple_orders payment_store commerce; do
   node --check "$APP_DIR/src/$file.js"
 done
+# Syntax and /health alone do not exercise the payment modules or SQL tables.
+# Validate the SDK, six product mappings and additive table initialization first.
+node --env-file="$ENV_FILE" "$APP_DIR/deploy/apple/check-runtime.cjs"
 # The SDK is imported only when payments are enabled. Do not change installed
 # SMS/captcha dependencies during this disabled foundation deployment.
 systemctl restart "$SERVICE"

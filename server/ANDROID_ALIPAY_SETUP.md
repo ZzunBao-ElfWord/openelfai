@@ -89,7 +89,7 @@ npm install alipay-sdk@4.14.0 --save-exact --ignore-scripts --no-audit --no-fund
 2. 真机 SDK 唤起、取消、断网/杀进程恢复、重复回调、双账号、全额退款及消费后欠额测试。
 3. 部分退款/异常订单人工核对工具和告警闭环。记录在 `payment_objects` 的 `alipay_review/needs_review`；
    不要手动 SQL 猜测改余额。当前只做冻结保护，不宣称部分退款已自动结算，完成运营对账流程前不开放真实收费。
-4. 正式 Android 签名：当前 release 仍用原项目 Debug 证书，APK 仅供测试；绑定支付宝应用时确认包名和实际签名。
+4. 正式 Android 签名：release 已改为读取本机 android/key.properties，不再回退到 Debug 证书。私有 JKS 与密码文件不提交 Git；绑定支付宝应用时须与实际 APK 的证书匹配。
 5. 隐私政策展示和支付宝 SDK 披露、真正的服务端账号注销。这两项仍是原项目占位，不因增加支付宝而自动完成。
 6. Google Play 等发行渠道如需分发，另行核对该渠道的支付要求；本轮没有接入 Google Play Billing 或微信。
 

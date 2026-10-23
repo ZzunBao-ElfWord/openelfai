@@ -74,6 +74,22 @@ module.exports = {
     },
   },
 
+  identity: {
+    enabled: bool('ALIYUN_CLOUDAUTH_ENABLED', false),
+    accessKeyId:
+      process.env.ALIYUN_CLOUDAUTH_ACCESS_KEY_ID ||
+      process.env.ALIYUN_ACCESS_KEY_ID ||
+      '',
+    accessKeySecret:
+      process.env.ALIYUN_CLOUDAUTH_ACCESS_KEY_SECRET ||
+      process.env.ALIYUN_ACCESS_KEY_SECRET ||
+      '',
+    endpoint: process.env.ALIYUN_CLOUDAUTH_ENDPOINT || 'cloudauth.aliyuncs.com',
+    regionId: process.env.ALIYUN_CLOUDAUTH_REGION_ID || 'cn-hangzhou',
+    connectTimeoutMs: Number(process.env.ALIYUN_CLOUDAUTH_CONNECT_TIMEOUT_MS || 5000),
+    readTimeoutMs: Number(process.env.ALIYUN_CLOUDAUTH_READ_TIMEOUT_MS || 20000),
+  },
+
   androidCommerce: {
     enabled: bool('ANDROID_COMMERCE_ENABLED', false),
     sandboxOnly: bool('ALIPAY_SANDBOX', false),

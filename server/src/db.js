@@ -44,6 +44,18 @@ const TABLES = [
     CONSTRAINT fk_sessions_user FOREIGN KEY (user_id) REFERENCES users(id)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
+  `CREATE TABLE IF NOT EXISTS identity_verifications (
+    user_id VARCHAR(40) PRIMARY KEY,
+    status VARCHAR(16) NOT NULL,
+    masked_name VARCHAR(32) NOT NULL,
+    masked_id_number VARCHAR(32) NOT NULL,
+    provider VARCHAR(32) NOT NULL,
+    provider_request_id VARCHAR(128) NULL,
+    verified_at VARCHAR(32) NOT NULL,
+    updated_at VARCHAR(32) NOT NULL,
+    CONSTRAINT fk_identity_user FOREIGN KEY (user_id) REFERENCES users(id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
   `CREATE TABLE IF NOT EXISTS user_wallets (
     user_id VARCHAR(40) PRIMARY KEY,
     diamonds BIGINT UNSIGNED NOT NULL DEFAULT 0,

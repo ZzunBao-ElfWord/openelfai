@@ -69,3 +69,24 @@ test('可升级已部署的旧苹果模块，保留验证码并补入账号绑�
   assert.ok(upgraded.app.includes('await captcha.verify(request.body);'));
   assert.deepEqual(prepare(upgraded), upgraded);
 });
+
+test('修复仅手工添加 protocol 2 但缺少 commerce 初始化的线上混合版本', () => {
+  const legacy = prepare(original);
+  legacy.app = legacy.app
+    .replace(/^const \{ createPaymentStore \} = require\('\.\/payment_store'\);\r?\n/m, '')
+    .replace(/^const \{ createCommerceService \} = require\('\.\/commerce'\);\r?\n/m, '')
+    .replace(/^  const paymentStore = .*\r?\n/m, '')
+    .replace(/^  const commerce = .*\r?\n/m, '')
+    .replace(/^    paymentStore,\r?\n/m, '')
+    .replace('return commerce.snapshot(user, request.query?.environment);',
+      'return { mode: appleIap.mode, wallet: await appleIap.wallet(user.id) };');
+  assert.ok(legacy.app.includes('mode: commerce.environment('));
+  assert.ok(!legacy.app.includes('const commerce ='));
+  const fixed = prepare(legacy);
+  assert.ok(fixed.app.includes("require('./payment_store')"));
+  assert.ok(fixed.app.includes("require('./commerce')"));
+  assert.ok(fixed.app.includes('const commerce = createCommerceService('));
+  assert.ok(fixed.app.includes('return commerce.snapshot(user, request.query?.environment);'));
+  assert.ok(!fixed.app.includes('[DEBUG ios/products]'));
+  assert.deepEqual(prepare(fixed), fixed);
+});
