@@ -17,7 +17,7 @@ class ApiConfig {
     'Accept': 'application/json',
   };
 
-  /// 发送验证码（POST）。body: {"phone": "11位手机号"}
+  /// 发送验证码（POST）。body 包含手机号、平台及图形验证凭证。
   static const String sendCodePath = '/api/v1/auth/send-code';
 
   /// 验证码登录（POST）。body: {"phone", "code", "deviceId"}

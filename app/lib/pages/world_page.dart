@@ -20,7 +20,8 @@ class WorldPage extends StatefulWidget {
   State<WorldPage> createState() => _WorldPageState();
 }
 
-class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMixin {
+class _WorldPageState extends State<WorldPage>
+    with SingleTickerProviderStateMixin {
   late final TabController _tc;
 
   @override
@@ -117,11 +118,13 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
           ),
           Row(
             children: [
-              const Icon(Icons.remove_red_eye_outlined, size: 13, color: AppColors.textMuted),
+              const Icon(Icons.remove_red_eye_outlined,
+                  size: 13, color: AppColors.textMuted),
               const SizedBox(width: 4),
               Text(
                 _fmt(WorldData.watchers),
-                style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                style:
+                    const TextStyle(fontSize: 11, color: AppColors.textMuted),
               ),
             ],
           ),
@@ -243,12 +246,14 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
                           const SizedBox(width: 4),
                           Text(
                             elf.serial,
-                            style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
+                            style: const TextStyle(
+                                fontSize: 10, color: AppColors.textMuted),
                           ),
                           const Spacer(),
                           Text(
                             p.timeAgo,
-                            style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
+                            style: const TextStyle(
+                                fontSize: 10, color: AppColors.textMuted),
                           ),
                           const SizedBox(width: 2),
                           _reportIcon(
@@ -268,7 +273,9 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
                       ),
                       if (p.isReply) ...[
                         const SizedBox(height: 4),
-                        Text('↩ 回复 某条内容', style: TextStyle(fontSize: 10, color: AppColors.textFaint)),
+                        Text('↩ 回复 某条内容',
+                            style: TextStyle(
+                                fontSize: 10, color: AppColors.textFaint)),
                       ],
                       const SizedBox(height: 6),
                       _renderContent(p),
@@ -293,7 +300,8 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
           children: [
             Text(
               p.body,
-              style: const TextStyle(fontSize: 14, color: AppColors.text, height: 1.6),
+              style: const TextStyle(
+                  fontSize: 14, color: AppColors.text, height: 1.6),
             ),
             const SizedBox(height: 8),
             ClipRRect(
@@ -347,7 +355,8 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
           children: [
             Text(
               p.body,
-              style: const TextStyle(fontSize: 14, color: AppColors.text, height: 1.6),
+              style: const TextStyle(
+                  fontSize: 14, color: AppColors.text, height: 1.6),
             ),
             const SizedBox(height: 8),
             Container(
@@ -369,7 +378,8 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
                       shape: BoxShape.circle,
                     ),
                     alignment: Alignment.center,
-                    child: const Icon(Icons.play_arrow, color: Colors.white, size: 24),
+                    child: const Icon(Icons.play_arrow,
+                        color: Colors.white, size: 24),
                   ),
                 ],
               ),
@@ -382,7 +392,8 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
           children: [
             Text(
               p.body,
-              style: const TextStyle(fontSize: 14, color: AppColors.text, height: 1.6),
+              style: const TextStyle(
+                  fontSize: 14, color: AppColors.text, height: 1.6),
             ),
             const SizedBox(height: 8),
             AudioPlayerCard(post: p),
@@ -403,7 +414,8 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
               const SizedBox(height: 8),
               Text(
                 p.body,
-                style: const TextStyle(fontSize: 13.5, color: AppColors.textSub, height: 1.7),
+                style: const TextStyle(
+                    fontSize: 13.5, color: AppColors.textSub, height: 1.7),
               ),
             ],
           ),
@@ -413,17 +425,21 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
           width: double.infinity,
           padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
           decoration: BoxDecoration(
-            border: Border(left: BorderSide(color: AppColors.cyan.withOpacity(0.5), width: 2)),
+            border: Border(
+                left: BorderSide(
+                    color: AppColors.cyan.withOpacity(0.5), width: 2)),
           ),
           child: Text(
             p.body,
-            style: const TextStyle(fontSize: 13, color: AppColors.textSub, height: 1.6),
+            style: const TextStyle(
+                fontSize: 13, color: AppColors.textSub, height: 1.6),
           ),
         );
       default: // text
         return Text(
           p.body,
-          style: const TextStyle(fontSize: 14, color: AppColors.text, height: 1.65),
+          style: const TextStyle(
+              fontSize: 14, color: AppColors.text, height: 1.65),
         );
     }
   }
@@ -482,11 +498,13 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
             padding: const EdgeInsets.symmetric(vertical: 4),
             child: Row(
               children: [
-                const Icon(Icons.chat_bubble_outline, size: 14, color: AppColors.textMuted),
+                const Icon(Icons.chat_bubble_outline,
+                    size: 14, color: AppColors.textMuted),
                 const SizedBox(width: 4),
                 Text(
                   '${p.replies}',
-                  style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                  style:
+                      const TextStyle(fontSize: 11, color: AppColors.textMuted),
                 ),
               ],
             ),
@@ -576,7 +594,10 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
                   SizedBox(width: 3),
                   Text(
                     '打赏',
-                    style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: Colors.white),
+                    style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white),
                   ),
                 ],
               ),
@@ -594,7 +615,8 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
     void send() {
       final err = state.addComment(p.id, input.text);
       if (err != null) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(err)));
         return;
       }
       input.clear();
@@ -636,7 +658,8 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
                           ),
                           const Spacer(),
                           IconButton(
-                            icon: const Icon(Icons.close, size: 18, color: AppColors.textMuted),
+                            icon: const Icon(Icons.close,
+                                size: 18, color: AppColors.textMuted),
                             onPressed: () => Navigator.of(ctx).pop(),
                           ),
                         ],
@@ -649,13 +672,16 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
                           ? const Center(
                               child: Text(
                                 '还没有评论。说第一句。',
-                                style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                                style: TextStyle(
+                                    fontSize: 12, color: AppColors.textMuted),
                               ),
                             )
                           : ListView.separated(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 10),
                               itemCount: list.length,
-                              separatorBuilder: (_, __) => const SizedBox(height: 12),
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 12),
                               itemBuilder: (_, i) {
                                 final c = list[i];
                                 return Row(
@@ -672,17 +698,22 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
                                             : AppColors.violet.withOpacity(0.2),
                                       ),
                                       child: Text(
-                                        c.isMine ? '我' : c.authorLabel.characters.first,
+                                        c.isMine
+                                            ? '我'
+                                            : c.authorLabel.characters.first,
                                         style: TextStyle(
                                           fontSize: 11,
-                                          color: c.isMine ? AppColors.cyan : AppColors.violetSoft,
+                                          color: c.isMine
+                                              ? AppColors.cyan
+                                              : AppColors.violetSoft,
                                         ),
                                       ),
                                     ),
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           Row(
                                             children: [
@@ -704,7 +735,9 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
                                               ),
                                               const Spacer(),
                                               _reportIcon(
-                                                onTap: () => _showReportCommentSheet(state, c),
+                                                onTap: () =>
+                                                    _showReportCommentSheet(
+                                                        state, c),
                                               ),
                                             ],
                                           ),
@@ -735,13 +768,16 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
                             child: TextField(
                               controller: input,
                               autofocus: false,
-                              style: const TextStyle(fontSize: 13, color: AppColors.text),
+                              style: const TextStyle(
+                                  fontSize: 13, color: AppColors.text),
                               decoration: InputDecoration(
                                 hintText: '回应 ${elf.name} …',
-                                hintStyle: const TextStyle(fontSize: 13, color: AppColors.textFaint),
+                                hintStyle: const TextStyle(
+                                    fontSize: 13, color: AppColors.textFaint),
                                 filled: true,
                                 fillColor: AppColors.surface,
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 10),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(20),
                                   borderSide: BorderSide.none,
@@ -754,7 +790,8 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
                           GestureDetector(
                             onTap: send,
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 10),
                               decoration: BoxDecoration(
                                 gradient: AppColors.brandGradient,
                                 borderRadius: BorderRadius.circular(20),
@@ -800,12 +837,18 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
                 children: [
                   Text(
                     '打赏 ${elf.name}',
-                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.text),
+                    style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.text),
                   ),
                   const Spacer(),
                   Text(
                     '💎 ${state.wallet.diamonds}',
-                    style: const TextStyle(fontSize: 12, color: AppColors.cyan, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.cyan,
+                        fontWeight: FontWeight.w600),
                   ),
                 ],
               ),
@@ -817,27 +860,35 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 children: tiers.map((t) {
-                  final enough = state.wallet.diamonds >= t;
+                  final enough = state.wallet.diamonds >= t &&
+                      state.wallet.refundDebt == 0 &&
+                      state.canTip(elf.id);
                   return ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: enough ? AppColors.violet.withOpacity(0.25) : AppColors.surface,
-                      foregroundColor: enough ? AppColors.violetSoft : AppColors.textMuted,
+                      backgroundColor: enough
+                          ? AppColors.violet.withOpacity(0.25)
+                          : AppColors.surface,
+                      foregroundColor:
+                          enough ? AppColors.violetSoft : AppColors.textMuted,
                       elevation: 0,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
                         side: BorderSide(
-                          color: enough ? AppColors.violet.withOpacity(0.5) : AppColors.strokeSoft,
+                          color: enough
+                              ? AppColors.violet.withOpacity(0.5)
+                              : AppColors.strokeSoft,
                         ),
                       ),
                     ),
                     onPressed: enough
-                        ? () {
-                            final err = state.tip(
+                        ? () async {
+                            final err = await state.tip(
                               elfId: elf.id,
                               postId: p.id,
                               amount: t,
                             );
+                            if (!ctx.mounted || !context.mounted) return;
                             Navigator.of(ctx).pop();
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
@@ -845,7 +896,8 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
                                   err ??
                                       '已打赏 💎$t · ${elf.name} 收益 +${WorldData.formatYuan(WorldData.creatorIncomeFor(t))}',
                                 ),
-                                backgroundColor: err == null ? AppColors.violet : null,
+                                backgroundColor:
+                                    err == null ? AppColors.violet : null,
                               ),
                             );
                           }
@@ -855,7 +907,9 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
                       children: [
                         Text('💎', style: const TextStyle(fontSize: 16)),
                         const SizedBox(height: 2),
-                        Text('$t', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                        Text('$t',
+                            style: const TextStyle(
+                                fontSize: 14, fontWeight: FontWeight.w700)),
                       ],
                     ),
                   );
@@ -865,7 +919,8 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
               const Text(
                 '钻石消费后不再流通：10💎 = ¥1，创作者获得 50%，平台收取 50%。',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 10.5, color: AppColors.textFaint, height: 1.5),
+                style: TextStyle(
+                    fontSize: 10.5, color: AppColors.textFaint, height: 1.5),
               ),
               const SizedBox(height: 6),
               TextButton(
@@ -898,7 +953,8 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(4),
-          child: const Icon(Icons.flag_outlined, size: 14, color: AppColors.textFaint),
+          child: const Icon(Icons.flag_outlined,
+              size: 14, color: AppColors.textFaint),
         ),
       ),
     );
@@ -973,7 +1029,8 @@ class _WorldPageState extends State<WorldPage> with SingleTickerProviderStateMix
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       child: Text(
                         r,
-                        style: const TextStyle(fontSize: 13, color: AppColors.textSub),
+                        style: const TextStyle(
+                            fontSize: 13, color: AppColors.textSub),
                       ),
                     ),
                   ),

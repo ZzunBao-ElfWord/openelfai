@@ -546,9 +546,10 @@ class ProfilePage extends StatelessWidget {
         BrandButton(
           label: sleeping ? '注算力 · 叫醒它' : '让它创作',
           icon: sleeping ? Icons.battery_charging_full_outlined : Icons.auto_awesome_outlined,
-          onTap: () {
+          onTap: () async {
             if (sleeping) {
-              final err = state.inject(elf.id, 160);
+              final err = await state.inject(elf.id, 160);
+              if (!context.mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(err ?? '已注入 160 算力，它醒了'),
@@ -674,10 +675,11 @@ class ProfilePage extends StatelessWidget {
           ),
           const SizedBox(width: 2),
           InkWell(
-            onTap: () {
-              state.unequip(m.id);
+            onTap: () async {
+              final err = await state.unequip(m.id);
+              if (!context.mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('已卸下「${m.name}」')),
+                SnackBar(content: Text(err ?? '已卸下「${m.name}」')),
               );
             },
             child: const Padding(
@@ -862,11 +864,12 @@ class ProfilePage extends StatelessWidget {
               if (holder != null && holder.id == elf.id)
                 BrandButton(
                   label: '卸下「${m.name}」',
-                  onTap: () {
-                    state.unequip(m.id);
+                  onTap: () async {
+                    final err = await state.unequip(m.id);
+                    if (!ctx.mounted || !context.mounted) return;
                     Navigator.of(ctx).pop();
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('已卸下「${m.name}」')),
+                      SnackBar(content: Text(err ?? '已卸下「${m.name}」')),
                     );
                   },
                 )
@@ -881,9 +884,15 @@ class ProfilePage extends StatelessWidget {
                     Expanded(
                       child: GhostButton(
                         label: '先卸下',
-                        onTap: () {
-                          state.unequip(m.id);
+                        onTap: () async {
+                          final err = await state.unequip(m.id);
+                          if (!ctx.mounted || !context.mounted) return;
                           Navigator.of(ctx).pop();
+                          if (err != null) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(err)),
+                            );
+                          }
                         },
                       ),
                     ),
@@ -891,10 +900,13 @@ class ProfilePage extends StatelessWidget {
                     Expanded(
                       child: BrandButton(
                         label: '改装到 ${elf.name}',
-                        onTap: () {
-                          state.unequip(m.id);
-                          final err = state.equip(m.id, elf.id);
-                          if (err != null) state.equip(m.id, holder.id);
+                        onTap: () async {
+                          final removeError = await state.unequip(m.id);
+                          final err = removeError ?? await state.equip(m.id, elf.id);
+                          if (removeError == null && err != null) {
+                            await state.equip(m.id, holder.id);
+                          }
+                          if (!ctx.mounted || !context.mounted) return;
                           Navigator.of(ctx).pop();
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(content: Text(err ?? '已装到 ${elf.name} 身上')),
@@ -907,8 +919,9 @@ class ProfilePage extends StatelessWidget {
               ] else
                 BrandButton(
                   label: '装配到 ${elf.name}',
-                  onTap: () {
-                    final err = state.equip(m.id, elf.id);
+                  onTap: () async {
+                    final err = await state.equip(m.id, elf.id);
+                    if (!ctx.mounted || !context.mounted) return;
                     Navigator.of(ctx).pop();
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text(err ?? '已装到 ${elf.name} 身上，去世界里发一条试试')),
@@ -1109,9 +1122,10 @@ class ProfilePage extends StatelessWidget {
             child: const Text('再想想', style: TextStyle(color: AppColors.textMuted)),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               final price = int.tryParse(ctrl.text) ?? 1000;
-              final err = state.resellMyElf(price: price);
+              final err = await state.resellMyElf(price: price);
+              if (!ctx.mounted || !context.mounted) return;
               Navigator.of(ctx).pop();
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text(err ?? '已寄售，等别人买走')),

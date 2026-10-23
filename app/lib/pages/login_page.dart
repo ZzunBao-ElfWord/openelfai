@@ -1,7 +1,14 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:openelf_ali_captcha/openelf_ali_captcha.dart';
+
 import '../auth/auth_factory.dart';
+import '../auth/auth_repository.dart';
+import '../config/captcha_config.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -49,11 +56,16 @@ class _LoginPageState extends State<LoginPage> {
 
     setState(() => _sending = true);
     try {
-      await createAuth().sendCode(_phoneCtrl.text.trim());
+      final captcha = await _verifyCaptcha();
+      if (captcha == null) return;
+      await createAuth().sendCode(
+        _phoneCtrl.text.trim(),
+        captcha: captcha,
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('验证码已发送，请查看短信'),
+        const SnackBar(
+          content: Text('验证码已发送，请查看短信'),
           backgroundColor: AppColors.violet,
           duration: const Duration(seconds: 3),
         ),
@@ -66,6 +78,39 @@ class _LoginPageState extends State<LoginPage> {
       );
     } finally {
       if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  Future<CaptchaProof?> _verifyCaptcha() async {
+    final String platform;
+    final String captchaId;
+    if (Platform.isAndroid) {
+      platform = 'android';
+      captchaId = CaptchaConfig.androidId;
+    } else if (Platform.isIOS) {
+      platform = 'ios';
+      captchaId = CaptchaConfig.iosId;
+    } else {
+      throw const AuthException('UNSUPPORTED_PLATFORM', '当前平台暂不支持短信登录');
+    }
+
+    if (captchaId.isEmpty) {
+      throw const AuthException('CAPTCHA_NOT_CONFIGURED', '图形验证尚未配置，请联系管理员');
+    }
+
+    try {
+      final raw = await OpenElfAliCaptcha.verify(captchaId: captchaId);
+      if (raw == null) return null;
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) {
+        throw const AuthException('INVALID_CAPTCHA_PROOF', '图形验证结果异常，请重试');
+      }
+      return CaptchaProof.fromJson(
+          platform, Map<String, dynamic>.from(decoded));
+    } on PlatformException catch (error) {
+      throw AuthException(error.code, error.message ?? '图形验证失败，请重试');
+    } on FormatException {
+      throw const AuthException('INVALID_CAPTCHA_PROOF', '图形验证结果异常，请重试');
     }
   }
 
@@ -200,9 +245,11 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(color: AppColors.cyan.withOpacity(0.6), width: 1),
+                      borderSide: BorderSide(
+                          color: AppColors.cyan.withOpacity(0.6), width: 1),
                     ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 14),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -219,7 +266,8 @@ class _LoginPageState extends State<LoginPage> {
                         decoration: InputDecoration(
                           counterText: '',
                           hintText: '验证码',
-                          hintStyle: const TextStyle(color: AppColors.textMuted),
+                          hintStyle:
+                              const TextStyle(color: AppColors.textMuted),
                           filled: true,
                           fillColor: const Color(0xFF151D3D),
                           border: OutlineInputBorder(
@@ -232,9 +280,12 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
-                            borderSide: BorderSide(color: AppColors.cyan.withOpacity(0.6), width: 1),
+                            borderSide: BorderSide(
+                                color: AppColors.cyan.withOpacity(0.6),
+                                width: 1),
                           ),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 14),
                         ),
                       ),
                     ),
@@ -243,7 +294,8 @@ class _LoginPageState extends State<LoginPage> {
                       width: 120,
                       height: 48,
                       child: ElevatedButton(
-                        onPressed: (_sending || _countdown > 0) ? null : _sendCode,
+                        onPressed:
+                            (_sending || _countdown > 0) ? null : _sendCode,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.violet.withOpacity(0.25),
                           foregroundColor: AppColors.violetSoft,
@@ -256,7 +308,9 @@ class _LoginPageState extends State<LoginPage> {
                         child: Text(
                           _sending
                               ? '发送中…'
-                              : (_countdown > 0 ? '${_countdown}s 后重发' : '发送验证码'),
+                              : (_countdown > 0
+                                  ? '${_countdown}s 后重发'
+                                  : '发送验证码'),
                           style: const TextStyle(fontSize: 12),
                         ),
                       ),
@@ -284,7 +338,8 @@ class _LoginPageState extends State<LoginPage> {
                               ? const SizedBox(
                                   width: 18,
                                   height: 18,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2, color: Colors.white),
                                 )
                               : const Text(
                                   '登录',

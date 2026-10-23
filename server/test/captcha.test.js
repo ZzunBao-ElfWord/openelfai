@@ -1,0 +1,79 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
+
+const { CaptchaError, createCaptchaVerifier } = require('../src/captcha');
+
+const settings = {
+  enabled: true,
+  allowOnError: false,
+  endpoint: 'https://captcha.alicaptcha.com/validate',
+  timeoutMs: 1000,
+  schemes: {
+    android: { appId: 'android-id', appKey: 'android-secret' },
+    ios: { appId: 'ios-id', appKey: 'ios-secret' },
+  },
+};
+
+const proof = {
+  platform: 'android',
+  lot_number: 'lot-123',
+  pass_token: 'pass-token',
+  gen_time: '1700000000',
+  captcha_output: 'output',
+};
+
+test('提交阿里云 Captcha4 要求的表单和签名', async () => {
+  let request;
+  const verifier = createCaptchaVerifier(settings, {
+    fetchImpl: async (url, options) => {
+      request = { url, options };
+      return { ok: true, async json() { return { result: 'success' }; } };
+    },
+  });
+
+  assert.deepEqual(await verifier.verify(proof), { passed: true });
+  assert.equal(request.url.searchParams.get('captcha_id'), 'android-id');
+  assert.equal(request.options.headers['content-type'], 'application/x-www-form-urlencoded');
+  assert.equal(request.options.body.get('lot_number'), proof.lot_number);
+  assert.equal(
+    request.options.body.get('sign_token'),
+    crypto.createHmac('sha256', 'android-secret').update(proof.lot_number).digest('hex'),
+  );
+});
+
+test('阿里云明确拒绝时拦截短信发送', async () => {
+  const verifier = createCaptchaVerifier(settings, {
+    fetchImpl: async () => ({
+      ok: true,
+      async json() { return { result: 'fail', reason: 'invalid' }; },
+    }),
+  });
+
+  await assert.rejects(
+    () => verifier.verify(proof),
+    (error) => error instanceof CaptchaError && error.code === 'CAPTCHA_REJECTED',
+  );
+});
+
+test('缺少验证凭证时不请求上游', async () => {
+  const verifier = createCaptchaVerifier(settings, {
+    fetchImpl: async () => assert.fail('不应请求阿里云'),
+  });
+
+  await assert.rejects(
+    () => verifier.verify({ platform: 'android' }),
+    (error) => error instanceof CaptchaError && error.code === 'CAPTCHA_REQUIRED',
+  );
+});
+
+test('上游异常可按配置使用限流兜底放行', async () => {
+  const verifier = createCaptchaVerifier(
+    { ...settings, allowOnError: true },
+    { fetchImpl: async () => { throw new Error('timeout'); } },
+  );
+
+  assert.deepEqual(await verifier.verify(proof), { passed: true, fallback: true });
+});

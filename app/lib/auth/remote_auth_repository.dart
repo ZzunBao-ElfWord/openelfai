@@ -70,25 +70,16 @@ class RemoteAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<void> sendCode(String phone) async {
-    await _post(ApiConfig.sendCodePath, {'phone': phone});
+  Future<void> sendCode(String phone, {required CaptchaProof captcha}) async {
+    await _post(ApiConfig.sendCodePath, {
+      'phone': phone,
+      ...captcha.toJson(),
+    });
   }
 
   @override
-  Future<User> loginWithCode({required String phone, required String code}) async {
-    // debug bypass: 测试手机号直接登录，跳过服务端验证
-    if (phone == '13800138000') {
-      final user = User(
-        id: 'u_me',
-        phone: phone,
-        nickname: '用户8000',
-        avatarInitial: 'U',
-        createdAt: DateTime.now(),
-      );
-      await _saveSession('debug-access-token', 'debug-refresh-token', user);
-      return user;
-    }
-
+  Future<User> loginWithCode(
+      {required String phone, required String code}) async {
     final deviceId = await _deviceId();
     final body = await _post(ApiConfig.loginByCodePath, {
       'phone': phone,
@@ -102,7 +93,8 @@ class RemoteAuthRepository implements AuthRepository {
       throw const AuthException('INVALID_RESPONSE', '登录响应异常，请稍后重试');
     }
 
-    final user = _parseUser(body['user'], await currentUser, fallbackPhone: phone);
+    final user =
+        _parseUser(body['user'], await currentUser, fallbackPhone: phone);
     await _saveSession(accessToken, refreshToken, user);
     return user;
   }
@@ -170,6 +162,29 @@ class RemoteAuthRepository implements AuthRepository {
 
   // —— HTTP ——
 
+  /// Authenticated API access with one refresh/retry, including payment APIs.
+  Future<Map<String, dynamic>> authenticatedRequest(
+    String path, {
+    Map<String, dynamic>? body,
+  }) async {
+    Future<Map<String, dynamic>> send() async {
+      final token = await _secure.read(key: _kAccessToken);
+      if (token == null) {
+        throw const AuthException('UNAUTHORIZED', '请先登录');
+      }
+      return body == null
+          ? _get(path, accessToken: token)
+          : _post(path, body, accessToken: token);
+    }
+
+    try {
+      return await send();
+    } on AuthException catch (error) {
+      if (!_isUnauthorized(error.code) || !await _refreshSession()) rethrow;
+      return send();
+    }
+  }
+
   Future<Map<String, dynamic>> _get(String path, {String? accessToken}) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}$path');
     http.Response response;
@@ -218,7 +233,8 @@ class RemoteAuthRepository implements AuthRepository {
 
   Map<String, String> _headers({String? accessToken}) => {
         ...ApiConfig.jsonHeaders,
-        if (accessToken != null && accessToken.isNotEmpty) 'Authorization': 'Bearer $accessToken',
+        if (accessToken != null && accessToken.isNotEmpty)
+          'Authorization': 'Bearer $accessToken',
       };
 
   Map<String, dynamic> _decode(http.Response response) {
@@ -237,15 +253,18 @@ class RemoteAuthRepository implements AuthRepository {
       throw AuthException(
         (error['code'] ?? 'UNKNOWN').toString(),
         (error['message'] ?? '请求失败').toString(),
+        statusCode: response.statusCode,
       );
     }
 
-    throw AuthException('HTTP_${response.statusCode}', '请求失败，请稍后重试');
+    throw AuthException('HTTP_${response.statusCode}', '请求失败，请稍后重试',
+        statusCode: response.statusCode);
   }
 
   // —— 持久化 ——
 
-  Future<void> _saveSession(String accessToken, String refreshToken, User user) async {
+  Future<void> _saveSession(
+      String accessToken, String refreshToken, User user) async {
     await _secure.write(key: _kAccessToken, value: accessToken);
     await _secure.write(key: _kRefreshToken, value: refreshToken);
     await _cacheUser(user);
@@ -268,13 +287,16 @@ class RemoteAuthRepository implements AuthRepository {
 
     final random = Random.secure();
     const chars = '0123456789abcdef';
-    final id = List.generate(32, (_) => chars[random.nextInt(chars.length)]).join();
+    final id =
+        List.generate(32, (_) => chars[random.nextInt(chars.length)]).join();
     await prefs.setString(_kDeviceId, id);
     return id;
   }
 
   bool _isUnauthorized(String code) =>
-      code == 'UNAUTHORIZED' || code == 'SESSION_EXPIRED' || code == 'SESSION_REVOKED';
+      code == 'UNAUTHORIZED' ||
+      code == 'SESSION_EXPIRED' ||
+      code == 'SESSION_REVOKED';
 
   User _parseUser(dynamic raw, User? cached, {String fallbackPhone = ''}) {
     if (raw is Map<String, dynamic>) {
@@ -282,7 +304,8 @@ class RemoteAuthRepository implements AuthRepository {
       final phone = raw['phone']?.toString() ?? cached?.phone ?? fallbackPhone;
       final nickname = raw['nickname']?.toString() ??
           (phone.length >= 4 ? '用户${phone.substring(phone.length - 4)}' : '用户');
-      final avatar = raw['avatarInitial']?.toString() ?? (nickname.isEmpty ? '用' : nickname[0]);
+      final avatar = raw['avatarInitial']?.toString() ??
+          (nickname.isEmpty ? '用' : nickname[0]);
       final createdAtStr = raw['createdAt']?.toString();
       final createdAt = createdAtStr != null
           ? DateTime.tryParse(createdAtStr) ?? DateTime.now()
@@ -302,7 +325,9 @@ class RemoteAuthRepository implements AuthRepository {
     return User(
       id: '',
       phone: fallbackPhone,
-      nickname: fallbackPhone.length >= 4 ? '用户${fallbackPhone.substring(fallbackPhone.length - 4)}' : '用户',
+      nickname: fallbackPhone.length >= 4
+          ? '用户${fallbackPhone.substring(fallbackPhone.length - 4)}'
+          : '用户',
       avatarInitial: '用',
       createdAt: DateTime.now(),
     );

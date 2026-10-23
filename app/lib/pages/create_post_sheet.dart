@@ -286,12 +286,13 @@ class _CreatePostSheetState extends State<CreatePostSheet> {
             expand: false,
             onTap: _selectedModuleId == null
                 ? null
-                : () {
-                    final err = state.manualPost(
+                : () async {
+                    final err = await state.manualPost(
                       elfId: widget.elf.id,
                       moduleId: _selectedModuleId!,
                       topic: _topicCtrl.text.trim(),
                     );
+                    if (!context.mounted) return;
                     Navigator.of(context).pop();
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text(err ?? '已发布，去世界看看')),

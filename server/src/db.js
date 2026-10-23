@@ -1,6 +1,7 @@
 'use strict';
 
 const mysql = require('mysql2/promise');
+const { PAYMENT_TABLES } = require('./payment_store');
 
 const TABLES = [
   `CREATE TABLE IF NOT EXISTS users (
@@ -42,6 +43,45 @@ const TABLES = [
     INDEX idx_sessions_expires (expires_at),
     CONSTRAINT fk_sessions_user FOREIGN KEY (user_id) REFERENCES users(id)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  `CREATE TABLE IF NOT EXISTS user_wallets (
+    user_id VARCHAR(40) PRIMARY KEY,
+    diamonds BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    total_recharged BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    updated_at VARCHAR(32) NOT NULL,
+    CONSTRAINT fk_wallet_user FOREIGN KEY (user_id) REFERENCES users(id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  `CREATE TABLE IF NOT EXISTS apple_iap_transactions (
+    transaction_id VARCHAR(64) PRIMARY KEY,
+    user_id VARCHAR(40) NOT NULL,
+    product_id VARCHAR(120) NOT NULL,
+    diamonds INT UNSIGNED NOT NULL,
+    environment VARCHAR(20) NOT NULL,
+    purchased_at BIGINT NULL,
+    created_at VARCHAR(32) NOT NULL,
+    INDEX idx_apple_iap_user (user_id),
+    CONSTRAINT fk_apple_iap_user FOREIGN KEY (user_id) REFERENCES users(id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  `CREATE TABLE IF NOT EXISTS apple_iap_sandbox_wallets (
+    user_id VARCHAR(40) PRIMARY KEY,
+    diamonds BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    total_recharged BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    updated_at VARCHAR(32) NOT NULL,
+    CONSTRAINT fk_sandbox_wallet_user FOREIGN KEY (user_id) REFERENCES users(id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  `CREATE TABLE IF NOT EXISTS apple_iap_sandbox_transactions (
+    transaction_id VARCHAR(64) PRIMARY KEY,
+    user_id VARCHAR(40) NOT NULL,
+    product_id VARCHAR(120) NOT NULL,
+    diamonds INT UNSIGNED NOT NULL,
+    environment VARCHAR(20) NOT NULL,
+    purchased_at BIGINT NULL,
+    created_at VARCHAR(32) NOT NULL,
+    INDEX idx_sandbox_iap_user (user_id),
+    CONSTRAINT fk_sandbox_iap_user FOREIGN KEY (user_id) REFERENCES users(id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 ];
 
 async function createPool(config) {
@@ -58,7 +98,7 @@ async function createPool(config) {
     enableKeepAlive: true,
   });
 
-  for (const statement of TABLES) {
+  for (const statement of [...TABLES, ...PAYMENT_TABLES]) {
     await pool.query(statement);
   }
 

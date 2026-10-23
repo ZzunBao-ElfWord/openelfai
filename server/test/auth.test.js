@@ -2,6 +2,9 @@
 
 const { after, before, test } = require('node:test');
 const assert = require('node:assert/strict');
+if (!/^openelf_[a-z0-9_]*test$/.test(process.env.DB_NAME || '')) {
+  throw new Error('鉴权集成测试会清空测试数据，必须显式指定独立 DB_NAME=openelf_*test，禁止使用生产数据库');
+}
 
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = 'test-jwt-secret-0123456789abcdef';

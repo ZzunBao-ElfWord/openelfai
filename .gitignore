@@ -32,6 +32,22 @@ yarn-error.log*
 .env
 .env.local
 .env.*.local
+.env.*
+!.env.example
+!.env.*.example
+*.p8
+*.p12
+*.jks
+*.keystore
+*.mobileprovision
+*.pem
+key.properties
+
+# Local caches, deployment archives and archived checkout
+.npm-cache/
+/_legacy_old_root/
+/打包文件夹/
+/OpenElf-*.zip
 
 # Flutter
 .flutter-plugins

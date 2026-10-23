@@ -6,6 +6,12 @@ const rateLimit = require('@fastify/rate-limit');
 
 const config = require('./config');
 const { createPool } = require('./db');
+const { createAppleIapService, createAppleVerifier } = require('./apple_iap');
+const { createPaymentStore } = require('./payment_store');
+const { createCommerceService } = require('./commerce');
+const { createAlipayGateway } = require('./alipay_gateway');
+const { createAlipayService } = require('./alipay');
+const { createCaptchaVerifier } = require('./captcha');
 const { createSmsProvider, SmsError } = require('./sms');
 const {
   generateRefreshToken,
@@ -66,6 +72,22 @@ async function buildApp(options = {}) {
   const ownsDb = !options.db;
   const db = options.db || (await createPool(config));
   const sms = options.sms || createSmsProvider(config);
+  const captcha = options.captcha || createCaptchaVerifier(config.captcha);
+  const appleVerifier = options.appleVerifier || (config.appleIap.enabled
+    ? await createAppleVerifier(config.appleIap) : null);
+  const paymentStore = options.paymentStore || createPaymentStore(db);
+  const commerce = createCommerceService({ store: paymentStore, settings: config.appleIap });
+  const appleIap = createAppleIapService({
+    db,
+    settings: config.appleIap,
+    verifyTransaction: appleVerifier,
+    paymentStore,
+    verifyNotification: options.appleNotificationVerifier,
+  });
+  const androidCommerce = createCommerceService({ store: paymentStore, settings: config.androidCommerce });
+  const alipay = createAlipayService({ store: paymentStore, settings: config.alipay,
+    commerceSettings: config.androidCommerce,
+    gateway: options.alipayGateway || createAlipayGateway(config.alipay) });
 
   const app = Fastify({
     logger:
@@ -185,7 +207,7 @@ async function buildApp(options = {}) {
     ]);
     const session = sessions[0];
 
-    if (!session || session.revoked_at || Number(session.expires_at) <= Date.now()) {
+    if (!session || session.user_id !== payload.sub || session.revoked_at || Number(session.expires_at) <= Date.now()) {
       throw fail(401, 'SESSION_EXPIRED', '登录状态已失效，请重新登录');
     }
 
@@ -241,6 +263,92 @@ async function buildApp(options = {}) {
     time: new Date().toISOString(),
   }));
 
+  // 内购默认关闭。商品未在 App Store Connect 建立、服务端未准备好前不会展示购买按钮。
+  app.get('/api/v1/ios/products', async (request) => {
+    const { user } = await authenticate(request);
+    return {
+      protocol: 2,
+      mode: commerce.environment(request.query?.environment).toLowerCase(),
+      appAccountToken: appleIap.accountToken(user.id),
+      products: appleIap.listProducts(),
+    };
+  });
+
+  app.get('/api/v1/wallet', async (request) => {
+    const { user } = await authenticate(request);
+    return commerce.snapshot(user, request.query?.environment);
+  });
+
+  app.post(
+    '/api/v1/ios/verify',
+    { config: { rateLimit: { max: 15, timeWindow: '1 minute' } } },
+    async (request) => {
+      const { user } = await authenticate(request);
+      const result = await appleIap.verifyAndGrant(user.id, request.body);
+      return { ...result, ...await commerce.snapshot(user, result.mode) };
+    },
+  );
+
+  app.post('/api/v1/commerce/actions',
+    { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
+    async (request) => {
+      const { user } = await authenticate(request);
+      return commerce.action(user, request.body);
+    });
+
+  // Public webhook: trust only Apple's verified outer and inner JWS signatures.
+  for (const environment of ['Production', 'Sandbox']) {
+    app.post('/api/v1/ios/notifications/' + environment.toLowerCase(),
+      { bodyLimit: 256 * 1024, config: { rateLimit: { max: 120, timeWindow: '1 minute' } } },
+      (request) => appleIap.notification(request.body, environment));
+  }
+
+  // Android Alipay: intentionally separate from Apple availability switches.
+  function requireAndroidCommerce() {
+    if (!config.androidCommerce.enabled) throw fail(503, 'ANDROID_COMMERCE_DISABLED', '安卓钱包服务尚未开放');
+  }
+  app.get('/api/v1/android/wallet', async (request) => {
+    const { user } = await authenticate(request); requireAndroidCommerce();
+    return androidCommerce.snapshot(user, alipay.environment);
+  });
+  app.post('/api/v1/android/commerce/actions', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (request) => {
+    const { user } = await authenticate(request); requireAndroidCommerce();
+    if (request.body?.environment?.toLowerCase() !== alipay.environment.toLowerCase()) throw fail(400, 'INVALID_ENVIRONMENT', '安卓钱包环境不匹配');
+    return androidCommerce.action(user, { ...request.body, environment: alipay.environment });
+  });
+  app.get('/api/v1/android/alipay/products', async (request) => {
+    await authenticate(request); return alipay.products();
+  });
+  app.get('/api/v1/android/alipay/pending', async (request) => {
+    const { user } = await authenticate(request); requireAndroidCommerce(); return alipay.pending(user);
+  });
+  app.post('/api/v1/android/alipay/orders', { config: { rateLimit: { max: 8, timeWindow: '1 minute' } } }, async (request) => {
+    const { user } = await authenticate(request); return alipay.create(user, request.body);
+  });
+  app.get('/api/v1/android/alipay/orders/:id', async (request) => {
+    const { user } = await authenticate(request);
+    const result = await alipay.refresh(user.id, request.params.id);
+    return { ...result, ...await androidCommerce.snapshot(user, alipay.environment) };
+  });
+  app.post('/api/v1/android/alipay/orders/:id/pay', async (request) => {
+    const { user } = await authenticate(request); return alipay.resume(user, request.params.id);
+  });
+  app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string', bodyLimit: 65536 }, (_request, body, done) => {
+    try {
+      const data = Object.create(null);
+      for (const [key, value] of new URLSearchParams(body)) {
+        if (Object.hasOwn(data, key) || ['__proto__', 'constructor', 'prototype'].includes(key)) throw new Error('Duplicate form field');
+        data[key] = value;
+      }
+      done(null, data);
+    } catch (_) { done(fail(400, 'INVALID_FORM', '表单格式无效')); }
+  });
+  app.post('/api/v1/android/alipay/notify', { bodyLimit: 65536 }, async (request, reply) => {
+    // Plain text success is Alipay's required acknowledgement, never a client grant.
+    try { await alipay.notify(request.body); return reply.type('text/plain').send('success'); }
+    catch (_) { return reply.code(400).type('text/plain').send('failure'); }
+  });
+
   // —— 发送验证码 ——
 
   app.post(
@@ -278,6 +386,8 @@ async function buildApp(options = {}) {
       if (Number(ipRows[0].count) >= 20) {
         throw fail(429, 'RATE_LIMITED', '当前网络发送次数过多，请稍后再试');
       }
+
+      await captcha.verify(request.body);
 
       const code = generateSmsCode();
       const [inserted] = await db.execute(

@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import '../state/app_state.dart';
+import '../payments/ios_iap_service.dart';
+import '../payments/alipay_service.dart';
+import '../config/commerce_config.dart';
 import '../theme.dart';
 import 'market_page.dart';
 import 'profile_page.dart';
@@ -18,9 +21,10 @@ class HomeShell extends StatefulWidget {
   State<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends State<HomeShell> {
+class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   int _current = 0;
   StreamSubscription<Uri>? _linkSub;
+  Timer? _autoTimer;
 
   List<Widget> get _pages => [
         const WorldPage(),
@@ -32,13 +36,33 @@ class _HomeShellState extends State<HomeShell> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _autoTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      unawaited(AppState.instance.triggerAutoIfDue());
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshPayments());
     _initAppLinks();
   }
 
   @override
   void dispose() {
     _linkSub?.cancel();
+    _autoTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refreshPayments();
+  }
+
+  void _refreshPayments() {
+    if (CommerceConfig.android) {
+      unawaited(AlipayService.instance.initialize());
+    } else {
+      unawaited(IosIapService.instance.initialize());
+    }
   }
 
   /// v1.3 站外回流：监听 https://openelfai.com/e/?id=xxx 链接（初始 + 运行中）。
@@ -125,7 +149,8 @@ class _BottomBar extends StatelessWidget {
                       child: Icon(
                         item.icon,
                         size: 18,
-                        color: selected ? AppColors.bgDeep : AppColors.textMuted,
+                        color:
+                            selected ? AppColors.bgDeep : AppColors.textMuted,
                         semanticLabel: item.semantics,
                       ),
                     ),
@@ -134,7 +159,8 @@ class _BottomBar extends StatelessWidget {
                       item.label,
                       style: TextStyle(
                         fontSize: 10,
-                        fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                        fontWeight:
+                            selected ? FontWeight.w600 : FontWeight.w400,
                         color: selected ? AppColors.text : AppColors.textMuted,
                       ),
                     ),
@@ -154,5 +180,6 @@ class _BarItem {
   final IconData icon;
   final String label;
   final String semantics;
-  const _BarItem({required this.icon, required this.label, required this.semantics});
+  const _BarItem(
+      {required this.icon, required this.label, required this.semantics});
 }

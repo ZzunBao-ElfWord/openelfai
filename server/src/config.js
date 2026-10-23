@@ -56,4 +56,53 @@ module.exports = {
       .filter(Boolean),
     whitelistCode: process.env.SMS_WHITELIST_CODE || '',
   },
+
+  captcha: {
+    enabled: bool('ALIYUN_CAPTCHA_ENABLED', false),
+    allowOnError: bool('ALIYUN_CAPTCHA_ALLOW_ON_ERROR', true),
+    endpoint: process.env.ALIYUN_CAPTCHA_ENDPOINT || 'https://captcha.alicaptcha.com/validate',
+    timeoutMs: Number(process.env.ALIYUN_CAPTCHA_TIMEOUT_MS || 8000),
+    schemes: {
+      android: {
+        appId: process.env.ALIYUN_CAPTCHA_ANDROID_APP_ID || '',
+        appKey: process.env.ALIYUN_CAPTCHA_ANDROID_APP_KEY || '',
+      },
+      ios: {
+        appId: process.env.ALIYUN_CAPTCHA_IOS_APP_ID || '',
+        appKey: process.env.ALIYUN_CAPTCHA_IOS_APP_KEY || '',
+      },
+    },
+  },
+
+  androidCommerce: {
+    enabled: bool('ANDROID_COMMERCE_ENABLED', false),
+    sandboxOnly: bool('ALIPAY_SANDBOX', false),
+    allowSandbox: bool('ALIPAY_SANDBOX', false),
+  },
+  alipay: {
+    enabled: bool('ALIPAY_ENABLED', false),
+    sandbox: bool('ALIPAY_SANDBOX', false),
+    appId: process.env.ALIPAY_APP_ID || '',
+    sellerId: process.env.ALIPAY_SELLER_ID || '',
+    keyMode: process.env.ALIPAY_KEY_MODE || 'public',
+    privateKeyPath: process.env.ALIPAY_PRIVATE_KEY_PATH || '',
+    publicKeyPath: process.env.ALIPAY_PUBLIC_KEY_PATH || '',
+    appCertPath: process.env.ALIPAY_APP_CERT_PATH || '',
+    alipayPublicCertPath: process.env.ALIPAY_PUBLIC_CERT_PATH || '',
+    alipayRootCertPath: process.env.ALIPAY_ROOT_CERT_PATH || '',
+    notifyUrl: process.env.ALIPAY_NOTIFY_URL || 'https://openelfai.com/api/v1/android/alipay/notify',
+  },
+
+  appleIap: {
+    enabled: bool('APPLE_IAP_ENABLED', false),
+    sandboxOnly: bool('APPLE_IAP_SANDBOX_ONLY', false),
+    productsJson: process.env.APPLE_IAP_PRODUCTS_JSON || '{}',
+    bundleId: process.env.APPLE_IAP_BUNDLE_ID || '',
+    appId: process.env.APPLE_IAP_APP_ID || '',
+    keyId: process.env.APPLE_IAP_KEY_ID || '',
+    issuerId: process.env.APPLE_IAP_ISSUER_ID || '',
+    privateKeyPath: process.env.APPLE_IAP_PRIVATE_KEY_PATH || '',
+    rootCertPaths: process.env.APPLE_IAP_ROOT_CERT_PATHS || '',
+    allowSandbox: bool('APPLE_IAP_ALLOW_SANDBOX', false),
+  },
 };

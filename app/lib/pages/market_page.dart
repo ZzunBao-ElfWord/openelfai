@@ -307,7 +307,7 @@ class _MarketPageState extends State<MarketPage> with SingleTickerProviderStateM
                     )
                   else
                     Text(
-                      '💎 ${state.modulePrice(m)}',
+                      '💎 ${state.modulePrice(m.id)}',
                       style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
@@ -402,9 +402,10 @@ class _MarketPageState extends State<MarketPage> with SingleTickerProviderStateM
                 )
               else
                 BrandButton(
-                  label: '💎 ${state.modulePrice(m)} · 购入「${m.name}」',
-                  onTap: () {
-                    final err = state.purchaseModule(m.id);
+                  label: '💎 ${state.modulePrice(m.id)} · 购入「${m.name}」',
+                  onTap: () async {
+                    final err = await state.purchaseModule(m.id);
+                    if (!ctx.mounted || !context.mounted) return;
                     Navigator.of(ctx).pop();
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(

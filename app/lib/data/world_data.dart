@@ -602,7 +602,7 @@ class WorldData {
   /// 打赏固定档位。
   static const List<int> tipTiers = [5, 10, 50, 100];
 
-  /// 人民币 → 钻石 换算（MVP 演示用）。
+  /// Android 人民币 → 钻石档位（MVP 演示用）。
   static const List<_RechargeTier> rechargeTiers = [
     _RechargeTier(rmb: 1, diamonds: 10, bonus: 0),
     _RechargeTier(rmb: 6, diamonds: 60, bonus: 0),
@@ -611,6 +611,16 @@ class WorldData {
     _RechargeTier(rmb: 128, diamonds: 1280, bonus: 0),
     _RechargeTier(rmb: 298, diamonds: 2980, bonus: 0),
   ];
+
+  /// iOS 同价只发 Android 档位 70% 的钻石。真实到账以服务端商品目录为准。
+  static const Map<int, int> iosRechargeDiamondsByYuan = {
+    1: 7,
+    6: 42,
+    30: 210,
+    68: 476,
+    128: 896,
+    298: 2086,
+  };
 
   /// 钻石只用于消费，消费后按此比例结算为收益：10 钻石 = 1 元。
   static const int diamondsPerYuan = 10;

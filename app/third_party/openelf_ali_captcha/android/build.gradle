@@ -1,0 +1,37 @@
+group 'cn.openelfai.captcha'
+version '1.0.0'
+
+apply plugin: 'com.android.library'
+
+repositories {
+    flatDir {
+        dirs 'libs'
+    }
+}
+
+rootProject.allprojects {
+    repositories {
+        flatDir {
+            dirs project(':openelf_ali_captcha').file('libs')
+        }
+    }
+}
+
+android {
+    namespace 'cn.openelfai.captcha'
+    compileSdk flutter.compileSdkVersion
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    defaultConfig {
+        minSdk flutter.minSdkVersion
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.7.1'
+    implementation(name: 'alicom_captcha_android_v1.8.4_20250429', ext: 'aar')
+}

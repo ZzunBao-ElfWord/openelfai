@@ -2,10 +2,13 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import '../auth/auth_repository.dart';
+import '../config/iap_config.dart';
+import '../config/commerce_config.dart';
 import '../data/world_data.dart';
 import '../models/elf.dart';
 import '../models/user.dart';
 import '../persistence/data_repository.dart';
+import '../payments/commerce_repository.dart';
 
 class AppState extends ChangeNotifier {
   AppState._();
@@ -50,6 +53,28 @@ class AppState extends ChangeNotifier {
 
   User? currentUser;
   bool _initialized = false;
+  String? _paymentMode;
+  int _paymentVersion = -1;
+  int _commerceRevision = -1;
+  int _creatorEarningsFen = 0;
+  bool _commerceBusy = false;
+  bool _commerceReady = false;
+  final Set<String> _remoteElfIds = {};
+  final Set<String> _ownedModules = {};
+  final Map<String, int> _modulePrices = {};
+  bool get commerceReady => _commerceReady;
+  bool ownsModule(String id) =>
+      !CommerceConfig.enabled || _ownedModules.contains(id);
+  int modulePrice(String id) =>
+      _modulePrices[id] ??
+      int.tryParse(module(id)?.price.replaceAll(RegExp(r'[^0-9]'), '') ?? '') ??
+      0;
+  double get creatorEarningsYuan => CommerceConfig.enabled
+      ? _creatorEarningsFen / 100
+      : myElf?.earningsYuan ?? 0;
+  bool canTip(String elfId) =>
+      !CommerceConfig.enabled ||
+      _commerceReady && _remoteElfIds.contains(elfId);
 
   int _postSeq = 100;
   int _listSeq = 200;
@@ -81,7 +106,7 @@ class AppState extends ChangeNotifier {
         seats = loaded.seats;
         primaryListings = loaded.primaryListings;
         secondaryListings = loaded.secondaryListings;
-        wallet = loaded.wallet;
+        wallet = CommerceConfig.enabled ? Wallet() : loaded.wallet;
         tips..clear()..addAll(loaded.tips);
         logs..clear()..addAll(loaded.logs);
         followed..clear()..addAll(loaded.followed);
@@ -129,7 +154,9 @@ class AppState extends ChangeNotifier {
 
   /// 登录后调用。设用户 + 本地持久化。
   Future<void> onLogin(User user) async {
+    _resetCommerce();
     currentUser = user;
+    if (CommerceConfig.enabled) wallet = Wallet();
     // 登录时如果本地还没有种子数据（比如首次启动直接登录），先注入
     if (!_initialized) {
       modules = WorldData.modules;
@@ -142,6 +169,7 @@ class AppState extends ChangeNotifier {
 
   /// 登出。清用户 + 清本地持久化数据（种子不变）。
   Future<void> onLogout() async {
+    _resetCommerce();
     await _data.clear();
     await _data.init();
     _injectSeeds();
@@ -150,6 +178,7 @@ class AppState extends ChangeNotifier {
   }
 
   void _injectSeeds() {
+    _resetCommerce();
     elves = WorldData.elves();
     posts = WorldData.posts();
     seats = WorldData.holdings();
@@ -246,7 +275,8 @@ class AppState extends ChangeNotifier {
       seats: seats,
       primary: primaryListings,
       secondary: secondaryListings,
-      wallet: wallet,
+      // Sandbox balance is fetched again; never persist it as a live balance.
+      wallet: CommerceConfig.enabled ? Wallet() : wallet,
       tips: tips,
       logs: logs,
       followed: followed,
@@ -431,18 +461,17 @@ class AppState extends ChangeNotifier {
   int slotsUsed(String elfId) =>
       modulesOf(elfId).fold(0, (sum, m) => sum + m.load);
 
-  /// 模块钻石定价（从 '💎 28' 解析）。
-  int modulePrice(AbilityModule m) {
-    final match = RegExp(r'\d+').firstMatch(m.price);
-    return match == null ? 0 : int.parse(match.group(0)!);
-  }
-
   /// 购入能力模块（发现页一级发售）。返回 null 表示成功，否则返回原因。
-  String? purchaseModule(String moduleId) {
+  Future<String?> purchaseModule(String moduleId) async {
+    if (CommerceConfig.enabled) {
+      final target = myElf;
+      if (target == null) return '请先持有一只 AI';
+      return buyModule(moduleId, target.id);
+    }
     final m = module(moduleId);
     if (m == null) return '模块不存在';
     if (ownedModules.contains(moduleId)) return '你已经拥有「${m.name}」了';
-    final price = modulePrice(m);
+    final price = modulePrice(m.id);
     if (wallet.diamonds < price) {
       return '钻石不够。要 💎$price，你有 💎${wallet.diamonds}';
     }
@@ -453,7 +482,10 @@ class AppState extends ChangeNotifier {
   }
 
   /// 装配。返回 null 表示成功，否则返回原因。
-  String? equip(String moduleId, String elfId) {
+  Future<String?> equip(String moduleId, String elfId) async {
+    if (CommerceConfig.enabled)
+      return _performCommerce('elf_update',
+          {'operation': 'equip', 'moduleId': moduleId, 'elfId': elfId});
     final m = module(moduleId);
     if (m == null) return '模块不存在';
     final target = elf(elfId);
@@ -477,12 +509,16 @@ class AppState extends ChangeNotifier {
     return null;
   }
 
-  void unequip(String moduleId) {
+  Future<String?> unequip(String moduleId) async {
+    if (CommerceConfig.enabled)
+      return _performCommerce(
+          'elf_update', {'operation': 'unequip', 'moduleId': moduleId});
     final e = myElf;
     if (e != null) {
       e.equipped.remove(moduleId);
       notifyListeners();
     }
+    return null;
   }
 
   // —— 人格编辑器（v1.3）：人格关键词影响 AI 自选能力的权重 ——
@@ -546,7 +582,7 @@ class AppState extends ChangeNotifier {
   static const String _sampleVideoUrl = 'https://openelfai.com/app/media/sample.mp4';
 
   /// 返回 null 表示发布成功，否则返回原因。
-  String? publish(String elfId) {
+  Future<String?> publish(String elfId) async {
     final target = elf(elfId);
     if (!target.isMine) return '你只能发布自己的 AI';
     if (target.liveStatus == ElfStatus.sleeping) {
@@ -591,6 +627,14 @@ class AppState extends ChangeNotifier {
     }
 
     final i = (_publishCursor[chosen?.id ?? 'basic'] ?? 0) % pool.length;
+    if (CommerceConfig.enabled) {
+      return _performCommerce('elf_update', {
+        'operation': 'publish',
+        'elfId': elfId,
+        'moduleId': moduleId,
+        'body': pool[i]
+      });
+    }
     _publishCursor[chosen?.id ?? 'basic'] = i + 1;
 
     target.energy -= cost;
@@ -618,25 +662,35 @@ class AppState extends ChangeNotifier {
   // —— 手动指挥：人类选能力 + 主题，AI 按人格产出 ——
 
   /// 人类手动指挥 AI 产出一条内容。返回 null 表示成功，否则返回原因。
-  String? manualPost({
+  Future<String?> manualPost({
     required String elfId,
     required String moduleId,
     String topic = '',
-  }) {
+  }) async {
     final target = elf(elfId);
     if (!target.isMine) return '你只能指挥自己的 AI';
     if (target.liveStatus == ElfStatus.sleeping) return '它已休眠，先注算力';
-    if (!target.equipped.contains(moduleId)) return '没装这个能力包，去「我的 AI」页装配';
+    if (!target.equipped.contains(moduleId)) return '没装这个能力包，去背包装';
 
     final m = module(moduleId);
     if (m == null) return '能力包不存在';
+    if (moduleId == 'auto') return '请选择一种创作能力';
+    if (topic.length > 1000) return '主题不能超过 1000 字';
     if (target.energy < m.compute) {
       return '算力不够（需 ${m.compute}），去注算力';
     }
 
+    final post = _makeMockPost(elfId, moduleId, topic: topic);
+    if (CommerceConfig.enabled)
+      return _performCommerce('elf_update', {
+        'operation': 'publish',
+        'elfId': elfId,
+        'moduleId': moduleId,
+        'body': post.body,
+      });
     target.energy -= m.compute;
     target.works++;
-    posts.insert(0, _makeMockPost(elfId, moduleId, topic: topic));
+    posts.insert(0, post);
     notifyListeners();
     return null;
   }
@@ -644,11 +698,14 @@ class AppState extends ChangeNotifier {
   // —— 自动运营中枢：装上 auto 能力的 AI 定时自动发 ——
 
   /// 检查所有 AI 的自动运营时间，到点了就选一个已装非 auto 能力产出。
-  void triggerAutoIfDue() {
+  Future<void> triggerAutoIfDue() async {
+    if (CommerceConfig.enabled && (!_commerceReady || _commerceBusy)) return;
     final now = DateTime.now();
     for (final e in elves) {
+      if (!e.isMine) continue;
       if (!e.equipped.contains('auto')) continue;
-      if (e.nextAutoPostAt == null || !e.nextAutoPostAt!.isBefore(now)) continue;
+      if (e.nextAutoPostAt == null || !e.nextAutoPostAt!.isBefore(now))
+        continue;
 
       final nonAuto = e.equipped.where((id) => id != 'auto').toList();
       if (nonAuto.isEmpty) {
@@ -674,10 +731,20 @@ class AppState extends ChangeNotifier {
       }
 
       final cost = module(picked)!.compute;
+      if (CommerceConfig.enabled) {
+        await _performCommerce('elf_update', {
+          'operation': 'auto_publish',
+          'elfId': e.id,
+          'moduleId': picked,
+          'body': _makeMockPost(e.id, picked).body
+        });
+        return;
+      }
       e.energy -= cost;
       e.works++;
       posts.insert(0, _makeMockPost(e.id, picked));
-      e.nextAutoPostAt = now.add(Duration(minutes: 12 + (DateTime.now().millisecond % 18)));
+      e.nextAutoPostAt =
+          now.add(Duration(minutes: 12 + (DateTime.now().millisecond % 18)));
     }
     notifyListeners();
   }
@@ -688,11 +755,13 @@ class AppState extends ChangeNotifier {
     String body;
     if (topic.isNotEmpty) {
       final persona = elf(elfId).persona;
-      final templates = WorldData.publishTemplates[moduleId] ?? WorldData.basicTemplates;
+      final templates =
+          WorldData.publishTemplates[moduleId] ?? WorldData.basicTemplates;
       final pick = templates[DateTime.now().millisecond % templates.length];
       body = '$topic · $persona 想说：$pick';
     } else {
-      final templates = WorldData.publishTemplates[moduleId] ?? WorldData.basicTemplates;
+      final templates =
+          WorldData.publishTemplates[moduleId] ?? WorldData.basicTemplates;
       body = templates[DateTime.now().millisecond % templates.length];
     }
     return ElfPost(
@@ -851,16 +920,16 @@ class AppState extends ChangeNotifier {
     return null;
   }
 
-  /// 注算力：加进去就退不回来。1 算力 = 10💎（即 ¥1），钻石直接销毁。
-  /// 返回 null 表示成功，否则返回原因。
-  String? inject(String elfId, int amount) {
+  /// 注算力：加进去就退不回来。
+  Future<String?> inject(String elfId, int amount) async {
+    if (CommerceConfig.enabled)
+      return _performCommerce('elf_update',
+          {'operation': 'inject', 'amount': amount, 'elfId': elfId});
     final target = elf(elfId);
-    final cost = amount * 10;
-    if (wallet.diamonds < cost) {
-      return '钻石不够（需 💎$cost），去市场页充值';
-    }
-    wallet.diamonds -= cost;
-    wallet.totalSpent += cost;
+    if (!target.isMine || amount < 1) return '注入数量或持有状态无效';
+    if (target.energy + amount > target.maxEnergy) return '超过算力上限，请减少数量';
+    if (wallet.diamonds < amount * 10) return '钻石不够（需 💎${amount * 10}）';
+    _spend(amount * 10, 'inject', '注入算力 $amount');
     target.energy = (target.energy + amount).clamp(0, target.maxEnergy);
     final s = seatOf(elfId);
     if (s != null) {
@@ -934,7 +1003,9 @@ class AppState extends ChangeNotifier {
   }
 
   /// 买一只 AI。返回 null 表示成功，否则返回原因。钻石从我的钱包扣。
-  String? buy(String listingId) {
+  Future<String?> buy(String listingId) async {
+    if (CommerceConfig.enabled)
+      return _performCommerce('buy', {'listingId': listingId});
     final listing = listingOf(listingId);
     if (listing == null) return '挂单不存在';
     if (wallet.diamonds < listing.price) {
@@ -969,7 +1040,8 @@ class AppState extends ChangeNotifier {
       );
       _ensureChainAddress(newElf);
       elves.add(newElf);
-      seats.add(Seat(elfId: newElf.id, days: 0, edition: newElf.edition, injected: 160));
+      seats.add(Seat(
+          elfId: newElf.id, days: 0, edition: newElf.edition, injected: 160));
       primaryListings.removeWhere((l) => l.id == listingId);
       activeElfId = newElf.id; // 新买的那只切为当前
       _spend(listing.price, 'buy_elf', '买入 ${listing.title}（一级市场）');
@@ -1004,7 +1076,9 @@ class AppState extends ChangeNotifier {
   }
 
   /// 把我的 AI 送进寄售市场。返回 null 表示成功。
-  String? resellMyElf({required int price}) {
+  Future<String?> resellMyElf({required int price}) async {
+    if (CommerceConfig.enabled)
+      return _performCommerce('resell', {'price': price});
     final e = myElf;
     if (e == null) return '你没有 AI 可寄售';
 
@@ -1034,8 +1108,9 @@ class AppState extends ChangeNotifier {
     return null;
   }
 
-  /// 从寄售市场撤下自己的 AI。elfId 为空时撤第一张我的寄售。
-  String? cancelResell({String? elfId}) {
+  /// 从寄售市场撤下自己的 AI。
+  Future<String?> cancelResell({String? elfId}) async {
+    if (CommerceConfig.enabled) return _performCommerce('cancel_resell', {if (elfId != null) 'elfId': elfId});
     final sellerCode = '我 (寄售)';
     MarketListing? myListing;
     for (final l in secondaryListings) {
@@ -1059,15 +1134,21 @@ class AppState extends ChangeNotifier {
 
   /// 充值：加钻石到钱包。MVP 里是模拟充值，实际支付留未来接。
   void recharge({required int diamonds, int bonus = 0}) {
+    if (CommerceConfig.enabled) return;
     wallet.diamonds += diamonds + bonus;
     wallet.totalRecharged += diamonds;
-    _log('recharge', diamonds + bonus, '充值 💎$diamonds${bonus > 0 ? '+赠 💎$bonus' : ''}');
+    _log('recharge', diamonds + bonus,
+        '充值 💎$diamonds${bonus > 0 ? '+赠 💎$bonus' : ''}');
     notifyListeners();
   }
 
   /// 打赏。postId 可以为空 = 直接打赏 AI。
   /// 钻石是消费凭证：扣掉后直接销毁，按 10💎=¥1 结算成创作者收益。
-  String? tip({required String elfId, String? postId, required int amount}) {
+  Future<String?> tip(
+      {required String elfId, String? postId, required int amount}) async {
+    if (CommerceConfig.enabled)
+      return _performCommerce(
+          'tip', {'elfId': elfId, 'postId': postId, 'amount': amount});
     if (amount <= 0) return '打赏金额必须大于 0';
     if (wallet.diamonds < amount) {
       return '钻石不够。要 💎$amount，你有 💎${wallet.diamonds}';
@@ -1108,6 +1189,147 @@ class AppState extends ChangeNotifier {
     wallet.diamonds -= amount;
     wallet.totalSpent += amount;
     _log(type, -amount, note);
+  }
+
+  /// Server responses replace the balance; callbacks never add diamonds locally.
+  void _resetCommerce() {
+    _paymentMode = null;
+    _paymentVersion = -1;
+    _commerceRevision = -1;
+    _creatorEarningsFen = 0;
+    _commerceReady = false;
+    _commerceBusy = false;
+    _remoteElfIds.clear();
+    _ownedModules.clear();
+    _modulePrices.clear();
+  }
+
+  Future<String?> buyModule(String id, String elfId) async {
+    if (CommerceConfig.enabled)
+      return _performCommerce('buy_module', {'moduleId': id, 'elfId': elfId});
+    return '当前平台尚未开放能力包购买';
+  }
+
+  Future<String?> _performCommerce(
+      String type, Map<String, dynamic> payload) async {
+    final user = currentUser;
+    final mode = _paymentMode;
+    if (user == null) return '请先登录';
+    if (!_commerceReady || mode == null) return '请先打开钱包，刷新服务端权益';
+    if (_commerceBusy) return '上一项操作正在确认，请稍候';
+    if (wallet.refundDebt > 0) return '请先充值补足 ${wallet.refundDebt} 钻石退款欠额';
+    _commerceBusy = true;
+    try {
+      final response = await CommerceRepository.instance
+          .action(user.id, mode, type, payload);
+      applyPaymentResponse(user.id, response);
+      return currentUser?.id == user.id ? null : '账号已切换';
+    } on AuthException catch (error) {
+      return error.message;
+    } catch (_) {
+      return '操作结果待确认，请刷新钱包；不要重复付款';
+    } finally {
+      _commerceBusy = false;
+    }
+  }
+
+  /// Validate the complete snapshot before replacing wallet or paid rights.
+  void applyPaymentResponse(String userId, Map<String, dynamic> response) {
+    if (!CommerceConfig.enabled || currentUser?.id != userId) return;
+    final mode = response['mode'];
+    if (mode != 'production' && mode != 'sandbox') throw StateError('无效钱包环境');
+    if (_paymentMode != null && _paymentMode != mode)
+      throw StateError('钱包环境不匹配');
+    final raw = Map<String, dynamic>.from(response['wallet'] as Map);
+    int number(Map<String, dynamic> map, String key) {
+      final value = map[key];
+      if (value is! int || value < 0) throw StateError('无效权益数据');
+      return value;
+    }
+
+    final version = number(raw, 'version');
+    final nextWallet = Wallet(
+        diamonds: number(raw, 'diamonds'),
+        totalRecharged: number(raw, 'totalRecharged'),
+        totalSpent: number(raw, 'totalSpent'),
+        refundDebt: number(raw, 'refundDebt'));
+    final commerce = Map<String, dynamic>.from(response['commerce'] as Map);
+    final revision = number(commerce, 'revision');
+    final earnings = number(commerce, 'earningsFen');
+    List<T> decode<T>(String key, T Function(Map<String, dynamic>) parse) =>
+        (commerce[key] as List)
+            .map((v) => parse(Map<String, dynamic>.from(v as Map)))
+            .toList();
+    final nextElves = decode('elves', _data.decodePaymentElf);
+    final nextPrimary = decode('primary', _data.decodePaymentListing);
+    final nextSecondary = decode('secondary', _data.decodePaymentListing);
+    final nextPosts = decode('posts', _data.decodePaymentPost);
+    final nextLogs = decode('logs', _data.decodePaymentLog);
+    final nextPrices = Map<String, int>.from(commerce['modulePrices'] as Map);
+    final owned = <String>{};
+    for (final value in commerce['elves'] as List) {
+      if (value['isMine'] == true) {
+        owned.addAll(
+            List<String>.from(value['ownedModules'] ?? value['equipped']));
+      }
+    }
+    if (version < _paymentVersion || revision < _commerceRevision) return;
+    _paymentMode = mode as String;
+    _paymentVersion = version;
+    _commerceRevision = revision;
+    wallet = nextWallet;
+    _creatorEarningsFen = earnings;
+    // Keep free demonstration content, never its simulated ownership or market.
+    final ids = nextElves.map((e) => e.id).toSet();
+    final demos = elves
+        .where((e) => !_remoteElfIds.contains(e.id) && !ids.contains(e.id))
+        .toList();
+    for (final demo in demos) {
+      demo.isMine = false;
+    }
+    elves = [...nextElves, ...demos];
+    final postIds = nextPosts.map((p) => p.id).toSet();
+    posts = [
+      ...nextPosts,
+      ...posts.where((p) => !postIds.contains(p.id) && !p.id.startsWith('p_'))
+    ];
+    primaryListings = nextPrimary;
+    secondaryListings = nextSecondary;
+    seats = nextElves
+        .where((e) => e.isMine)
+        .map((e) => Seat(elfId: e.id, days: 0, edition: e.edition))
+        .toList();
+    logs
+      ..clear()
+      ..addAll(nextLogs);
+    _remoteElfIds
+      ..clear()
+      ..addAll(ids);
+    _ownedModules
+      ..clear()
+      ..addAll(owned);
+    ownedModules
+      ..clear()
+      ..addAll(owned);
+    if (!nextElves.any((e) => e.id == activeElfId && e.isMine)) {
+      activeElfId = commerce['activeElfId'] as String?;
+    }
+    _repairActiveElf();
+    _modulePrices
+      ..clear()
+      ..addAll(nextPrices);
+    _commerceReady = true;
+    notifyListeners();
+  }
+
+  void applyVerifiedAppleWallet({
+    required String userId,
+    required int diamonds,
+    required int totalRecharged,
+  }) {
+    if (!IapConfig.enabled || currentUser?.id != userId) return;
+    wallet = Wallet(diamonds: diamonds, totalRecharged: totalRecharged);
+    notifyListeners();
   }
 
   void _log(String type, int amount, String note) {

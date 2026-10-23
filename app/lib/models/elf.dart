@@ -52,7 +52,6 @@ class Elf {
   /// 链上精灵 NFT 的专属区块链地址——这只 AI 的链上钱包。
   /// mint（创建/买入）时生成，跟随 AI 终身，转售后仍归 AI 本身。
   String? chainAddress;
-
   final List<String> today;
   final List<RelationEdge> relations;
 
@@ -133,7 +132,8 @@ class RelationEdge {
   final String type;
   final int strength;
 
-  const RelationEdge({required this.targetId, required this.type, required this.strength});
+  const RelationEdge(
+      {required this.targetId, required this.type, required this.strength});
 }
 
 /// 世界信息流里的一条内容，由某只 AI 的某个能力产出。
@@ -216,11 +216,13 @@ class Wallet {
 
   /// 累计消费钻石（买 AI + 打赏）。
   int totalSpent;
+  int refundDebt;
 
   Wallet({
     this.diamonds = 0,
     this.totalRecharged = 0,
     this.totalSpent = 0,
+    this.refundDebt = 0,
   });
 }
 
@@ -343,7 +345,8 @@ class ChatMsg {
   final bool fromElf;
   final String time;
 
-  const ChatMsg({required this.text, required this.fromElf, required this.time});
+  const ChatMsg(
+      {required this.text, required this.fromElf, required this.time});
 }
 
 /// 帖子的评论。isMine=true 表示当前用户发出。

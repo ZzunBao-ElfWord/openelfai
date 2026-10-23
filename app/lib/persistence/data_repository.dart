@@ -58,18 +58,23 @@ class DataRepository {
   }) async {
     final p = await _ensure();
     await Future.wait([
-      p.setString(_kElfs, jsonEncode(elfs.map((e) => _serializeElf(e)).toList())),
+      p.setString(
+          _kElfs, jsonEncode(elfs.map((e) => _serializeElf(e)).toList())),
       p.setString(_kPosts, jsonEncode(posts.map(_serializePost).toList())),
       p.setString(_kSeats, jsonEncode(seats.map(_serializeSeat).toList())),
-      p.setString(_kPrimary, jsonEncode(primary.map(_serializeListing).toList())),
-      p.setString(_kSecondary, jsonEncode(secondary.map(_serializeListing).toList())),
+      p.setString(
+          _kPrimary, jsonEncode(primary.map(_serializeListing).toList())),
+      p.setString(
+          _kSecondary, jsonEncode(secondary.map(_serializeListing).toList())),
       p.setString(_kWallet, jsonEncode(_serializeWallet(wallet))),
       p.setString(_kTips, jsonEncode(tips.map(_serializeTip).toList())),
       p.setString(_kLogs, jsonEncode(logs.map(_serializeLog).toList())),
       p.setString(_kFollowed, jsonEncode(followed.toList())),
-      p.setString(_kComments, jsonEncode(comments.map(
-        (k, v) => MapEntry(k, v.map((c) => c.toJson()).toList()),
-      ))),
+      p.setString(
+          _kComments,
+          jsonEncode(comments.map(
+            (k, v) => MapEntry(k, v.map((c) => c.toJson()).toList()),
+          ))),
       p.setString(_kUser, jsonEncode(user.toJson())),
       p.setString(_kLikedPosts, jsonEncode(likedPosts.toList())),
       p.setString(_kCollectedPosts, jsonEncode(collectedPosts.toList())),
@@ -110,7 +115,8 @@ class DataRepository {
           .map((j) => _deserializeListing(Map<String, dynamic>.from(j)))
           .toList();
       final walletRaw = p.getString(_kWallet) ?? '{}';
-      final wallet = _deserializeWallet(Map<String, dynamic>.from(jsonDecode(walletRaw)));
+      final wallet =
+          _deserializeWallet(Map<String, dynamic>.from(jsonDecode(walletRaw)));
       final tipsRaw = p.getString(_kTips) ?? '[]';
       final tips = (jsonDecode(tipsRaw) as List)
           .map((j) => _deserializeTip(Map<String, dynamic>.from(j)))
@@ -120,7 +126,8 @@ class DataRepository {
           .map((j) => _deserializeLog(Map<String, dynamic>.from(j)))
           .toList();
       final followedRaw = p.getString(_kFollowed) ?? '[]';
-      final followed = (jsonDecode(followedRaw) as List).map((j) => j as String).toSet();
+      final followed =
+          (jsonDecode(followedRaw) as List).map((j) => j as String).toSet();
       final commentsRaw = p.getString(_kComments) ?? '{}';
       final comments = (Map<String, dynamic>.from(jsonDecode(commentsRaw))).map(
         (k, v) => MapEntry(
@@ -196,6 +203,15 @@ class DataRepository {
   }
 
   // —— serialize / deserialize ——
+  // Payment snapshots use the same model schema, but ownership is server-owned.
+  Elf decodePaymentElf(Map<String, dynamic> value) =>
+      _deserializeElf({...value, 'status': 'active'});
+  ElfPost decodePaymentPost(Map<String, dynamic> value) =>
+      _deserializePost(value);
+  MarketListing decodePaymentListing(Map<String, dynamic> value) =>
+      _deserializeListing(value);
+  WalletLog decodePaymentLog(Map<String, dynamic> value) =>
+      _deserializeLog(value);
 
   Map<String, dynamic> _serializeElf(Elf e) => {
         'id': e.id,
@@ -254,8 +270,9 @@ class DataRepository {
         works: j['works'] as int,
         attention: j['attention'] as int,
         earningsYuan: (j['earningsYuan'] as num?)?.toDouble() ?? 0,
-        nextAutoPostAt: j['nextAutoPostAt'] == null
-            ? null
+        nextAutoPostAt: j['nextAutoPostAt'] is num
+            ? DateTime.fromMillisecondsSinceEpoch((j['nextAutoPostAt'] as num).toInt())
+            : j['nextAutoPostAt'] == null ? null
             : DateTime.tryParse(j['nextAutoPostAt'] as String),
         lastDecayAt: j['lastDecayAt'] == null
             ? null

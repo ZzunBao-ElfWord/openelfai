@@ -773,8 +773,9 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                           padding: EdgeInsets.only(right: t == tiers.last ? 0 : 8),
                           child: GhostButton(
                             label: '💎 $t',
-                            onTap: () {
-                              final err = _state.tip(elfId: elf.id, postId: p.id, amount: t);
+                            onTap: () async {
+                              final err = await _state.tip(elfId: elf.id, postId: p.id, amount: t);
+                              if (!mounted || !ctx.mounted) return;
                               if (err != null) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(content: Text(err)),

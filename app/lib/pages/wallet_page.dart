@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+import '../config/iap_config.dart';
+import '../config/commerce_config.dart';
 import '../data/world_data.dart';
 import '../models/elf.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/ios_recharge_panel.dart';
+import '../widgets/alipay_recharge_panel.dart';
 
 /// 钻石钱包：余额 / 充值档位 / 流水 / 打赏记录。
 class WalletPage extends StatelessWidget {
@@ -26,9 +30,18 @@ class WalletPage extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('充值钻石', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.text)),
+                    const Text('充值钻石',
+                        style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.text)),
                     const SizedBox(height: 10),
-                    _rechargeClosed(),
+                    if (IapConfig.enabled)
+                      const IosRechargePanel()
+                    else if (CommerceConfig.android)
+                      const AlipayRechargePanel()
+                    else
+                      _rechargeClosed(),
                     const SizedBox(height: 24),
                     _sectionDivider('流水'),
                     ...state.logs.take(15).map((l) => _logRow(l)),
@@ -37,7 +50,8 @@ class WalletPage extends StatelessWidget {
                         child: Padding(
                           padding: const EdgeInsets.all(20),
                           child: Text('还没有流水。先充值，或去世界里打赏别人的 AI。',
-                              style: TextStyle(fontSize: 11.5, color: AppColors.textMuted)),
+                              style: TextStyle(
+                                  fontSize: 11.5, color: AppColors.textMuted)),
                         ),
                       ),
                     const SizedBox(height: 20),
@@ -75,7 +89,8 @@ class WalletPage extends StatelessWidget {
                   padding: EdgeInsets.zero,
                   alignment: Alignment.centerLeft,
                   onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.arrow_back_ios_new, size: 17, color: AppColors.textSub),
+                  icon: const Icon(Icons.arrow_back_ios_new,
+                      size: 17, color: AppColors.textSub),
                 ),
               ],
             ),
@@ -88,13 +103,16 @@ class WalletPage extends StatelessWidget {
                 const SizedBox(width: 8),
                 Text(
                   '${state.wallet.diamonds}',
-                  style: const TextStyle(fontSize: 34, fontWeight: FontWeight.w700, color: AppColors.cyan),
+                  style: const TextStyle(
+                      fontSize: 34,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.cyan),
                 ),
               ],
             ),
             const SizedBox(height: 4),
             const Text(
-              '钻石余额 · 只能用于消费（购买 AI / 打赏）',
+              '钻石余额 · 购买 AI / 能力包 / 打赏 / 注算力',
               style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
             ),
             const SizedBox(height: 14),
@@ -106,11 +124,14 @@ class WalletPage extends StatelessWidget {
                 _stat('累计消费', '💎${state.wallet.totalSpent}'),
                 _stat(
                   '我的 AI 收益',
-                  WorldData.formatYuan(state.myElf?.earningsYuan ?? 0),
+                  WorldData.formatYuan(state.creatorEarningsYuan),
                 ),
               ],
             ),
             const SizedBox(height: 10),
+            if (state.wallet.refundDebt > 0)
+              Text('退款欠额：${state.wallet.refundDebt} 钻石。消费已暂停，下次充值优先补足欠额。',
+                  style: const TextStyle(color: Colors.orange, fontSize: 12)),
             const Text(
               '消费后钻石不再流通：10💎 = ¥1，创作者获得 50%，平台收取 50%。',
               style: TextStyle(fontSize: 10.5, color: AppColors.textFaint),
@@ -125,9 +146,14 @@ class WalletPage extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontSize: 10, color: AppColors.textFaint)),
+        Text(label,
+            style: const TextStyle(fontSize: 10, color: AppColors.textFaint)),
         const SizedBox(height: 2),
-        Text(value, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.textSub)),
+        Text(value,
+            style: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textSub)),
       ],
     );
   }
@@ -150,12 +176,16 @@ class WalletPage extends StatelessWidget {
               children: const [
                 Text(
                   '充值即将开放',
-                  style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.textSub),
+                  style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textSub),
                 ),
                 SizedBox(height: 3),
                 Text(
                   '接入应用商店官方支付后上线。先去世界里打赏别人的 AI。',
-                  style: TextStyle(fontSize: 10.5, color: AppColors.textMuted, height: 1.5),
+                  style: TextStyle(
+                      fontSize: 10.5, color: AppColors.textMuted, height: 1.5),
                 ),
               ],
             ),
@@ -165,17 +195,16 @@ class WalletPage extends StatelessWidget {
     );
   }
 
-  Widget _rechargeGrid(AppState state) {
-    // 暂时保留代码但不渲染，等内购接好再恢复
-    return const SizedBox.shrink();
-  }
-
   Widget _sectionDivider(String text) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Row(
         children: [
-          Text(text, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.text)),
+          Text(text,
+              style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.text)),
           const SizedBox(width: 8),
           Expanded(child: Container(height: 1, color: AppColors.strokeSoft)),
         ],
@@ -197,12 +226,14 @@ class WalletPage extends StatelessWidget {
                   l.note,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 12, color: AppColors.textSub),
+                  style:
+                      const TextStyle(fontSize: 12, color: AppColors.textSub),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   l.time,
-                  style: const TextStyle(fontSize: 10, color: AppColors.textFaint),
+                  style:
+                      const TextStyle(fontSize: 10, color: AppColors.textFaint),
                 ),
               ],
             ),
