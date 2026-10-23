@@ -1,0 +1,106 @@
+name: Build OpenElf iOS
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-ios:
+    runs-on: macos-15
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: app
+    env:
+      BUILD_NAME: 1.0.4
+      BUILD_NUMBER: '6'
+
+    steps:
+      - name: Check out latest integrated source
+        uses: actions/checkout@v4
+
+      - name: Select supported Xcode
+        run: |
+          developer_dir=$(python3 - <<'PY'
+          import glob, os, re
+          candidates = []
+          for name in glob.glob('/Applications/Xcode*.app'):
+              if re.search(r'beta|rc', name, re.I):
+                  continue
+              match = re.search(r'Xcode_(\d+(?:\.\d+)*)\.app$', name)
+              if match and int(match[1].split('.')[0]) >= 26:
+                  candidates.append((tuple(map(int, match[1].split('.'))), name))
+          preferred = '/Applications/Xcode_26.3.app'
+          selected = preferred if os.path.isdir(preferred) else max(candidates)[1] if candidates else None
+          if not selected:
+              raise SystemExit('No supported stable Xcode 26+ installation found')
+          print(selected + '/Contents/Developer')
+          PY
+          )
+          sudo xcode-select --switch "$developer_dir"
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.6
+          channel: stable
+          cache: true
+
+      - name: Import existing distribution certificate
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.IOS_DISTRIBUTION_P12_BASE64 }}
+          p12-password: ${{ secrets.IOS_DISTRIBUTION_P12_PASSWORD }}
+
+      - name: Validate existing App Store profile
+        env:
+          IOS_PROFILE_BASE64: ${{ secrets.IOS_PROFILE_BASE64 }}
+        run: |
+          test -n "$IOS_PROFILE_BASE64"
+          profile_path="$RUNNER_TEMP/openelf.mobileprovision"
+          printf '%s' "$IOS_PROFILE_BASE64" | base64 --decode > "$profile_path"
+          security cms -D -i "$profile_path" -o "$RUNNER_TEMP/openelf-profile.plist"
+          python3 - <<'PY'
+          import datetime, hashlib, os, plistlib
+          with open(os.environ['RUNNER_TEMP'] + '/openelf-profile.plist', 'rb') as f:
+              profile = plistlib.load(f)
+          entitlements = profile['Entitlements']
+          team = profile['TeamIdentifier'][0]
+          assert entitlements['application-identifier'] == team + '.com.ai.openelf', 'Bundle ID mismatch'
+          assert entitlements.get('get-task-allow') is False, 'Development profile rejected'
+          assert 'ProvisionedDevices' not in profile, 'Ad Hoc profile rejected'
+          assert not profile.get('ProvisionsAllDevices'), 'Enterprise profile rejected'
+          assert profile['ExpirationDate'] > datetime.datetime.utcnow(), 'Expired provisioning profile'
+          certificates = profile['DeveloperCertificates']
+          assert len(certificates) == 1, 'Expected a single App Store distribution certificate'
+          fingerprint = hashlib.sha1(certificates[0]).hexdigest().upper()
+          with open(os.environ['GITHUB_ENV'], 'a') as f:
+              f.write('IOS_SIGNING_IDENTITY=' + fingerprint + '\n')
+          with open(os.environ['RUNNER_TEMP'] + '/openelf-entitlements.plist', 'wb') as f:
+              plistlib.dump(entitlements, f)
+          print('Validated App Store profile for com.ai.openelf')
+          PY
+
+      - name: Resolve current Flutter dependencies
+        run: flutter pub get
+
+      - name: Build latest iOS release
+        run: |
+          flutter build ios --release --no-codesign \
+            --build-name="$BUILD_NAME" --build-number="$BUILD_NUMBER" \
+            --dart-define=ALIYUN_CAPTCHA_IOS_ID=a6a503af8a6273b0c3842ef3432f08a1
+
+      - name: Sign and package Transporter IPA
+        run: bash scripts/ci_sign_ipa.sh
+
+      - name: Upload signed IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenElf1.0.4-iOS
+          path: app/build/ios/export/OpenElf1.0.4.ipa
+          if-no-files-found: error
+          retention-days: 7
