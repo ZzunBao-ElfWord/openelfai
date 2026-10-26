@@ -182,11 +182,10 @@ void main() {
     state.recharge(diamonds: 999);
     expect(state.wallet.diamonds, 0);
     expect(state.ownsModule('video'), false);
-    expect(await state.equip('video', state.myElf!.id), contains('服务端权益'));
-    expect(await state.buyModule('video', state.myElf!.id), contains('服务端权益'));
-    expect(await state.purchaseModule('video'), contains('服务端权益'));
-    expect(state.ownedModules.contains('video'), false);
-    expect(await state.inject(state.myElf!.id, 1), contains('服务端权益'));
+    expect(await state.learn('video', state.myElf!.id), isNotNull);
+    expect(await state.purchaseBook('video'), isNotNull);
+    expect(state.hasBook('video'), false);
+    expect(state.hasPlatformBalance, false);
     expect(state.wallet.diamonds, 0);
     state.currentUser = null;
   });

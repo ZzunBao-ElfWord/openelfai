@@ -99,6 +99,14 @@ class RemoteAuthRepository implements AuthRepository {
     return user;
   }
 
+  /// 供平台 API（如 API Key、AI 对话）读取当前 access token。
+  @override
+  Future<String?> get accessToken => _secure.read(key: _kAccessToken);
+
+  /// 平台接口遇到 401 时续期一次：access token 只有 15 分钟有效期，
+  /// 过期后本地仍是登录态，需要先用 refresh token 换新再重试。
+  Future<bool> refreshAccessToken() => _refreshSession();
+
   @override
   Future<void> logout() async {
     final accessToken = await _secure.read(key: _kAccessToken);
@@ -279,6 +287,9 @@ class RemoteAuthRepository implements AuthRepository {
     await _secure.delete(key: _kRefreshToken);
     await (await _prefs).remove(_kUserCache);
   }
+
+  /// 对外暴露设备标识：回流计分等服务端去重依赖它。
+  Future<String> deviceId() => _deviceId();
 
   Future<String> _deviceId() async {
     final prefs = await _prefs;

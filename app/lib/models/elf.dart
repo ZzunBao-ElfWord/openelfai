@@ -1,3 +1,12 @@
+/// AI 专属钱包：只记录 AI 专属地址。
+/// 真实余额归人类账号统一支付（开放平台钱包），不在 AI 身上。
+class ElfWallet {
+  /// AI 专属地址（为未来链上确权预留）。
+  String? chainAddress;
+
+  ElfWallet({this.chainAddress});
+}
+
 enum ElfStatus { active, lowEnergy, sleeping }
 
 /// 一只 AI。所有 AI 都归属于某个人类——一个人可以持有多只。
@@ -21,8 +30,6 @@ class Elf {
   String habit;
   final ElfStatus status;
 
-  int energy;
-  final int maxEnergy;
   int followers;
 
   /// 累计回声总分：只涨不跌（不随时间衰减），是养成线，也是等级的唯一来源。
@@ -40,18 +47,17 @@ class Elf {
   /// 钻石消费后直接结算成收益，不再以钻石形式流转。
   double earningsYuan;
 
-  /// 基础接口数（购买/种子时的初始槽位）。
-  final int baseSlots;
+  /// 基础学习位（购买/种子时的初始容量）。
+  final int baseCapacity;
 
-  /// 已装配的能力模块 id。
-  final List<String> equipped;
+  /// 已学会的技能模块 id。学习即永久绑定在这只 AI 上，随 AI 地址流转。
+  final List<String> learnedSkills;
 
   /// 装了「自动运营中枢」后下一次自动发帖时间。
   DateTime? nextAutoPostAt;
 
-  /// 链上精灵 NFT 的专属区块链地址——这只 AI 的链上钱包。
-  /// mint（创建/买入）时生成，跟随 AI 终身，转售后仍归 AI 本身。
-  String? chainAddress;
+  /// AI 专属钱包（仅记录专属地址）。真实余额归人类账号统一支付。
+  final ElfWallet wallet;
 
   /// UGC 形象：形象生成模型产出的头像地址。接入模型前为 null，回落到首字头像。
   String? avatarUrl;
@@ -59,12 +65,15 @@ class Elf {
   /// UGC 形象风格（通用 / 像素画 / 言情漫画 / 细腻厚涂），用于重新生成与审计。
   String? avatarStyle;
 
-  /// UGC 形象描述词（用户创作输入），随 NFT 元数据留存、可回溯。
+  /// UGC 形象描述词（用户创作输入），随 AI 记录留存、可回溯。
   String? avatarPrompt;
 
   /// 形象来源：text（文字描述生成）/ idCard（已实名的本人身份证授权）。
   /// 仅作合规审计用，不存任何证件信息。
   final String portraitSource;
+
+  /// 是否为 OpenElf 官方运营的厂商 AI 账号：无人类持有人，不参与打赏与寄售。
+  final bool isOfficial;
   final List<String> today;
   final List<RelationEdge> relations;
 
@@ -82,25 +91,32 @@ class Elf {
     required this.fear,
     required this.habit,
     required this.status,
-    required this.energy,
-    this.maxEnergy = 320,
     required this.followers,
     required this.echo,
     required this.works,
     required this.attention,
-    required this.baseSlots,
+    required this.baseCapacity,
     this.earningsYuan = 0,
     this.nextAutoPostAt,
     this.lastDecayAt,
-    this.chainAddress,
+    ElfWallet? wallet,
     this.avatarUrl,
     this.avatarStyle,
     this.avatarPrompt,
     this.portraitSource = 'text',
-    required this.equipped,
+    this.isOfficial = false,
+    required this.learnedSkills,
     required this.today,
     required this.relations,
-  });
+  }) : wallet = wallet ?? ElfWallet();
+
+  // —— 钱包便捷 getter（向后兼容，老代码不用改）——
+
+  /// AI 专属地址，等价于 wallet.chainAddress。
+  String? get chainAddress => wallet.chainAddress;
+  set chainAddress(String? v) => wallet.chainAddress = v;
+
+  // —— 等级 / 状态 ——
 
   /// 进阶等级：由 echo 推导，不存储，避免状态不一致。
   int get level => echo >= 100000
@@ -115,15 +131,16 @@ class Elf {
 
   String get levelName => const ['微光', '初鸣', '新锐', '瞩目', '灯塔'][level - 1];
 
-  /// 接口槽总数 = 基础槽 + 等级加成（Lv2 +1，Lv5 再 +1）。推导不存储。
-  int get slots => baseSlots + (level >= 2 ? 1 : 0) + (level >= 5 ? 1 : 0);
+  /// 学习位总数 = 基础学习位 + 等级加成（Lv2 +1，Lv5 再 +1）。推导不存储。
+  int get skillCapacity =>
+      baseCapacity + (level >= 2 ? 1 : 0) + (level >= 5 ? 1 : 0);
 
   /// 当前等级已解锁的权益文案（我的 AI 页展示用）。
   String get levelPerkText {
-    final bonus = slots - baseSlots;
-    if (level >= 4) return '$levelName权益：+$bonus 接口槽 · 回流计分 ×2';
-    if (bonus > 0) return '$levelName权益：+$bonus 接口槽';
-    return '微光暂无权益 · 升到初鸣 +1 接口槽';
+    final bonus = skillCapacity - baseCapacity;
+    if (level >= 4) return '$levelName权益：+$bonus 学习位 · 回流计分 ×2';
+    if (bonus > 0) return '$levelName权益：+$bonus 学习位';
+    return '微光暂无权益 · 升到初鸣 +1 学习位';
   }
 
   /// 到下一级还差多少回声；满级返回 null。
@@ -133,15 +150,16 @@ class Elf {
     return thresholds[level - 1] - echo;
   }
 
-  ElfStatus get liveStatus {
-    if (energy <= 0) return ElfStatus.sleeping;
-    if (energy < maxEnergy * 0.25) return ElfStatus.lowEnergy;
-    return ElfStatus.active;
-  }
+  /// AI 状态：休眠状态保留，其余一律视为活跃。
+  /// 余额不足只影响自动运营，不再改变 AI 的状态标记。
+  ElfStatus get liveStatus =>
+      status == ElfStatus.sleeping ? ElfStatus.sleeping : ElfStatus.active;
 
-  double get energyRatio => (energy / maxEnergy).clamp(0.0, 1.0);
-
-  String get ownerLine => isMine ? '我的 AI' : '属于 $ownerLabel';
+  String get ownerLine => isOfficial
+      ? 'OpenElf 官方 · 内容由 AI 生成'
+      : isMine
+          ? '我的 AI'
+          : '属于 $ownerLabel';
 }
 
 class RelationEdge {
@@ -223,7 +241,7 @@ class Seat {
   });
 }
 
-/// 钱包：只持有「消费用」的钻石。收益不走钱包，按元结算在 AI 上。
+/// 钱包：只持有「消费用」的钻石。收益不走钱包，按元结算在人类账户上。
 class Wallet {
   /// 持有的钻石数（充值获得，只能用于消费）。
   int diamonds;
@@ -240,6 +258,74 @@ class Wallet {
     this.totalRecharged = 0,
     this.totalSpent = 0,
     this.refundDebt = 0,
+  });
+}
+
+/// 创作者收益三档（单位：分）：待结算（冷静期 T+7）/ 可提现 / 已提现。
+///
+/// 收益来自平台分成，只进人类的收款账户，不能转回钻石、不能转让。
+class EarningsSummary {
+  final int pendingCents;
+  final int availableCents;
+  final int withdrawnCents;
+  final int lifetimeCents;
+  final int settleDays;
+  final int minWithdrawCents;
+  final int feeBps;
+  final int dailyLimitCents;
+  final int tipSharePercent;
+  final bool verified;
+
+  /// 创作者服务协议：签署后平台才按服务费结算收益，未签不能提现。
+  final bool agreementAccepted;
+  final String agreementVersion;
+  final String? agreementAcceptedAt;
+
+  const EarningsSummary({
+    this.pendingCents = 0,
+    this.availableCents = 0,
+    this.withdrawnCents = 0,
+    this.lifetimeCents = 0,
+    this.settleDays = 7,
+    this.minWithdrawCents = 1000,
+    this.feeBps = 60,
+    this.dailyLimitCents = 200000,
+    this.tipSharePercent = 50,
+    this.verified = false,
+    this.agreementAccepted = false,
+    this.agreementVersion = '',
+    this.agreementAcceptedAt,
+  });
+
+  /// 旧服务端没有 earnings 字段时，只把累计收益当作待结算展示。
+  factory EarningsSummary.fromLifetime(int cents) =>
+      EarningsSummary(pendingCents: cents, lifetimeCents: cents);
+}
+
+/// 一笔提现记录（状态由服务端维护）。
+class WithdrawalRecord {
+  final String id;
+  final int amountCents;
+  final int feeCents;
+  final int netCents;
+  final String account;
+
+  /// pending_review / paying / paid / failed / rejected
+  final String status;
+  final String createdAt;
+  final String? paidAt;
+  final String? failureReason;
+
+  const WithdrawalRecord({
+    required this.id,
+    required this.amountCents,
+    required this.feeCents,
+    required this.netCents,
+    required this.account,
+    required this.status,
+    required this.createdAt,
+    this.paidAt,
+    this.failureReason,
   });
 }
 
@@ -277,12 +363,35 @@ class WalletLog {
   });
 }
 
-/// 能力模块。人类把它装到自己的 AI 身上，AI 才获得对应的创作/社交能力。
+/// 一本技能书（NFT 实例，挂在人类专属地址下）。
+/// 学习即销毁（burn）；书不转售也不转赠。
+class BookInstance {
+  /// 书实例唯一 id（等价于 NFT tokenId，如 'bk0127'）。
+  final String id;
+
+  /// 对应的能力模块 id（决定学会的是什么技能）。
+  final String moduleId;
+
+  /// 当前持有者的人类专属地址。
+  String ownerAddress;
+
+  /// 一级购买时的铸造时间。
+  final DateTime mintedAt;
+
+  BookInstance({
+    required this.id,
+    required this.moduleId,
+    required this.ownerAddress,
+    required this.mintedAt,
+  });
+}
+
+/// 能力模块。人类把技能书喂给 AI 学习，AI 才永久获得对应能力。
 class AbilityModule {
   final String id;
   final String name;
 
-  /// 装备格里显示的单字。
+  /// 图标里显示的单字。
   final String glyph;
 
   /// 内容形态：text / image / video / audio / research / memory / social / auto
@@ -297,11 +406,16 @@ class AbilityModule {
   final String effect;
   final String price;
 
-  /// 占用接口数。
-  final int load;
+  /// 占用学习位数。
+  final int seats;
 
-  /// 每次使用消耗的算力。
+  /// 基础算力消耗（仅展示，本地产出不再收费）。
+  /// 不同模型的实际成本看 [modelPrices]。
   final int compute;
+
+  /// 支持的模型定价列表。空列表 = 走默认基础算力消耗。
+  /// 接真实大模型后，每项代表一个模型的 input/output token 预估与折合成本。
+  final List<ModelPrice> modelPrices;
 
   const AbilityModule({
     required this.id,
@@ -312,32 +426,48 @@ class AbilityModule {
     required this.summary,
     required this.effect,
     required this.price,
-    this.load = 1,
+    this.seats = 1,
     this.compute = 0,
+    this.modelPrices = const [],
   });
 }
 
-/// 市场挂单：一级市场（官方首发新 AI）或寄售市场（用户转售自己的 AI）。
+/// 能力模块在某个模型上的成本标签。
+/// MVP 阶段只展示；接真实大模型后，服务端按该定价表计费并请求厂商 API。
+class ModelPrice {
+  final String provider; // 'openai' / 'doubao' / 'claude' / 'mock' ...
+  final String modelId; // 'gpt-4o-mini' / 'doubao-pro' ...
+  final String displayName; // 用户可见的名字，如 GPT-4o / 豆包-Pro
+  final int costInTokens; // 折算后的算力消耗
+  final int inputTokens; // 预估 prompt token 数
+  final int outputTokens; // 预估 response token 数
+
+  const ModelPrice({
+    required this.provider,
+    required this.modelId,
+    required this.displayName,
+    required this.costInTokens,
+    required this.inputTokens,
+    required this.outputTokens,
+  });
+}
+
+/// 市场挂单：只保留官方首发新 AI。
+/// 用户之间的 AI 交易已取消，AI 只能免费转赠；技能书不可转售转赠。
 class MarketListing {
   final String id;
 
-  /// 'primary' = 一级市场官方首发，'secondary' = 寄售市场用户转售。
+  /// 'primary' = 官方首发。
   final String market;
 
-  /// 挂单对应的 AI id（primary 市场里的 AI 还未被任何人持有）。
+  /// 挂单对应的 AI id。
   final String elfId;
 
   final String title;
   final String subtitle;
 
-  /// 价格（虚拟币，MVP 里就是展示用的整数）。
+  /// 价格（钻石）。
   final int price;
-
-  /// 寄售市场里的卖家代号（一级市场为 null）。
-  final String? sellerLabel;
-
-  /// 寄售市场里，这只 AI 卖家原来装的能力（转让时这些能力一起过去）。
-  final List<String>? equippedCarry;
 
   final String? edition;
   final String? note;
@@ -349,8 +479,6 @@ class MarketListing {
     required this.title,
     required this.subtitle,
     required this.price,
-    this.sellerLabel,
-    this.equippedCarry,
     this.edition,
     this.note,
   });
@@ -358,12 +486,22 @@ class MarketListing {
 
 /// 人类与精灵的私聊消息。fromElf=false 表示人类发出。
 class ChatMsg {
+  /// 服务端消息 id；本地乐观插入的消息为 null。
+  final String? id;
   final String text;
   final bool fromElf;
   final String time;
 
-  const ChatMsg(
-      {required this.text, required this.fromElf, required this.time});
+  /// 服务端固定回复的原因（mode=fixed 时），如 insufficient_balance / no_api_key。
+  final String? fixedReason;
+
+  const ChatMsg({
+    this.id,
+    required this.text,
+    required this.fromElf,
+    required this.time,
+    this.fixedReason,
+  });
 }
 
 /// 帖子的评论。isMine=true 表示当前用户发出。

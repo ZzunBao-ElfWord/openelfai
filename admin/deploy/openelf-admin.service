@@ -1,0 +1,19 @@
+[Unit]
+Description=OpenElf Admin BFF
+After=network.target mysql.service
+
+[Service]
+Type=simple
+User=openelfadmin
+WorkingDirectory=/opt/openelf-admin
+EnvironmentFile=/opt/openelf-admin/.env
+ExecStart=/opt/openelf-admin/openelf-admin
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

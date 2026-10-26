@@ -1,10 +1,10 @@
 'use client';
 
 /* Openelf 开放精灵 · 偏好调节面板（保留原版功能）
- * 三项偏好与原版一致：显示密度（舒适/紧凑）、排序方式（最新收录/按名称）、主色调。
- * 默认值即品牌色定案：主色 #2E7A58（精灵绿）、深绿 #1F5740（悬停/强调）、
- * 浅绿 #E8F3ED（背景/分区）、琥珀金 #F5B841（行动按钮点缀）。
- * 偏好仅存于浏览器 localStorage（键 openelf:prefs:v1），不上传、无账号。
+ * 三项偏好：显示密度（舒适/紧凑）、排序方式（按知名度/最新收录/按名称）、主色调。
+ * 默认值即品牌色定案：主色 #2563EB（精灵蓝）、深蓝 #1D4ED8（悬停/强调）、
+ * 浅蓝 #EFF4FF（背景/分区）。
+ * 偏好仅存于浏览器 localStorage（键 openelf:prefs:v2），不上传、无账号。
  */
 import {
   createContext,
@@ -14,26 +14,29 @@ import {
   useRef,
   useState
 } from 'react';
+import { usePathname } from 'next/navigation';
 import { Icon } from './icons';
 
-const PREFS_KEY = 'openelf:prefs:v1';
+const PREFS_KEY = 'openelf:prefs:v2';
 
 const DEFAULTS = {
   density: 'comfort', // comfort | compact
-  sort: 'latest', // latest | name
-  accent: '#2E7A58' // 品牌色：精灵绿
+  sort: 'hot', // hot | latest | name
+  accent: '#2563EB' // 品牌色：精灵蓝
 };
 
-const ACCENT_PRESETS = ['#2E7A58', '#2F4858', '#9A6B2F'];
+const SORT_MODES = ['hot', 'latest', 'name'];
+
+const ACCENT_PRESETS = ['#2563EB', '#0F172A', '#0E7490'];
 
 /* 品牌默认色用精确值；用户自选色用 color-mix 派生强调/浅色变体 */
 function applyAccent(accent) {
   const root = document.documentElement;
   const norm = (accent || '').trim().toLowerCase();
-  if (norm === '#2e7a58') {
-    root.style.setProperty('--elf', '#2E7A58');
-    root.style.setProperty('--elf-strong', '#1F5740');
-    root.style.setProperty('--elf-soft', '#E8F3ED');
+  if (norm === '#2563eb') {
+    root.style.setProperty('--elf', '#2563EB');
+    root.style.setProperty('--elf-strong', '#1D4ED8');
+    root.style.setProperty('--elf-soft', '#EFF4FF');
   } else if (/^#[0-9a-f]{6}$/.test(norm)) {
     root.style.setProperty('--elf', norm);
     root.style.setProperty('--elf-strong', `color-mix(in srgb, ${norm} 78%, #10241B)`);
@@ -66,7 +69,7 @@ export function PreferencesProvider({ children }) {
         const saved = JSON.parse(raw);
         setPrefs({
           density: saved.density === 'compact' ? 'compact' : 'comfort',
-          sort: saved.sort === 'name' ? 'name' : 'latest',
+          sort: SORT_MODES.includes(saved.sort) ? saved.sort : DEFAULTS.sort,
           accent: /^#[0-9A-Fa-f]{6}$/.test(saved.accent || '')
             ? saved.accent
             : DEFAULTS.accent
@@ -108,6 +111,7 @@ export function PreferencesProvider({ children }) {
 function PreferencePanel({ prefs, setPref, reset }) {
   const [open, setOpen] = useState(false);
   const panelRef = useRef(null);
+  const pathname = usePathname() || '/';
 
   useEffect(() => {
     if (!open) return;
@@ -117,6 +121,11 @@ function PreferencePanel({ prefs, setPref, reset }) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [open]);
+
+  // 官网首页与下载页是纯品牌页，不展示图鉴偏好入口
+  if (pathname === '/' || pathname === '/download' || pathname === '/download/') return null;
+  // 开发者控制台使用独立全屏深色布局，不显示偏好悬浮按钮
+  if (pathname === '/console' || pathname.startsWith('/console/')) return null;
 
   return (
     <>
@@ -170,6 +179,15 @@ function PreferencePanel({ prefs, setPref, reset }) {
               <button
                 type="button"
                 role="radio"
+                aria-checked={prefs.sort === 'hot'}
+                className={'pref-seg-btn' + (prefs.sort === 'hot' ? ' is-on' : '')}
+                onClick={() => setPref('sort', 'hot')}
+              >
+                按知名度
+              </button>
+              <button
+                type="button"
+                role="radio"
                 aria-checked={prefs.sort === 'latest'}
                 className={'pref-seg-btn' + (prefs.sort === 'latest' ? ' is-on' : '')}
                 onClick={() => setPref('sort', 'latest')}
@@ -220,7 +238,7 @@ function PreferencePanel({ prefs, setPref, reset }) {
           </div>
 
           <button type="button" className="pref-reset" onClick={reset}>
-            恢复默认（精灵绿）
+            恢复默认（精灵蓝）
           </button>
         </div>
       ) : null}

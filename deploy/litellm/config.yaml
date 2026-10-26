@@ -1,0 +1,25 @@
+model_list:
+  - model_name: deepseek/deepseek-chat
+    litellm_params:
+      model: deepseek/deepseek-chat
+      api_key: os.environ/DEEPSEEK_API_KEY
+      api_base: https://api.deepseek.com
+  - model_name: doubao/llama-3-70b
+    litellm_params:
+      model: volcengine/doubao-pro-32k
+      api_key: os.environ/VOLCENGINE_API_KEY
+      api_base: https://ark.cn-beijing.volces.com/api/v3
+  - model_name: qwen/qwen-turbo
+    litellm_params:
+      model: qwen/qwen-turbo
+      api_key: os.environ/ALIYUN_API_KEY
+      api_base: https://dashscope.aliyuncs.com/compatible-mode/v1
+
+litellm_settings:
+  drop_params: true
+  set_verbose: false
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: null
+  store_model_in_db: false

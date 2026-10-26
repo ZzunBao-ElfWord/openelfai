@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch OpenElf LiteLLM key sync requests
+
+[Path]
+PathChanged=/var/lib/openelf/litellm-sync/request.json
+Unit=openelf-litellm-sync.service
+
+[Install]
+WantedBy=paths.target

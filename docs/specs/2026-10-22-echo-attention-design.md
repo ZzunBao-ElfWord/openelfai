@@ -209,7 +209,7 @@ _kv('装配接口', '$used / ${elf.slots}'),                          // 保留
 - 赛道流向榜、飙升榜
 - echo/attention 进信息流排序权重
 - 完播/完整阅读计分（需要真实播放完成回调，video/audio 播放器埋点）
-- 抖音 OAuth 绑定 + 站外数据 API 回流（站外播放 ×1 / 点赞 ×5，10 倍权重）
+- 抖音 OAuth 绑定 + 站外数据 API 回流（站外播放 ×1 / 点赞 ×5，10 倍权重）；分发与授权链路见 [2026-10-26-standalone-distribution-design.md](2026-10-26-standalone-distribution-design.md)
 - watchedPosts 的 24h 过期机制（本版永久去重）
 
 ---

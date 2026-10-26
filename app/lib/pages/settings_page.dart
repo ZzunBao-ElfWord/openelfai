@@ -15,95 +15,99 @@ class SettingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = AppState.instance;
-    return AppBackground(
-      child: SafeArea(
-        bottom: false,
-        child: AnimatedBuilder(
-          animation: state,
-          builder: (context, _) {
-            return ListView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-              children: [
-                _header(context),
-                const SizedBox(height: 14),
-                _userCard(state),
-                const SizedBox(height: 14),
-                _section('外观'),
-                _themeCard(),
-                const SizedBox(height: 18),
-                _section('账户'),
-                _tile(
-                  icon: Icons.account_balance_wallet_outlined,
-                  label: '钻石钱包',
-                  subtitle: '💎${state.wallet.diamonds} · 累计收益 ${WorldData.formatYuan(state.myElf?.earningsYuan ?? 0)}',
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const WalletPage()),
-                  ),
-                ),
-                _tile(
-                  icon: Icons.verified_user_outlined,
-                  label: '实名认证',
-                  subtitle: state.isIdentityVerified
-                      ? '已认证 · ${state.identity?.maskedName ?? ''} · 可用于创建本人形象 AI'
-                      : '上传身份证完成核验，用于创建本人形象 AI',
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                        builder: (_) => const IdentityVerifyPage()),
-                  ),
-                ),
-                const SizedBox(height: 18),
-                _section('法律与政策'),
-                _tile(
-                  icon: Icons.privacy_tip_outlined,
-                  label: '隐私政策',
-                  subtitle: '我们如何收集、使用、保护你的数据',
-                  onTap: () => _openPolicy(context, PolicyKind.privacy),
-                ),
-                _tile(
-                  icon: Icons.gavel_outlined,
-                  label: '用户协议',
-                  subtitle: '使用 OpenElf 的条款',
-                  onTap: () => _openPolicy(context, PolicyKind.terms),
-                ),
-                _tile(
-                  icon: Icons.description_outlined,
-                  label: '社区规范',
-                  subtitle: '发帖、评论、打赏的行为准则',
-                  onTap: () => _openPolicy(context, PolicyKind.community),
-                ),
-                const SizedBox(height: 18),
-                _section('其他'),
-                _tile(
-                  icon: Icons.info_outline,
-                  label: '关于 OpenElf',
-                  subtitle: 'v1.0.0 · 我的 AI，我做主',
-                  onTap: () => _openAbout(context),
-                ),
-                _tile(
-                  icon: Icons.flag_outlined,
-                  label: '举报与反馈',
-                  subtitle: '发现违规或有建议？告诉我们',
-                  onTap: () => _snack(context, '举报入口即将开放'),
-                ),
-                if (state.currentUser != null) ...[
-                  const SizedBox(height: 24),
-                  _divider(),
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      body: AppBackground(
+        child: SafeArea(
+          bottom: false,
+          child: AnimatedBuilder(
+            animation: state,
+            builder: (context, _) {
+              return ListView(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                children: [
+                  _header(context),
                   const SizedBox(height: 14),
-                  _dangerTile(
-                    icon: Icons.logout,
-                    label: '退出登录',
-                    onTap: () => _confirmLogout(context),
+                  _userCard(state),
+                  const SizedBox(height: 14),
+                  _section('外观'),
+                  _themeCard(),
+                  const SizedBox(height: 18),
+                  _section('账户'),
+                  _tile(
+                    icon: Icons.account_balance_wallet_outlined,
+                    label: '钻石钱包',
+                    subtitle:
+                        '💎${state.wallet.diamonds} · 累计收益 ${WorldData.formatYuan(state.myElf?.earningsYuan ?? 0)}',
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const WalletPage()),
+                    ),
                   ),
-                  const SizedBox(height: 8),
-                  _dangerTile(
-                    icon: Icons.delete_forever_outlined,
-                    label: '删除账号',
-                    onTap: () => _confirmDeleteAccount(context),
+                  _tile(
+                    icon: Icons.verified_user_outlined,
+                    label: '实名认证',
+                    subtitle: state.isIdentityVerified
+                        ? '已认证 · ${state.identity?.maskedName ?? ''} · 可用于创建本人形象 AI'
+                        : '上传身份证完成核验，用于创建本人形象 AI',
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                          builder: (_) => const IdentityVerifyPage()),
+                    ),
                   ),
+                  const SizedBox(height: 18),
+                  _section('法律与政策'),
+                  _tile(
+                    icon: Icons.privacy_tip_outlined,
+                    label: '隐私政策',
+                    subtitle: '我们如何收集、使用、保护你的数据',
+                    onTap: () => _openPolicy(context, PolicyKind.privacy),
+                  ),
+                  _tile(
+                    icon: Icons.gavel_outlined,
+                    label: '用户协议',
+                    subtitle: '使用 OpenElf 的条款',
+                    onTap: () => _openPolicy(context, PolicyKind.terms),
+                  ),
+                  _tile(
+                    icon: Icons.description_outlined,
+                    label: '社区规范',
+                    subtitle: '发帖、评论、打赏的行为准则',
+                    onTap: () => _openPolicy(context, PolicyKind.community),
+                  ),
+                  const SizedBox(height: 18),
+                  _section('其他'),
+                  _tile(
+                    icon: Icons.info_outline,
+                    label: '关于 OpenElf',
+                    subtitle: 'v1.0.0 · 我的 AI，我做主',
+                    onTap: () => _openAbout(context),
+                  ),
+                  _tile(
+                    icon: Icons.flag_outlined,
+                    label: '举报与反馈',
+                    subtitle: '发现违规或有建议？告诉我们',
+                    onTap: () => _snack(context, '举报入口即将开放'),
+                  ),
+                  if (state.currentUser != null) ...[
+                    const SizedBox(height: 24),
+                    _divider(),
+                    const SizedBox(height: 14),
+                    _dangerTile(
+                      icon: Icons.logout,
+                      label: '退出登录',
+                      onTap: () => _confirmLogout(context),
+                    ),
+                    const SizedBox(height: 8),
+                    _dangerTile(
+                      icon: Icons.delete_forever_outlined,
+                      label: '删除账号',
+                      onTap: () => _confirmDeleteAccount(context),
+                    ),
+                  ],
                 ],
-              ],
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
     );
@@ -126,7 +130,10 @@ class SettingsPage extends StatelessWidget {
           ),
           Text(
             '设置',
-            style: TextStyle(fontSize: 21, fontWeight: FontWeight.w700, color: AppColors.text),
+            style: TextStyle(
+                fontSize: 21,
+                fontWeight: FontWeight.w700,
+                color: AppColors.text),
           ),
         ],
       );
@@ -199,7 +206,8 @@ class SettingsPage extends StatelessWidget {
           ),
           child: Row(
             children: [
-              _themeOption(ThemeMode.system, Icons.brightness_auto_outlined, '跟随系统'),
+              _themeOption(
+                  ThemeMode.system, Icons.brightness_auto_outlined, '跟随系统'),
               _themeOption(ThemeMode.light, Icons.light_mode_outlined, '白天'),
               _themeOption(ThemeMode.dark, Icons.dark_mode_outlined, '黑夜'),
             ],
@@ -252,7 +260,10 @@ class SettingsPage extends StatelessWidget {
         padding: const EdgeInsets.only(bottom: 10),
         child: Text(
           text,
-          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textSub),
+          style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textSub),
         ),
       );
 
@@ -297,7 +308,8 @@ class SettingsPage extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       subtitle,
-                      style: TextStyle(fontSize: 10.5, color: AppColors.textMuted),
+                      style:
+                          TextStyle(fontSize: 10.5, color: AppColors.textMuted),
                     ),
                   ],
                 ),
@@ -373,7 +385,7 @@ class SettingsPage extends StatelessWidget {
         SizedBox(height: 8),
         Text('我的 AI，我做主。'),
         SizedBox(height: 4),
-        Text('把能力拆成模块，自己组装，放进世界替你争夺注意力。'),
+        Text('把技能做成技能书，自己组装，放进世界替你争夺注意力。'),
       ],
     );
   }
@@ -388,10 +400,12 @@ class SettingsPage extends StatelessWidget {
       builder: (dctx) => AlertDialog(
         backgroundColor: AppColors.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: Text('退出登录', style: TextStyle(color: AppColors.text, fontSize: 16)),
+        title:
+            Text('退出登录', style: TextStyle(color: AppColors.text, fontSize: 16)),
         content: Text(
           '退出后需要重新登录才能继续使用。',
-          style: TextStyle(fontSize: 12.5, color: AppColors.textMuted, height: 1.6),
+          style: TextStyle(
+              fontSize: 12.5, color: AppColors.textMuted, height: 1.6),
         ),
         actions: [
           TextButton(
@@ -426,10 +440,12 @@ class SettingsPage extends StatelessWidget {
       builder: (dctx) => AlertDialog(
         backgroundColor: AppColors.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: Text('删除账号', style: TextStyle(color: AppColors.warn, fontSize: 16)),
+        title:
+            Text('删除账号', style: TextStyle(color: AppColors.warn, fontSize: 16)),
         content: Text(
           '账号删除后，你的 AI、钻石、收益、打赏记录等所有数据将被永久清除，无法恢复。\n\n确认继续？',
-          style: TextStyle(fontSize: 12.5, color: AppColors.textMuted, height: 1.6),
+          style: TextStyle(
+              fontSize: 12.5, color: AppColors.textMuted, height: 1.6),
         ),
         actions: [
           TextButton(
@@ -482,7 +498,8 @@ class _PolicyPage extends StatelessWidget {
               children: [
                 IconButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  icon: Icon(Icons.arrow_back_ios_new, size: 17, color: AppColors.textSub),
+                  icon: Icon(Icons.arrow_back_ios_new,
+                      size: 17, color: AppColors.textSub),
                 ),
                 const Expanded(child: SizedBox()),
               ],
@@ -491,7 +508,11 @@ class _PolicyPage extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
               child: Row(
                 children: [
-                  Text(title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.text)),
+                  Text(title,
+                      style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.text)),
                 ],
               ),
             ),
@@ -507,18 +528,25 @@ class _PolicyPage extends StatelessWidget {
                   ),
                   child: ListView(
                     children: [
-                      Icon(Icons.description_outlined, size: 40, color: AppColors.textMuted),
+                      Icon(Icons.description_outlined,
+                          size: 40, color: AppColors.textMuted),
                       const SizedBox(height: 12),
                       Text(
                         '$title 正在编写中',
                         textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textSub),
+                        style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textSub),
                       ),
                       const SizedBox(height: 6),
                       Text(
                         '完整内容将发布在 $url',
                         textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 11, color: AppColors.textMuted, height: 1.5),
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.textMuted,
+                            height: 1.5),
                       ),
                     ],
                   ),

@@ -1,6 +1,5 @@
 import './globals.css';
-import Header from '../components/header';
-import Footer from '../components/footer';
+import SiteChrome from '../components/site-chrome';
 import { PreferencesProvider } from '../components/preferences';
 import { SITE_NAME, SITE_TITLE, SITE_DESC, SITE_URL } from '../lib/site';
 
@@ -16,7 +15,7 @@ export const metadata = {
     template: '%s | 开放精灵 Openelf'
   },
   description: SITE_DESC,
-  keywords: ['AI工具', 'AI工具大全', 'AI工具导航', '人工智能工具', '全球AI工具', '开放精灵', 'Openelf'],
+  keywords: ['AI明星', 'AI网红', 'AI养成', 'AI创作', 'AI精灵', '开放精灵', 'Openelf'],
   alternates: { canonical: '/' },
   openGraph: {
     type: 'website',
@@ -37,12 +36,15 @@ export default function RootLayout({ children }) {
   return (
     <html lang="zh-CN">
       <body>
+        {/* 注销旧版 Flutter 网页注册的 Service Worker，避免旧缓存拦截新官网 */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister()})})}"
+          }}
+        />
         <PreferencesProvider>
-          <div className="app">
-            <Header />
-            <main className="main">{children}</main>
-            <Footer />
-          </div>
+          <SiteChrome>{children}</SiteChrome>
         </PreferencesProvider>
       </body>
     </html>

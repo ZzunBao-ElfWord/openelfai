@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+
 import '../data/world_data.dart';
 import '../models/elf.dart';
 import '../state/app_state.dart';
@@ -6,10 +9,11 @@ import '../theme.dart';
 import '../widgets/audio_player_card.dart';
 import '../widgets/common.dart';
 import '../widgets/share_card.dart';
-import 'elf_detail_page.dart';
 import 'elf_chat_page.dart';
+import 'login_page.dart';
 import 'attention_board_page.dart';
 import 'media_viewer_page.dart';
+import 'post_detail_page.dart';
 import 'wallet_page.dart';
 
 /// 世界广场（X For You 布局）：顶栏 tabs + 沉浸式多形态信息流 + 算法排序。
@@ -24,14 +28,39 @@ class _WorldPageState extends State<WorldPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tc;
 
+  /// 首次信息流请求要等钱包快照就绪（loadFeed 需要确认计费环境），
+  /// 所以先监听状态，就绪后补一次拉取，避免首屏空着再也不加载。
+  bool _kickedOff = false;
+
   @override
   void initState() {
     super.initState();
     _tc = TabController(length: 3, vsync: this, initialIndex: 0);
+    _tc.addListener(_onTabChanged);
+    AppState.instance.addListener(_tryKickoffFeed);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _tryKickoffFeed());
+  }
+
+  void _tryKickoffFeed() {
+    if (_kickedOff || !mounted) return;
+    final state = AppState.instance;
+    // 未登录时不需要拉流；钱包就绪后再拉，否则请求会因环境未确认被丢掉。
+    if (state.currentUser == null || !state.commerceReady) return;
+    _kickedOff = true;
+    state.loadFeed();
+  }
+
+  /// 切换 tab 时才向服务端要该榜单，避免一次拉三条流。
+  void _onTabChanged() {
+    if (_tc.indexIsChanging) return;
+    final sort = switch (_tc.index) { 1 => 'hot', 2 => 'mine', _ => 'recommend' };
+    AppState.instance.loadFeed(sort: sort);
   }
 
   @override
   void dispose() {
+    AppState.instance.removeListener(_tryKickoffFeed);
+    _tc.removeListener(_onTabChanged);
     _tc.dispose();
     super.dispose();
   }
@@ -57,21 +86,25 @@ class _WorldPageState extends State<WorldPage>
           child: AnimatedBuilder(
             animation: state,
             builder: (context, _) {
-              return Column(
-                children: [
-                  _header(state),
-                  _tabs(),
-                  Expanded(
-                    child: TabBarView(
-                      controller: _tc,
-                      children: [
-                        _feed(state, state.feedForYou()),
-                        _feed(state, state.feedHot()),
-                        _feed(state, state.feedMine()),
-                      ],
+              // 桌面宽屏：头部/标签/信息流整体收窄居中（类似微博网页版）。
+              return WideContent(
+                maxWidth: 760,
+                child: Column(
+                  children: [
+                    _header(state),
+                    _tabs(),
+                    Expanded(
+                      child: TabBarView(
+                        controller: _tc,
+                        children: [
+                          _feed(state, state.feedForYou(), 'recommend'),
+                          _feed(state, state.feedHot(), 'hot'),
+                          _feed(state, state.feedMine(), 'mine'),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               );
             },
           ),
@@ -153,27 +186,61 @@ class _WorldPageState extends State<WorldPage>
     );
   }
 
-  Widget _feed(AppState state, List<ElfPost> posts) {
+  Widget _feed(AppState state, List<ElfPost> posts, String sort) {
+    final loading = state.feedLoading('world', sort: sort);
     if (posts.isEmpty) {
       return Center(
         child: Text(
-          '这里还没有内容。',
+          loading ? '正在加载…' : '这里还没有内容。',
           style: TextStyle(fontSize: 12, color: AppColors.textMuted),
         ),
       );
     }
-    return ListView.separated(
-      itemCount: posts.length,
-      separatorBuilder: (_, __) => Divider(
-        height: 1,
-        thickness: 1,
-        color: AppColors.strokeSoft,
-      ),
-      itemBuilder: (_, i) {
-        final p = posts[i];
-        final elf = state.elf(p.elfId);
-        return _postCard(state, elf, p);
+    final hasMore = state.feedHasMore('world', sort: sort);
+    return NotificationListener<ScrollNotification>(
+      // 触底前一屏就请求下一页，滚动不出现明显停顿。
+      onNotification: (n) {
+        if (n.metrics.extentAfter < 400 && hasMore) {
+          unawaited(state.loadFeed(sort: sort));
+        }
+        return false;
       },
+      child: ListView.separated(
+        itemCount: posts.length + (loading || hasMore ? 1 : 0),
+        separatorBuilder: (_, __) => Divider(
+          height: 1,
+          thickness: 1,
+          color: AppColors.strokeSoft,
+        ),
+        itemBuilder: (_, i) {
+          if (i >= posts.length) return _feedFooter(loading, hasMore, sort);
+          final p = posts[i];
+          final elf = state.elf(p.elfId);
+          return _postCard(state, elf, p);
+        },
+      ),
+    );
+  }
+
+  Widget _feedFooter(bool loading, bool hasMore, String sort) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 18),
+      child: Center(
+        child: loading
+            ? const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2))
+            : TextButton(
+                onPressed: hasMore
+                    ? () => unawaited(AppState.instance.loadFeed(sort: sort))
+                    : null,
+                child: Text(
+                  '加载更多',
+                  style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                ),
+              ),
+      ),
     );
   }
 
@@ -202,8 +269,9 @@ class _WorldPageState extends State<WorldPage>
         // 语音帖：卡片上直接播放，不进详情页。
         break;
       default:
+        // 内容详情页展示作品本身，AI 主页从头像进。
         Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => ElfDetailPage(elfId: elf.id)),
+          MaterialPageRoute(builder: (_) => PostDetailPage(post: p, elf: elf)),
         );
     }
   }
@@ -247,6 +315,22 @@ class _WorldPageState extends State<WorldPage>
                           elf.serial,
                           style: TextStyle(fontSize: 10, color: AppColors.textMuted),
                         ),
+                        if (elf.isOfficial) ...[
+                          const SizedBox(width: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 4, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: AppColors.cyan.withOpacity(0.14),
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                            child: Text(
+                              '官方',
+                              style: TextStyle(
+                                  fontSize: 9, color: AppColors.cyan),
+                            ),
+                          ),
+                        ],
                         const Spacer(),
                         Text(
                           p.timeAgo,
@@ -470,10 +554,18 @@ class _WorldPageState extends State<WorldPage>
     final collected = state.isCollected(p.id);
     return Row(
       children: [
+        // 左侧指标组可横向滚动，窄屏不溢出；打赏按钮常驻右侧
+        Expanded(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
         // 点赞（+1 回声/注视，再点取消回滚）
         GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTap: () => state.toggleLike(p.id),
+          onTap: () {
+            if (checkLoginOrPrompt(context)) state.toggleLike(p.id);
+          },
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 4),
             child: Row(
@@ -498,7 +590,9 @@ class _WorldPageState extends State<WorldPage>
         const SizedBox(width: 16),
         GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTap: () => _showCommentsSheet(state, p),
+          onTap: () {
+            if (checkLoginOrPrompt(context)) _showCommentsSheet(state, p);
+          },
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 4),
             child: Row(
@@ -519,7 +613,9 @@ class _WorldPageState extends State<WorldPage>
         // 收藏（+3 回声/注视，再点取消回滚）
         GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTap: () => state.toggleCollect(p.id),
+          onTap: () {
+            if (checkLoginOrPrompt(context)) state.toggleCollect(p.id);
+          },
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 4),
             child: Row(
@@ -575,12 +671,17 @@ class _WorldPageState extends State<WorldPage>
             child: Icon(Icons.ios_share, size: 14, color: AppColors.textMuted, semanticLabel: '分享'),
           ),
         ),
-        const Spacer(),
-        // 💎 打赏按钮（只对非我的 AI 显示）
-        if (!elf.isMine)
+              ],
+            ),
+          ),
+        ),
+        // 💎 打赏按钮（只对非我的 AI 显示；官方账号无持有人，不支持打赏）
+        if (!elf.isMine && !elf.isOfficial)
           GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: () => _showTipSheet(state, p, tiers),
+            onTap: () {
+              if (checkLoginOrPrompt(context)) _showTipSheet(state, p, tiers);
+            },
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
               decoration: BoxDecoration(
@@ -617,11 +718,12 @@ class _WorldPageState extends State<WorldPage>
     final elf = state.elf(p.elfId);
     final input = TextEditingController();
 
-    void send() {
-      final err = state.addComment(p.id, input.text);
+    Future<void> send() async {
+      // 评论要等服务端回执，先取出 messenger 避免跨 await 使用 context。
+      final messenger = ScaffoldMessenger.of(context);
+      final err = await state.addComment(p.id, input.text);
       if (err != null) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(err)));
+        messenger.showSnackBar(SnackBar(content: Text(err)));
         return;
       }
       input.clear();

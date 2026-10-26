@@ -57,6 +57,12 @@ key.properties
 # Coverage
 coverage/
 
+# Local QA artifacts (adb screenshots and uiautomator dumps)
+/app/*.png
+/app/*.xml
+/app/*.txt
+/app/third_party/**/android/.gradle/
+
 # Misc
 *.swp
 *.swo

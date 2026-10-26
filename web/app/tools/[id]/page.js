@@ -1,12 +1,11 @@
-/* 工具详情页：107 款工具逐一静态生成（generateStaticParams），
+/* 应用详情页：TOOLS（AI 工具应用）逐一静态生成（generateStaticParams），
  * 页面 title / meta description / OG 标签 / canonical / 结构化数据（JSON-LD）齐备。
- * 文案与链接全部来自 data/tools.json，不新增不臆造。 */
+ * 文案与链接全部来自 data/tools.json，不新增不臆造。大模型平台走 /models/[id]/。 */
 import { notFound } from 'next/navigation';
 import BackButton from '../../../components/back-button';
 import { Icon } from '../../../components/icons';
 import { Seal, RegionBadge, EntryButton, ToolCard, SectionHeader } from '../../../components/ui';
 import {
-  CATEGORIES,
   CATEGORY_MAP,
   REGION_LABEL,
   TOOLS,

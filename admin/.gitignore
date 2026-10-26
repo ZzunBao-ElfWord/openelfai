@@ -1,0 +1,5 @@
+.env
+bff/openelf-admin
+bff/internal/web/dist/*
+!bff/internal/web/dist/.gitkeep
+.env.production

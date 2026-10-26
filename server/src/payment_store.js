@@ -8,6 +8,10 @@ const PAYMENT_TABLES = [
     total_spent BIGINT UNSIGNED NOT NULL DEFAULT 0,
     refund_debt BIGINT UNSIGNED NOT NULL DEFAULT 0,
     earnings_fen BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    -- 创作者收益三档：待结算（冷静期）/ 可提现 / 已提现，单位分。
+    pending_cents BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    available_cents BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    withdrawn_cents BIGINT UNSIGNED NOT NULL DEFAULT 0,
     version BIGINT UNSIGNED NOT NULL DEFAULT 0,
     PRIMARY KEY (environment, user_id),
     CONSTRAINT fk_payment_meta_user FOREIGN KEY (user_id) REFERENCES users(id)
@@ -58,6 +62,16 @@ function createPaymentStore(db) {
             async user(id) {
               return (await query('SELECT id, nickname, status FROM users WHERE id = ?', [id]))[0];
             },
+            async userByPhone(phone) {
+              return (await query('SELECT id, nickname, status FROM users WHERE phone = ?', [phone]))[0];
+            },
+            async userByHumanAddress(humanAddress) {
+              return (await query(`SELECT u.id, u.nickname, u.status FROM payment_objects o
+                JOIN users u ON u.id = o.owner_id
+                WHERE o.environment = ? AND o.kind = 'profile'
+                  AND JSON_UNQUOTE(JSON_EXTRACT(o.payload, '$.humanAddress')) = ? LIMIT 1`,
+              [environment, humanAddress]))[0];
+            },
             async lockWallet(userId) {
               await query(`INSERT IGNORE INTO ${names.wallet} (user_id, diamonds, total_recharged, updated_at) VALUES (?, 0, 0, ?)`, [userId, new Date().toISOString()]);
               const row = (await query(`SELECT diamonds, total_recharged FROM ${names.wallet} WHERE user_id = ? FOR UPDATE`, [userId]))[0];
@@ -65,14 +79,17 @@ function createPaymentStore(db) {
               const meta = (await query('SELECT * FROM payment_wallet_meta WHERE environment = ? AND user_id = ? FOR UPDATE', [environment, userId]))[0];
               return { diamonds: safeInteger(row.diamonds), totalRecharged: safeInteger(row.total_recharged),
                 totalSpent: safeInteger(meta.total_spent), refundDebt: safeInteger(meta.refund_debt),
-                earningsFen: safeInteger(meta.earnings_fen), version: safeInteger(meta.version) };
+                earningsFen: safeInteger(meta.earnings_fen), version: safeInteger(meta.version),
+                pendingCents: safeInteger(meta.pending_cents), availableCents: safeInteger(meta.available_cents),
+                withdrawnCents: safeInteger(meta.withdrawn_cents) };
             },
             async saveWallet(userId, wallet) {
               for (const value of Object.values(wallet)) safeInteger(value);
               await query(`UPDATE ${names.wallet} SET diamonds = ?, total_recharged = ?, updated_at = ? WHERE user_id = ?`,
                 [wallet.diamonds, wallet.totalRecharged, new Date().toISOString(), userId]);
-              await query('UPDATE payment_wallet_meta SET total_spent = ?, refund_debt = ?, earnings_fen = ?, version = ? WHERE environment = ? AND user_id = ?',
-                [wallet.totalSpent, wallet.refundDebt, wallet.earningsFen, wallet.version, environment, userId]);
+              await query('UPDATE payment_wallet_meta SET total_spent = ?, refund_debt = ?, earnings_fen = ?, pending_cents = ?, available_cents = ?, withdrawn_cents = ?, version = ? WHERE environment = ? AND user_id = ?',
+                [wallet.totalSpent, wallet.refundDebt, wallet.earningsFen, wallet.pendingCents,
+                  wallet.availableCents, wallet.withdrawnCents, wallet.version, environment, userId]);
             },
             async get(kind, id, lock = false) {
               const rows = await query('SELECT payload FROM payment_objects WHERE environment = ? AND kind = ? AND object_id = ?' + (lock ? ' FOR UPDATE' : ''), [environment, kind, id]);
@@ -84,11 +101,12 @@ function createPaymentStore(db) {
                 ref_id=VALUES(ref_id), state=VALUES(state), payload=VALUES(payload), updated_at=VALUES(updated_at)`,
               [environment, kind, id, owner, ref, state, JSON.stringify(value), new Date().toISOString()]);
             },
-            async list(kind, { owner, state, limit = 200, lock = false } = {}) {
+            async list(kind, { owner, state, ref, limit = 200, lock = false } = {}) {
               const filters = ['environment = ?', 'kind = ?'];
               const params = [environment, kind];
               if (owner !== undefined) { filters.push('owner_id = ?'); params.push(owner); }
               if (state !== undefined) { filters.push('state = ?'); params.push(state); }
+              if (ref !== undefined) { filters.push('ref_id = ?'); params.push(ref); }
               const count = Math.max(1, Math.min(500, Number(limit) || 200));
               const rows = await query(`SELECT payload FROM payment_objects WHERE ${filters.join(' AND ')} ORDER BY updated_at DESC, object_id ASC LIMIT ${Math.trunc(count)}` + (lock ? ' FOR UPDATE' : ''), params);
               return rows.map((row) => JSON.parse(row.payload));

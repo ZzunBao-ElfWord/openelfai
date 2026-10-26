@@ -22,7 +22,6 @@ class DataRepository {
   static const _kPosts = 'openelf.posts';
   static const _kSeats = 'openelf.seats';
   static const _kPrimary = 'openelf.primaryListings';
-  static const _kSecondary = 'openelf.secondaryListings';
   static const _kWallet = 'openelf.wallet';
   static const _kTips = 'openelf.tips';
   static const _kLogs = 'openelf.logs';
@@ -33,7 +32,10 @@ class DataRepository {
   static const _kCollectedPosts = 'openelf.collectedPosts';
   static const _kWatchedPosts = 'openelf.watchedPosts';
   static const _kReferralCounted = 'openelf.referralCounted';
-  static const _kOwnedModules = 'openelf.ownedModules';
+  static const _kBooks = 'openelf.books';
+
+  /// 旧版（装配模式）的已购模块 id，仅用于 v1.6 迁移读取，不再写入。
+  static const _kLegacyOwnedModules = 'openelf.ownedModules';
   static const _kActiveElfId = 'openelf.activeElfId';
   static const _kIdentity = 'openelf.identity';
 
@@ -44,7 +46,6 @@ class DataRepository {
     required List<ElfPost> posts,
     required List<Seat> seats,
     required List<MarketListing> primary,
-    required List<MarketListing> secondary,
     required Wallet wallet,
     required List<Tip> tips,
     required List<WalletLog> logs,
@@ -54,7 +55,7 @@ class DataRepository {
     required Set<String> collectedPosts,
     required Set<String> watchedPosts,
     required Set<String> referralCounted,
-    required Set<String> ownedModules,
+    required List<BookInstance> books,
     String? activeElfId,
     IdentityVerification? identity,
     required User user,
@@ -67,8 +68,6 @@ class DataRepository {
       p.setString(_kSeats, jsonEncode(seats.map(_serializeSeat).toList())),
       p.setString(
           _kPrimary, jsonEncode(primary.map(_serializeListing).toList())),
-      p.setString(
-          _kSecondary, jsonEncode(secondary.map(_serializeListing).toList())),
       p.setString(_kWallet, jsonEncode(_serializeWallet(wallet))),
       p.setString(_kTips, jsonEncode(tips.map(_serializeTip).toList())),
       p.setString(_kLogs, jsonEncode(logs.map(_serializeLog).toList())),
@@ -83,7 +82,7 @@ class DataRepository {
       p.setString(_kCollectedPosts, jsonEncode(collectedPosts.toList())),
       p.setString(_kWatchedPosts, jsonEncode(watchedPosts.toList())),
       p.setString(_kReferralCounted, jsonEncode(referralCounted.toList())),
-      p.setString(_kOwnedModules, jsonEncode(ownedModules.toList())),
+      p.setString(_kBooks, jsonEncode(books.map(_serializeBook).toList())),
       if (activeElfId != null)
         p.setString(_kActiveElfId, activeElfId)
       else
@@ -115,10 +114,6 @@ class DataRepository {
           .toList();
       final primaryRaw = p.getString(_kPrimary) ?? '[]';
       final primary = (jsonDecode(primaryRaw) as List)
-          .map((j) => _deserializeListing(Map<String, dynamic>.from(j)))
-          .toList();
-      final secondaryRaw = p.getString(_kSecondary) ?? '[]';
-      final secondary = (jsonDecode(secondaryRaw) as List)
           .map((j) => _deserializeListing(Map<String, dynamic>.from(j)))
           .toList();
       final walletRaw = p.getString(_kWallet) ?? '{}';
@@ -164,7 +159,6 @@ class DataRepository {
         posts: posts,
         seats: seats,
         primaryListings: primary,
-        secondaryListings: secondary,
         wallet: wallet,
         tips: tips,
         logs: logs,
@@ -174,7 +168,10 @@ class DataRepository {
         collectedPosts: readSet(_kCollectedPosts),
         watchedPosts: readSet(_kWatchedPosts),
         referralCounted: readSet(_kReferralCounted),
-        ownedModules: readSet(_kOwnedModules),
+        books: (jsonDecode(p.getString(_kBooks) ?? '[]') as List)
+            .map((j) => _deserializeBook(Map<String, dynamic>.from(j)))
+            .toList(),
+        legacyOwnedModules: readSet(_kLegacyOwnedModules),
         activeElfId: p.getString(_kActiveElfId),
         identity: identity,
         user: user,
@@ -194,7 +191,6 @@ class DataRepository {
       p.remove(_kPosts),
       p.remove(_kSeats),
       p.remove(_kPrimary),
-      p.remove(_kSecondary),
       p.remove(_kWallet),
       p.remove(_kTips),
       p.remove(_kLogs),
@@ -204,7 +200,8 @@ class DataRepository {
       p.remove(_kCollectedPosts),
       p.remove(_kWatchedPosts),
       p.remove(_kReferralCounted),
-      p.remove(_kOwnedModules),
+      p.remove(_kBooks),
+      p.remove(_kLegacyOwnedModules),
       p.remove(_kActiveElfId),
       p.remove(_kIdentity),
     ]);
@@ -226,6 +223,22 @@ class DataRepository {
       _deserializeListing(value);
   WalletLog decodePaymentLog(Map<String, dynamic> value) =>
       _deserializeLog(value);
+  BookInstance decodePaymentBook(Map<String, dynamic> value) =>
+      _deserializeBook(value);
+
+  /// 技能书目录项：名称/图标/赛道/文案/价格由服务端下发，客户端只做展示。
+  AbilityModule decodePaymentModule(Map<String, dynamic> j) => AbilityModule(
+        id: j['id'] as String,
+        name: j['name']?.toString() ?? '',
+        glyph: j['glyph']?.toString() ?? '',
+        category: j['category']?.toString() ?? 'text',
+        track: j['track']?.toString() ?? 'writing',
+        summary: j['summary']?.toString() ?? '',
+        effect: j['effect']?.toString() ?? '',
+        price: '💎 ${j['price'] ?? 0}',
+        seats: (j['seats'] as num?)?.toInt() ?? 1,
+        compute: (j['compute'] as num?)?.toInt() ?? 0,
+      );
 
   Map<String, dynamic> _serializeElf(Elf e) => {
         'id': e.id,
@@ -241,8 +254,6 @@ class DataRepository {
         'fear': e.fear,
         'habit': e.habit,
         'status': e.status.name,
-        'energy': e.energy,
-        'maxEnergy': e.maxEnergy,
         'followers': e.followers,
         'echo': e.echo,
         'works': e.works,
@@ -255,8 +266,9 @@ class DataRepository {
         'avatarStyle': e.avatarStyle,
         'avatarPrompt': e.avatarPrompt,
         'portraitSource': e.portraitSource,
-        'baseSlots': e.baseSlots,
-        'equipped': e.equipped,
+        'isOfficial': e.isOfficial,
+        'baseCapacity': e.baseCapacity,
+        'learnedSkills': e.learnedSkills,
         'today': e.today,
         'relations': e.relations
             .map((r) => {
@@ -281,28 +293,32 @@ class DataRepository {
         fear: j['fear'] as String,
         habit: j['habit'] as String,
         status: ElfStatus.values.firstWhere((s) => s.name == j['status']),
-        energy: j['energy'] as int,
-        maxEnergy: j['maxEnergy'] as int,
         followers: j['followers'] as int,
         echo: j['echo'] as int,
         works: j['works'] as int,
         attention: j['attention'] as int,
         earningsYuan: (j['earningsYuan'] as num?)?.toDouble() ?? 0,
         nextAutoPostAt: j['nextAutoPostAt'] is num
-            ? DateTime.fromMillisecondsSinceEpoch((j['nextAutoPostAt'] as num).toInt())
-            : j['nextAutoPostAt'] == null ? null
-            : DateTime.tryParse(j['nextAutoPostAt'] as String),
+            ? DateTime.fromMillisecondsSinceEpoch(
+                (j['nextAutoPostAt'] as num).toInt())
+            : j['nextAutoPostAt'] == null
+                ? null
+                : DateTime.tryParse(j['nextAutoPostAt'] as String),
         lastDecayAt: j['lastDecayAt'] == null
             ? null
             : DateTime.tryParse(j['lastDecayAt'] as String),
-        chainAddress: j['chainAddress'] as String?,
+        wallet: ElfWallet(chainAddress: j['chainAddress'] as String?),
         avatarUrl: j['avatarUrl'] as String?,
         avatarStyle: j['avatarStyle'] as String?,
         avatarPrompt: j['avatarPrompt'] as String?,
         portraitSource: j['portraitSource'] as String? ?? 'text',
-        // v1.3 迁移：slots → baseSlots（等级加成改由 getter 推导）
-        baseSlots: (j['baseSlots'] as int?) ?? (j['slots'] as int),
-        equipped: List<String>.from(j['equipped'] as List),
+        isOfficial: j['isOfficial'] as bool? ?? false,
+        // v1.6 迁移：baseSlots/slots → baseCapacity；equipped → learnedSkills
+        baseCapacity: (j['baseCapacity'] as int?) ??
+            (j['baseSlots'] as int?) ??
+            (j['slots'] as int),
+        learnedSkills:
+            List<String>.from((j['learnedSkills'] ?? j['equipped']) as List),
         today: List<String>.from(j['today'] as List),
         relations: (j['relations'] as List)
             .map((r) => RelationEdge(
@@ -376,8 +392,6 @@ class DataRepository {
         'title': l.title,
         'subtitle': l.subtitle,
         'price': l.price,
-        'sellerLabel': l.sellerLabel,
-        'equippedCarry': l.equippedCarry,
         'edition': l.edition,
         'note': l.note,
       };
@@ -385,16 +399,27 @@ class DataRepository {
   MarketListing _deserializeListing(Map<String, dynamic> j) => MarketListing(
         id: j['id'] as String,
         market: j['market'] as String,
-        elfId: j['elfId'] as String,
+        elfId: j['elfId'] as String? ?? '',
         title: j['title'] as String,
         subtitle: j['subtitle'] as String,
         price: j['price'] as int,
-        sellerLabel: j['sellerLabel'] as String?,
-        equippedCarry: j['equippedCarry'] == null
-            ? null
-            : List<String>.from(j['equippedCarry'] as List),
         edition: j['edition'] as String?,
         note: j['note'] as String?,
+      );
+
+  Map<String, dynamic> _serializeBook(BookInstance b) => {
+        'id': b.id,
+        'moduleId': b.moduleId,
+        'ownerAddress': b.ownerAddress,
+        'mintedAt': b.mintedAt.toIso8601String(),
+      };
+
+  BookInstance _deserializeBook(Map<String, dynamic> j) => BookInstance(
+        id: j['id'] as String,
+        moduleId: j['moduleId'] as String,
+        ownerAddress: j['ownerAddress'] as String? ?? '',
+        mintedAt:
+            DateTime.tryParse(j['mintedAt'] as String? ?? '') ?? DateTime.now(),
       );
 
   Map<String, dynamic> _serializeWallet(Wallet w) => {
@@ -448,7 +473,6 @@ class LoadedData {
   final List<ElfPost> posts;
   final List<Seat> seats;
   final List<MarketListing> primaryListings;
-  final List<MarketListing> secondaryListings;
   final Wallet wallet;
   final List<Tip> tips;
   final List<WalletLog> logs;
@@ -458,7 +482,10 @@ class LoadedData {
   final Set<String> collectedPosts;
   final Set<String> watchedPosts;
   final Set<String> referralCounted;
-  final Set<String> ownedModules;
+  final List<BookInstance> books;
+
+  /// 仅用于 v1.6 迁移：旧版已购模块 id。
+  final Set<String> legacyOwnedModules;
   final String? activeElfId;
   final IdentityVerification? identity;
   final User? user;
@@ -468,7 +495,6 @@ class LoadedData {
     required this.posts,
     required this.seats,
     required this.primaryListings,
-    required this.secondaryListings,
     required this.wallet,
     required this.tips,
     required this.logs,
@@ -478,7 +504,8 @@ class LoadedData {
     required this.collectedPosts,
     required this.watchedPosts,
     required this.referralCounted,
-    required this.ownedModules,
+    required this.books,
+    this.legacyOwnedModules = const {},
     this.activeElfId,
     this.identity,
     required this.user,

@@ -102,9 +102,9 @@ export default function ToolsExplorer({ tools }) {
     <div className="page-tools">
       <header className="tools-head">
         <div className="sec-eyebrow">DIRECTORY</div>
-        <h1 className="tools-title">{catName || '全部工具'}</h1>
+        <h1 className="tools-title">{catName || '全部应用'}</h1>
         <p className="tools-count">
-          共 <b>{result.length}</b> 款工具
+          共 <b>{result.length}</b> 个应用
           {activeConds.length ? ' · ' + activeConds.join(' · ') : ''}
         </p>
       </header>
@@ -124,8 +124,8 @@ export default function ToolsExplorer({ tools }) {
           <input
             type="text"
             className="searchbox-input"
-            placeholder="搜索 AI 工具名称或关键词"
-            aria-label="搜索 AI 工具名称或关键词"
+            placeholder="搜索 AI 应用名称或关键词"
+            aria-label="搜索 AI 应用名称或关键词"
             autoComplete="off"
             value={kw}
             onChange={(e) => setKw(e.target.value)}

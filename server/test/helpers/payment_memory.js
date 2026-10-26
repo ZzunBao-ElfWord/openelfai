@@ -21,13 +21,30 @@ function memoryStore() {
         const objectKey = (kind, id) => prefix + kind + ':' + id;
         const tx = {
           async user(id) { return clone(next.users.get(id)); },
+          async userByPhone(phone) {
+            for (const user of next.users.values()) if (user.phone === phone) return clone(user);
+            return undefined;
+          },
+          async userByHumanAddress(humanAddress) {
+            for (const row of next.objects.values()) {
+              if (row.environment !== environment || row.kind !== 'profile') continue;
+              if (row.value?.humanAddress === humanAddress) return clone(next.users.get(row.owner));
+            }
+            return undefined;
+          },
           async lockWallet(id) {
             if (!next.users.has(id)) throw new Error('Foreign key: missing user');
             const key = prefix + id;
             if (!next.wallets.has(key)) next.wallets.set(key, {
               diamonds: 0, totalRecharged: 0, totalSpent: 0, refundDebt: 0, earningsFen: 0, version: 0,
+              pendingCents: 0, availableCents: 0, withdrawnCents: 0,
             });
-            return clone(next.wallets.get(key));
+            const wallet = next.wallets.get(key);
+            // 老测试数据没有收益三档字段，这里补齐默认值。
+            for (const field of ['pendingCents', 'availableCents', 'withdrawnCents']) {
+              if (wallet[field] === undefined) wallet[field] = 0;
+            }
+            return clone(wallet);
           },
           async saveWallet(id, wallet) {
             for (const n of Object.values(wallet)) if (!Number.isSafeInteger(n) || n < 0) throw new Error('Invalid wallet');
@@ -35,9 +52,10 @@ function memoryStore() {
           },
           async get(kind, id) { return clone(next.objects.get(objectKey(kind, id))?.value || null); },
           async put(kind, id, value, options = {}) { next.objects.set(objectKey(kind, id), { environment, kind, id, value: clone(value), ...options }); },
-          async list(kind, { owner, state: status, limit = 200 } = {}) {
+          async list(kind, { owner, state: status, ref, limit = 200 } = {}) {
             return [...next.objects.values()].filter((row) => row.environment === environment && row.kind === kind &&
-              (owner === undefined || row.owner === owner) && (status === undefined || row.state === status))
+              (owner === undefined || row.owner === owner) && (status === undefined || row.state === status) &&
+              (ref === undefined || row.ref === ref))
               .reverse().slice(0, limit).map((row) => clone(row.value));
           },
           async legacyOrder(id) { return clone(next.legacy.get(prefix + id) || null); },

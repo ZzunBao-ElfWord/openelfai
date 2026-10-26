@@ -13,4 +13,12 @@ class CommerceConfig {
       android ? '/api/v1/android/wallet' : '/api/v1/wallet';
   static String get actionsPath =>
       android ? '/api/v1/android/commerce/actions' : '/api/v1/commerce/actions';
+  static String get feedPath =>
+      android ? '/api/v1/android/commerce/feed' : '/api/v1/commerce/feed';
+  static String get chatPath =>
+      android ? '/api/v1/android/commerce/chat' : '/api/v1/commerce/chat';
+  static String get earningsPath =>
+      android ? '/api/v1/android/earnings' : '/api/v1/earnings';
+  static String get wishesPath =>
+      android ? '/api/v1/android/wishes' : '/api/v1/wishes';
 }

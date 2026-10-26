@@ -1,10 +1,13 @@
 'use strict';
 
 const crypto = require('node:crypto');
+const path = require('node:path');
+const fs = require('node:fs/promises');
 const Fastify = require('fastify');
 const rateLimit = require('@fastify/rate-limit');
 
 const config = require('./config');
+const platformConfig = require('./platform/config');
 const { createPool } = require('./db');
 const { createAppleIapService, createAppleVerifier } = require('./apple_iap');
 const { createPaymentStore } = require('./payment_store');
@@ -22,16 +25,76 @@ const {
   signAccessToken,
   verifyAccessToken,
 } = require('./security');
+const {
+  ensureDefaultKey,
+  getDefaultKeyPlain,
+  revealDefaultKey,
+  rotateDefaultKey,
+} = require('./platform/user_keys');
+const { decrypt, keyHint } = require('./platform/secret');
+const { createConsoleHandlers } = require('./platform/console');
+const { createTopupService } = require('./platform/topup');
+const { createUpstream } = require('./platform/upstream');
+const { ensureVendorAgents, createWorldAgentService } = require('./world_agents');
 
 const PHONE_RE = /^1[3-9]\d{9}$/;
 const DEVICE_RE = /^[A-Za-z0-9_-]{8,80}$/;
 const CODE_RE = /^\d{6}$/;
+
+const CORS_ORIGINS = (process.env.PLATFORM_CORS_ORIGINS || 'https://openelfai.com,https://www.openelfai.com')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const CHAT_MAX_TEXT = 2000;
+const CHAT_MAX_HISTORY = 20;
+const CHAT_MAX_HISTORY_CHARS = 8000;
+const CHAT_HISTORY_WINDOW = 12;
+const CHAT_TIMEOUT_MS = 60_000;
+const FALLBACK_REPLY =
+  process.env.PLATFORM_FALLBACK_REPLY || '（这只 AI 还没接通大脑，等我配置好 API Key 再来聊吧～）';
+const AI_UPSTREAM_ERROR = {
+  error: 'ai_upstream_error',
+  message: 'AI 服务暂时不可用，请稍后再试',
+};
+
+function fixedReply(reason) {
+  return { mode: 'fixed', reply: FALLBACK_REPLY, reason };
+}
+
+async function readPlatformWallet(db, userId) {
+  const [rows] = await db.execute(
+    'SELECT balance_micro, frozen_micro, total_topup_micro FROM platform_wallets WHERE user_id = ?',
+    [userId],
+  );
+  const row = rows[0];
+  return {
+    balance_micro: Number(row?.balance_micro || 0),
+    frozen_micro: Number(row?.frozen_micro || 0),
+    total_topup_micro: Number(row?.total_topup_micro || 0),
+  };
+}
 
 function fail(statusCode, code, message) {
   const error = new Error(message);
   error.statusCode = statusCode;
   error.code = code;
   return error;
+}
+
+// 平台余额充值使用独立回调地址；默认沿用已配置通知地址的域名。
+function resolveTopupNotifyUrl() {
+  if (process.env.ALIPAY_TOPUP_NOTIFY_URL) return process.env.ALIPAY_TOPUP_NOTIFY_URL;
+  try {
+    return `${new URL(config.alipay.notifyUrl).origin}/api/v1/platform/alipay/notify`;
+  } catch (_) {
+    return 'https://api.openelfai.com/api/v1/platform/alipay/notify';
+  }
+}
+
+// 网页充值支付完成后回到开发者控制台；服务端再追加订单号用于查单。
+function resolveTopupReturnUrl() {
+  return process.env.ALIPAY_TOPUP_RETURN_URL || 'https://openelfai.com/console/?view=topup';
 }
 
 function readPhone(body) {
@@ -58,6 +121,47 @@ function readDeviceId(body) {
   return deviceId;
 }
 
+function readChatText(body) {
+  const text = typeof body?.text === 'string' ? body.text.trim() : '';
+  if (!text || text.length > CHAT_MAX_TEXT) {
+    throw fail(400, 'INVALID_TEXT', '请输入 1-2000 字的内容');
+  }
+  return text;
+}
+
+function readChatHistory(body) {
+  const raw = body?.history;
+  if (raw == null) return [];
+  if (!Array.isArray(raw) || raw.length > CHAT_MAX_HISTORY) {
+    throw fail(400, 'INVALID_HISTORY', '对话记录格式不正确');
+  }
+
+  let total = 0;
+  return raw.map((item) => {
+    const role = item?.role;
+    const content = typeof item?.content === 'string' ? item.content : null;
+    if ((role !== 'user' && role !== 'assistant') || content === null || content.length > CHAT_MAX_TEXT) {
+      throw fail(400, 'INVALID_HISTORY', '对话记录格式不正确');
+    }
+    total += content.length;
+    if (total > CHAT_MAX_HISTORY_CHARS) {
+      throw fail(400, 'INVALID_HISTORY', '对话记录过长');
+    }
+    return { role, content };
+  });
+}
+
+function buildElfSystemPrompt(body) {
+  const name = typeof body?.name === 'string' ? body.name.trim().slice(0, 64) : '';
+  const persona = typeof body?.persona === 'string' ? body.persona.trim() : '';
+  const lines = [
+    `你是 OpenElf 应用里的 AI 精灵${name ? `「${name}」` : ''}，用简体中文和用户自然对话。`,
+  ];
+  if (persona) lines.push(`角色设定：${persona}`);
+  lines.push('保持角色口吻，回答简洁、真诚；不要编造事实，也不要输出与角色无关的内容。');
+  return lines.join('\n').slice(0, 800);
+}
+
 function publicUser(row) {
   return {
     id: row.id,
@@ -76,7 +180,13 @@ async function buildApp(options = {}) {
   const appleVerifier = options.appleVerifier || (config.appleIap.enabled
     ? await createAppleVerifier(config.appleIap) : null);
   const paymentStore = options.paymentStore || createPaymentStore(db);
-  const commerce = createCommerceService({ store: paymentStore, settings: config.appleIap });
+  const alipayGateway = options.alipayGateway || createAlipayGateway(config.alipay);
+  // 提现出款：走支付宝单笔转账；通道未配置时直接报错，绝不当作成功。
+  const payout = alipayGateway ? async (row) => alipayGateway.transfer({
+    outTradeNo: row.outTradeNo, account: row.account, amountCents: row.netCents,
+    remark: `OpenElf 创作者收益 ${row.id}`,
+  }) : null;
+  const commerce = createCommerceService({ store: paymentStore, settings: config.appleIap, payout });
   const appleIap = createAppleIapService({
     db,
     settings: config.appleIap,
@@ -84,10 +194,18 @@ async function buildApp(options = {}) {
     paymentStore,
     verifyNotification: options.appleNotificationVerifier,
   });
-  const androidCommerce = createCommerceService({ store: paymentStore, settings: config.androidCommerce });
+  const androidCommerce = createCommerceService({ store: paymentStore, settings: config.androidCommerce, payout });
   const alipay = createAlipayService({ store: paymentStore, settings: config.alipay,
     commerceSettings: config.androidCommerce,
-    gateway: options.alipayGateway || createAlipayGateway(config.alipay) });
+    gateway: alipayGateway });
+  // 平台余额充值：与钻石钱包完全独立，只入账 platform_wallets。
+  const platformTopup = createTopupService({
+    db,
+    settings: config.alipay,
+    gateway: alipayGateway,
+    notifyUrl: resolveTopupNotifyUrl(),
+    returnUrl: resolveTopupReturnUrl(),
+  });
 
   const app = Fastify({
     logger:
@@ -102,6 +220,36 @@ async function buildApp(options = {}) {
   });
 
   app.decorate('db', db);
+
+  const worldAgents = createWorldAgentService({
+    store: paymentStore,
+    upstream: options.worldUpstream || createUpstream({
+      baseUrl: platformConfig.litellm.baseUrl,
+      masterKey: platformConfig.litellm.masterKey,
+      timeoutMs: platformConfig.litellm.timeoutMs,
+    }),
+    settings: config.worldAgents,
+    logger: app.log,
+  });
+
+  const consoleHandlers = createConsoleHandlers({ db });
+
+  // 跨域：只允许白名单来源携带 CORS 头；预检请求统一 204。
+  app.addHook('onRequest', async (request, reply) => {
+    const origin = request.headers.origin;
+    if (typeof origin === 'string' && CORS_ORIGINS.includes(origin)) {
+      reply.header('access-control-allow-origin', origin);
+      reply.header('vary', 'Origin');
+      reply.header('access-control-allow-methods', 'GET,POST,PUT,DELETE,OPTIONS');
+      reply.header('access-control-allow-headers', 'authorization,content-type');
+      reply.header('access-control-max-age', '86400');
+    }
+    if (request.method === 'OPTIONS') {
+      return reply.code(204).send();
+    }
+  });
+
+  await app.register(require('./platform'));
 
   app.register(rateLimit, {
     global: true,
@@ -124,6 +272,8 @@ async function buildApp(options = {}) {
       error: {
         code: error.code || (safeStatus >= 500 ? 'INTERNAL_ERROR' : 'BAD_REQUEST'),
         message: safeStatus >= 500 ? '服务暂时不可用' : error.message,
+        // 充值遇到待支付订单时，需要把 order_id 透出给客户端继续拉起支付。
+        ...(error.orderId ? { order_id: error.orderId } : {}),
       },
     });
   });
@@ -137,6 +287,41 @@ async function buildApp(options = {}) {
   if (ownsDb) {
     app.addHook('onClose', async () => {
       await db.end();
+    });
+  }
+
+  // 自动运营由服务端定时驱动：用户离线也会按时产出，算力不足停工并推送提醒。
+  // unref 让进程在测试或短生命周期场景下不被定时器挂住。
+  let autoTimer = null;
+  let worldTimer = null;
+  if (options.autoRunner !== false) {
+    const interval = Math.max(Number(options.autoIntervalMs) || 60000, 5000);
+    autoTimer = setInterval(() => {
+      for (const service of [commerce, androidCommerce]) {
+        // 服务未开放时 autoCycle 自身是空操作，无需在此判断。
+        service.autoCycle().catch((error) => app.log.error({ err: error }, 'auto cycle failed'));
+      }
+    }, interval);
+    autoTimer.unref?.();
+
+    // 厂商官方 AI：先幂等建号，再按当天进度补齐互动。
+    // 测试环境默认不启动，避免测试库被官方账号种子和上游调用污染。
+    if (config.worldAgents.enabled && config.nodeEnv !== 'test') {
+      const worldInterval = Math.max(Number(options.worldIntervalMs) || 10 * 60000, 15000);
+      ensureVendorAgents(paymentStore, config.worldAgents)
+        .then(() => {
+          worldAgents.cycle().catch((error) => app.log.error({ err: error }, 'world agent cycle failed'));
+          worldTimer = setInterval(() => {
+            worldAgents.cycle().catch((error) => app.log.error({ err: error }, 'world agent cycle failed'));
+          }, worldInterval);
+          worldTimer.unref?.();
+        })
+        .catch((error) => app.log.error({ err: error }, 'world agent seed failed'));
+    }
+
+    app.addHook('onClose', async () => {
+      if (autoTimer) clearInterval(autoTimer);
+      if (worldTimer) clearInterval(worldTimer);
     });
   }
 
@@ -263,6 +448,23 @@ async function buildApp(options = {}) {
     time: new Date().toISOString(),
   }));
 
+  // 官方账号头像：静态资源体积小，直接按文件名白名单读取，避免额外挂静态目录。
+  const worldAssetDir = path.join(__dirname, '..', 'assets', 'world');
+  app.get('/api/v1/world-assets/:file', async (request, reply) => {
+    const file = String(request.params?.file || '');
+    if (!/^[a-z0-9_-]+\.(png|jpg|jpeg|webp)$/i.test(file)) {
+      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: '资源不存在' } });
+    }
+    try {
+      const buf = await fs.readFile(path.join(worldAssetDir, file));
+      reply.header('cache-control', 'public, max-age=86400');
+      reply.type(file.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg');
+      return reply.send(buf);
+    } catch {
+      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: '资源不存在' } });
+    }
+  });
+
   // 内购默认关闭。商品未在 App Store Connect 建立、服务端未准备好前不会展示购买按钮。
   app.get('/api/v1/ios/products', async (request) => {
     const { user } = await authenticate(request);
@@ -289,12 +491,98 @@ async function buildApp(options = {}) {
     },
   );
 
+  // 对话记录：与支付环境无关，按「用户 + AI」存一份，换设备可恢复。
+  app.get('/api/v1/commerce/chat', async (request) => {
+    const { user } = await authenticate(request);
+    return commerce.listChat(user, request.query);
+  });
+  app.get('/api/v1/android/commerce/chat', async (request) => {
+    const { user } = await authenticate(request);
+    return androidCommerce.listChat(user, request.query);
+  });
+
+  // 创作者收益：提现申请与记录。审核接口在下方内部路由里，仅认配置令牌。
+  const earningsRoutes = [
+    ['/api/v1/earnings', commerce],
+    ['/api/v1/android/earnings', androidCommerce],
+  ];
+  for (const [base, service] of earningsRoutes) {
+    app.post(base + '/withdraw',
+      { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+      async (request) => {
+        const { user } = await authenticate(request);
+        return service.requestWithdrawal(user, request.body);
+      });
+    app.get(base + '/withdrawals', async (request) => {
+      const { user } = await authenticate(request);
+      return service.listWithdrawals(user, request.query.environment);
+    });
+  }
+
+  // 内部审核队列：只给运维使用，未配置令牌时整体关闭。
+  function requireReviewToken(request) {
+    const token = config.withdrawReviewToken;
+    if (!token) throw fail(404, 'NOT_FOUND', '接口不存在');
+    const given = String(request.headers['x-review-token'] || '');
+    if (given.length !== token.length || !crypto.timingSafeEqual(Buffer.from(given), Buffer.from(token))) {
+      throw fail(401, 'UNAUTHORIZED', '审核令牌无效');
+    }
+  }
+  app.get('/internal/withdrawals',
+    { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
+    async (request, reply) => {
+      requireReviewToken(request);
+      const status = typeof request.query.status === 'string' ? request.query.status : 'pending_review';
+      const environment = request.query.environment === 'sandbox' ? 'Sandbox' : 'Production';
+      const service = environment === 'Sandbox' ? commerce : androidCommerce;
+      reply.header('cache-control', 'no-store');
+      return service.listAllWithdrawals(environment, status);
+    });
+  app.post('/internal/withdrawals/:id/review',
+    { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
+    async (request) => {
+      requireReviewToken(request);
+      const environment = request.body?.environment === 'sandbox' ? 'Sandbox' : 'Production';
+      const service = environment === 'Sandbox' ? commerce : androidCommerce;
+      return service.reviewWithdrawal({ environment, withdrawalId: request.params.id,
+        action: request.body?.action, reason: request.body?.reason });
+    });
+
+  // 信息流分页：排序、分页、去重都在服务端完成，客户端只按页追加。
+  app.get('/api/v1/commerce/feed',
+    { config: { rateLimit: { max: 120, timeWindow: '1 minute' } } },
+    async (request) => {
+      const { user } = await authenticate(request);
+      return commerce.listFeed(user, request.query);
+    });
+
   app.post('/api/v1/commerce/actions',
-    { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
+    { config: { rateLimit: { max: 240, timeWindow: '1 minute' } } },
     async (request) => {
       const { user } = await authenticate(request);
       return commerce.action(user, request.body);
     });
+
+  // 能力许愿：收集用户期待 AI 具备的能力，供产品排期参考。
+  for (const route of ['/api/v1/wishes', '/api/v1/android/wishes']) {
+    app.post(route,
+      { bodyLimit: 4 * 1024, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+      async (request) => {
+        const { user } = await authenticate(request);
+        if (route.startsWith('/api/v1/android')) requireAndroidCommerce();
+        const text = typeof request.body?.text === 'string' ? request.body.text.trim() : '';
+        if (!text) throw fail(400, 'INVALID_WISH', '请先写下你期待的能力');
+        if ([...text].length > 200) throw fail(400, 'INVALID_WISH', '许愿内容请控制在 200 字以内');
+        const environment = request.body?.environment?.toLowerCase() === 'sandbox' ? 'Sandbox' : 'Production';
+        const id = crypto.randomUUID();
+        await paymentStore.transaction(environment, async (tx) => {
+          await tx.put('wish', id,
+            { text, createdAt: new Date().toISOString() },
+            { owner: user.id, state: 'new' });
+        });
+        return { ok: true, id };
+      });
+  }
 
   // Public webhook: trust only Apple's verified outer and inner JWS signatures.
   for (const environment of ['Production', 'Sandbox']) {
@@ -311,10 +599,14 @@ async function buildApp(options = {}) {
     const { user } = await authenticate(request); requireAndroidCommerce();
     return androidCommerce.snapshot(user, alipay.environment);
   });
-  app.post('/api/v1/android/commerce/actions', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (request) => {
+  app.post('/api/v1/android/commerce/actions', { config: { rateLimit: { max: 240, timeWindow: '1 minute' } } }, async (request) => {
     const { user } = await authenticate(request); requireAndroidCommerce();
     if (request.body?.environment?.toLowerCase() !== alipay.environment.toLowerCase()) throw fail(400, 'INVALID_ENVIRONMENT', '安卓钱包环境不匹配');
     return androidCommerce.action(user, { ...request.body, environment: alipay.environment });
+  });
+  app.get('/api/v1/android/commerce/feed', async (request) => {
+    const { user } = await authenticate(request); requireAndroidCommerce();
+    return androidCommerce.listFeed(user, { ...request.query, environment: alipay.environment });
   });
   app.get('/api/v1/android/alipay/products', async (request) => {
     await authenticate(request); return alipay.products();
@@ -348,6 +640,18 @@ async function buildApp(options = {}) {
     try { await alipay.notify(request.body); return reply.type('text/plain').send('success'); }
     catch (_) { return reply.code(400).type('text/plain').send('failure'); }
   });
+
+  // 实名二要素复核：服务端为准，客户端不再自行声明认证结果。
+  app.post('/api/v1/identity/verify',
+    { bodyLimit: 16 * 1024, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    async (request) => {
+      const { user } = await authenticate(request);
+      if (request.body?.platform === 'android') requireAndroidCommerce();
+      const service = request.body?.platform === 'android' ? androidCommerce : commerce;
+      return service.verifyIdentity(user, request.body);
+    });
+
+  require('./web_captcha').registerWebCaptcha(app, { settings: config.captcha, verifier: captcha });
 
   // —— 发送验证码 ——
 
@@ -644,6 +948,205 @@ async function buildApp(options = {}) {
   app.get('/api/v1/auth/me', async (request, reply) => {
     const { user } = await authenticate(request);
     return reply.send({ user: publicUser(user) });
+  });
+
+  // —— 平台钱包 ——
+
+  app.get('/api/v1/platform/wallet', async (request) => {
+    const { user } = await authenticate(request);
+    return readPlatformWallet(db, user.id);
+  });
+
+  // —— 平台余额充值（支付宝 App 支付） ——
+
+  app.get('/api/v1/platform/topup/products', async (request) => {
+    await authenticate(request);
+    return platformTopup.products();
+  });
+
+  app.post(
+    '/api/v1/platform/topup/orders',
+    { config: { rateLimit: { max: 8, timeWindow: '1 minute' } } },
+    async (request, reply) => {
+      const { user } = await authenticate(request);
+      try {
+        return await platformTopup.create(user, request.body);
+      } catch (error) {
+        if (error.code === 'TOPUP_PENDING_ORDER') {
+          return reply.code(409).send({
+            error: { code: error.code, message: error.message, orderId: error.orderId },
+          });
+        }
+        throw error;
+      }
+    },
+  );
+
+  app.post('/api/v1/platform/topup/orders/:id/pay', async (request) => {
+    const { user } = await authenticate(request);
+    return platformTopup.resume(user, request.params.id, request.body);
+  });
+
+  app.get('/api/v1/platform/topup/orders/:id', async (request) => {
+    const { user } = await authenticate(request);
+    return platformTopup.refresh(user.id, request.params.id);
+  });
+
+  app.post(
+    '/api/v1/platform/alipay/notify',
+    { bodyLimit: 65536, config: { rateLimit: { max: 120, timeWindow: '1 minute' } } },
+    async (request, reply) => {
+      try {
+        await platformTopup.notify(request.body);
+        return reply.type('text/plain').send('success');
+      } catch (error) {
+        // 日志只记录订单号，禁止输出验签数据与交易号。
+        request.log.error({ orderId: request.body?.out_trade_no, code: error.code }, 'platform topup notify failed');
+        return reply.code(400).type('text/plain').send('failure');
+      }
+    },
+  );
+
+  // —— 平台默认密钥 ——
+
+  app.get('/api/v1/platform/my-key', async (request) => {
+    const { user } = await authenticate(request);
+    const { row, created, plain } = await ensureDefaultKey(db, user.id);
+
+    let apiKeyPlain = created ? plain : null;
+    if (!apiKeyPlain && row.key_cipher) {
+      try {
+        apiKeyPlain = decrypt(row.key_cipher);
+      } catch (_) {
+        apiKeyPlain = null;
+      }
+    }
+
+    const result = {
+      api_key_masked: keyHint(apiKeyPlain),
+      key_prefix: row.key_prefix,
+      created_at: row.created_at,
+      revoked_at: row.revoked_at || null,
+      wallet: await readPlatformWallet(db, user.id),
+    };
+    if (row.revoked_at) result.revoked = true;
+    return result;
+  });
+
+  app.post('/api/v1/platform/my-key/reveal', async (request, reply) => {
+    const { user } = await authenticate(request);
+    try {
+      const apiKey = await revealDefaultKey(db, user.id);
+      return { api_key: apiKey };
+    } catch (error) {
+      if (error.statusCode === 409) {
+        return reply.code(409).send({ error: error.code, message: error.message });
+      }
+      throw error;
+    }
+  });
+
+  app.post('/api/v1/platform/my-key/reset', async (request) => {
+    const { user } = await authenticate(request);
+    const result = await rotateDefaultKey(db, user.id);
+    return {
+      api_key: result.plain,
+      key_prefix: result.prefix,
+      created_at: result.createdAt,
+    };
+  });
+
+  // —— 开发者控制台 ——
+
+  app.get('/api/v1/platform/console/overview', async (request) => {
+    const { user } = await authenticate(request);
+    return consoleHandlers.overview(request, user);
+  });
+
+  app.get('/api/v1/platform/console/usage', async (request) => {
+    const { user } = await authenticate(request);
+    return consoleHandlers.usage(request, user);
+  });
+
+  app.get('/api/v1/platform/console/ledger', async (request) => {
+    const { user } = await authenticate(request);
+    return consoleHandlers.ledger(request, user);
+  });
+
+  // —— Elf 对话：使用用户名下的默认密钥调用本机开放平台网关 ——
+
+  app.post('/api/v1/elf-chat', { bodyLimit: 64 * 1024 }, async (request, reply) => {
+    const { user } = await authenticate(request);
+    const text = readChatText(request.body);
+    const history = readChatHistory(request.body);
+    const elfId = typeof request.body?.elfId === 'string' ? request.body.elfId : '';
+
+    // 无论真实回复还是固定话术，都把这一轮问答落库，并把最新会话回给客户端覆盖本地。
+    const done = async (payload) => {
+      const saved = await commerce.recordChat(user, {
+        elfId, text, reply: payload.reply, fixedReason: payload.reason,
+      });
+      return saved ? { ...payload, messages: saved.messages } : payload;
+    };
+
+    const apiKey = await getDefaultKeyPlain(db, user.id);
+    if (!apiKey) return done(fixedReply('no_api_key'));
+
+    const wallet = await readPlatformWallet(db, user.id);
+    if (wallet.balance_micro - wallet.frozen_micro <= 0) {
+      return done(fixedReply('insufficient_balance'));
+    }
+
+    const messages = [
+      { role: 'system', content: buildElfSystemPrompt(request.body) },
+      ...history.slice(-CHAT_HISTORY_WINDOW),
+      { role: 'user', content: text },
+    ];
+    const baseUrl = process.env.PLATFORM_SELF_URL || `http://127.0.0.1:${config.port}`;
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), CHAT_TIMEOUT_MS);
+    try {
+      let response;
+      try {
+        response = await fetch(`${baseUrl}/v1/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model: process.env.PLATFORM_CHAT_MODEL || 'deepseek/deepseek-chat',
+            messages,
+            max_tokens: 800,
+          }),
+          signal: controller.signal,
+        });
+      } catch (_) {
+        return reply.code(502).send(AI_UPSTREAM_ERROR);
+      }
+
+      if (response.status === 402) return done(fixedReply('insufficient_balance'));
+      if (response.status === 401) return done(fixedReply('invalid_api_key'));
+      if (response.status === 404) return done(fixedReply('model_unavailable'));
+      if (response.status !== 200) return reply.code(502).send(AI_UPSTREAM_ERROR);
+
+      const payload = await response.json().catch(() => null);
+      const content = payload?.choices?.[0]?.message?.content;
+      if (typeof content !== 'string' || !content) {
+        return reply.code(502).send(AI_UPSTREAM_ERROR);
+      }
+
+      const after = await readPlatformWallet(db, user.id);
+      return done({
+        mode: 'ai',
+        reply: content,
+        usage: payload.usage || null,
+        balance_micro: after.balance_micro,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
   });
 
   return app;

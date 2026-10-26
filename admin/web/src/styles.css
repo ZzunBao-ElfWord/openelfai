@@ -1,0 +1,67 @@
+@import 'tailwindcss';
+
+/* ===== 基座原子组件（与 koko-admin 同款最小设计系统，主色由 indigo 换成 blue） =====
+   Tailwind v4 的 @apply 只能引用内置工具类，自定义类之间不能互相 @apply，
+   因此基础样式用选择器分组共享。 */
+@layer components {
+  .btn,
+  .btn-primary,
+  .btn-secondary,
+  .btn-danger,
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-md px-3.5 py-2 text-sm font-medium
+      transition-colors disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer select-none;
+  }
+  .btn-primary {
+    @apply bg-blue-600 text-white hover:bg-blue-500;
+  }
+  .btn-secondary {
+    @apply bg-white text-gray-700 ring-1 ring-inset ring-gray-300 hover:bg-gray-50;
+  }
+  .btn-danger {
+    @apply bg-red-600 text-white hover:bg-red-500;
+  }
+  .btn-ghost {
+    @apply text-gray-600 hover:bg-gray-100;
+  }
+
+  .input {
+    @apply w-full rounded-md border-0 px-3 py-2 text-sm text-gray-900 ring-1 ring-inset
+      ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-blue-600 outline-none;
+  }
+
+  .card {
+    @apply rounded-xl bg-white ring-1 ring-gray-200 shadow-sm;
+  }
+
+  .badge,
+  .badge-gray,
+  .badge-red,
+  .badge-amber,
+  .badge-green,
+  .badge-blue {
+    @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium;
+  }
+  .badge-gray {
+    @apply bg-gray-100 text-gray-600;
+  }
+  .badge-red {
+    @apply bg-red-100 text-red-700;
+  }
+  .badge-amber {
+    @apply bg-amber-100 text-amber-700;
+  }
+  .badge-green {
+    @apply bg-green-100 text-green-700;
+  }
+  .badge-blue {
+    @apply bg-blue-100 text-blue-700;
+  }
+
+  .th {
+    @apply px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500;
+  }
+  .td {
+    @apply px-4 py-3 text-sm text-gray-700 align-middle;
+  }
+}

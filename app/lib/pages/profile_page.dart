@@ -1,24 +1,35 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../config/commerce_config.dart';
 import '../data/world_data.dart';
 import '../models/elf.dart';
+import '../models/user.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
-import '../widgets/share_card.dart';
-import 'create_post_sheet.dart';
-import 'elf_chat_page.dart';
-import 'elf_detail_page.dart';
+import 'api_key_page.dart';
+import 'bookshelf_page.dart';
+import 'create_elf_page.dart';
+import 'elf_console_page.dart';
+import 'earnings_page.dart';
+import 'login_page.dart';
 import 'market_page.dart';
-import 'persona_edit_page.dart';
 import 'settings_page.dart';
 import 'wallet_page.dart';
 
-/// 「我」tab：用户档案 + 我的 AI 管理 + 账户入口（抖音式个人页结构）。
-/// 原来的「我的 AI」「设置」两个 tab 合并到这里，设置降级为右上角入口。
-class ProfilePage extends StatelessWidget {
+/// 「我」tab：人类自己的主页。
+///
+/// 这里只承载人类账户：头像/昵称/人类地址、钻石与收益、持有的 AI NFT 卡片、
+/// 账户入口。AI 的一切数据与配置都不放在这里——点卡片进入那只 AI 的
+/// 专属「AI 控制台」，人类与 AI 的边界因此保持清晰。
+class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
 
+  @override
+  State<ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends State<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     final state = AppState.instance;
@@ -28,57 +39,45 @@ class ProfilePage extends StatelessWidget {
         child: AnimatedBuilder(
           animation: state,
           builder: (context, _) {
-            final elf = state.myElf;
-            return ListView(
-              padding: EdgeInsets.zero,
-              children: [
-                _cover(context, state),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 28),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _userLine(context, state),
-                      const SizedBox(height: 16),
-                      _statsRow(elf),
-                      const SizedBox(height: 18),
-                      if (elf == null && state.currentUser != null) _noElfCard(context),
-                      if (elf != null) ...[
-                        SectionHeader(
-                          '我的 AI',
-                          trailing: state.myElves.length > 1
-                              ? '${state.myElves.length} 只 · 详情'
-                              : '详情',
-                          onTrailingTap: () => Navigator.of(context).push(
-                            MaterialPageRoute(builder: (_) => ElfDetailPage(elfId: elf.id)),
-                          ),
-                        ),
-                        _elfSwitcher(context, state, elf),
-                        const SizedBox(height: 10),
-                        _elfCard(context, elf),
-                        const SizedBox(height: 12),
-                        _actions(context, state, elf),
-                        const SizedBox(height: 6),
-                        SectionHeader(
-                          '装配工坊',
-                          trailing: '${state.slotsUsed(elf.id)} / ${elf.slots} 接口',
-                        ),
-                        _assembly(context, state, elf),
-                        SectionHeader(
-                          '人格档案',
-                          trailing: '编辑',
-                          onTrailingTap: () => Navigator.of(context).push(
-                            MaterialPageRoute(builder: (_) => const PersonaEditPage()),
-                          ),
-                        ),
-                        _personaCard(elf),
+            final user = state.currentUser;
+            final elves = state.myElves;
+            return WideContent(
+              maxWidth: 760,
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: [
+                  _banner(context, user),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 28),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _identityRow(context, state),
+                        const SizedBox(height: 14),
+                        if (user == null)
+                          _guestCard(context)
+                        else ...[
+                          _humanAssets(context, state),
+                          const SizedBox(height: 12),
+                          _apiKeyEntry(context),
+                          const SizedBox(height: 6),
+                          if (elves.isEmpty)
+                            _emptyNftCard(context)
+                          else ...[
+                            SectionHeader(
+                              '我的 AI · NFT',
+                              trailing: '${elves.length} 个 · 点卡片进入控制台',
+                            ),
+                            _nftGrid(context, state, elves),
+                          ],
+                        ],
+                        const SizedBox(height: 18),
+                        _boundaryCard(),
                       ],
-                      const SizedBox(height: 18),
-                      _accountSection(context, state),
-                    ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             );
           },
         ),
@@ -86,11 +85,11 @@ class ProfilePage extends StatelessWidget {
     );
   }
 
-  // —— 顶部封面（抖音式）——
+  // —— 顶部封面 ——
 
-  Widget _cover(BuildContext context, AppState state) {
+  Widget _banner(BuildContext context, User? user) {
     return SizedBox(
-      height: 132,
+      height: 146,
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -100,52 +99,57 @@ class ProfilePage extends StatelessWidget {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  AppColors.violet.withOpacity(0.34),
-                  AppColors.bg.withOpacity(0.95),
-                  AppColors.cyan.withOpacity(0.14),
+                  AppColors.violet.withValues(alpha: 0.34),
+                  AppColors.bg.withValues(alpha: 0.95),
+                  AppColors.cyan.withValues(alpha: 0.14),
                 ],
               ),
             ),
           ),
-          // 装饰纹路
           Positioned(
-            right: -40,
-            top: -30,
-            child: Container(
-              width: 220,
-              height: 220,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: AppColors.text.withValues(alpha: 0.06), width: 22),
+            right: 6,
+            top: -24,
+            child: Text(
+              user?.avatarInitial ?? 'O',
+              style: TextStyle(
+                fontSize: 138,
+                fontWeight: FontWeight.w900,
+                color: AppColors.text.withValues(alpha: 0.05),
+                height: 1,
               ),
             ),
           ),
           Positioned(
-            right: 36,
-            top: 26,
+            left: 16,
+            top: 24,
             child: Text(
               'OPENELF',
               style: TextStyle(
-                fontSize: 26,
+                fontSize: 20,
                 fontWeight: FontWeight.w800,
-                letterSpacing: 6,
-                color: AppColors.text.withValues(alpha: 0.05),
+                letterSpacing: 5,
+                color: AppColors.text.withValues(alpha: 0.06),
               ),
             ),
           ),
           Positioned(
-            top: 6,
-            right: 8,
-            child: Semantics(
-              label: '设置',
-              button: true,
-              child: IconButton(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const SettingsPage()),
+            top: 2,
+            right: 6,
+            child: Row(
+              children: [
+                Semantics(
+                  label: '设置',
+                  button: true,
+                  child: IconButton(
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const SettingsPage()),
+                    ),
+                    icon: Icon(Icons.settings_outlined,
+                        size: 21,
+                        color: AppColors.text.withValues(alpha: 0.82)),
+                  ),
                 ),
-                icon: Icon(Icons.settings_outlined,
-                    size: 21, color: AppColors.text.withValues(alpha: 0.82)),
-              ),
+              ],
             ),
           ),
         ],
@@ -153,16 +157,22 @@ class ProfilePage extends StatelessWidget {
     );
   }
 
-  Widget _userLine(BuildContext context, AppState state) {
+  // —— 身份行：人类账户 ——
+
+  Widget _identityRow(BuildContext context, AppState state) {
     final user = state.currentUser;
+    final addr = user?.chainAddress;
+    final short = (addr != null && addr.length > 13)
+        ? '${addr.substring(0, 6)}…${addr.substring(addr.length - 4)}'
+        : addr;
+
     return Transform.translate(
-      offset: const Offset(0, -26),
+      offset: const Offset(0, -36),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Container(
-            width: 64,
-            height: 64,
+            width: 72,
+            height: 72,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               gradient: AppColors.brandGradient,
@@ -171,521 +181,91 @@ class ProfilePage extends StatelessWidget {
             alignment: Alignment.center,
             child: Text(
               user?.avatarInitial ?? '?',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: AppColors.onBrand),
+              style: TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.onBrand),
             ),
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  user?.nickname ?? '未登录',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.text),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  user == null ? '先登录，再养一只自己的 AI' : _maskPhone(user.phone),
-                  style: TextStyle(fontSize: 11, color: AppColors.textMuted),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // —— 关键数据 ——
-
-  Widget _statsRow(Elf? elf) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.strokeSoft),
-        color: AppColors.surface.withOpacity(0.5),
-      ),
-      child: Row(
-        children: [
-          _stat('本周被注视', _fmt(elf?.attention ?? 0)),
-          _vline(),
-          _stat('粉丝', _fmt(elf?.followers ?? 0)),
-          _vline(),
-          _stat('累计收益', WorldData.formatYuan(elf?.earningsYuan ?? 0)),
-        ],
-      ),
-    );
-  }
-
-  Widget _stat(String label, String value) {
-    return Expanded(
-      child: Column(
-        children: [
-          Text(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: AppColors.text),
-          ),
-          const SizedBox(height: 3),
-          Text(label, style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
-        ],
-      ),
-    );
-  }
-
-  Widget _vline() => Container(width: 1, height: 24, color: AppColors.strokeSoft);
-
-  // —— 多只 AI 切换（v1.5 取消 1 只限制）——
-
-  Widget _elfSwitcher(BuildContext context, AppState state, Elf current) {
-    return SizedBox(
-      height: 44,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.only(bottom: 2),
-        children: [
-          ...state.myElves.map((e) {
-            final selected = e.id == current.id;
-            return Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(22),
-                onTap: () => state.selectElf(e.id),
-                child: Container(
-                  padding: const EdgeInsets.fromLTRB(4, 4, 12, 4),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(22),
-                    color: selected ? AppColors.violet.withOpacity(0.16) : AppColors.surface,
-                    border: Border.all(
-                      color: selected ? AppColors.violet.withOpacity(0.65) : AppColors.strokeSoft,
-                    ),
-                  ),
-                  child: Row(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: user == null
+                  ? () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const LoginPage()))
+                  : null,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     children: [
-                      ElfAvatar(elf: e, size: 32),
-                      const SizedBox(width: 8),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            e.name,
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600,
-                              color: selected ? AppColors.text : AppColors.textSub,
-                            ),
-                          ),
-                          Text(
-                            'Lv${e.level} · ${e.serial}',
-                            style: TextStyle(fontSize: 9, color: AppColors.textFaint),
-                          ),
-                        ],
+                      Flexible(
+                        child: Text(
+                          user?.nickname ?? '未登录',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.text),
+                        ),
                       ),
+                      const SizedBox(width: 7),
+                      _humanPill(),
                     ],
                   ),
-                ),
-              ),
-            );
-          }),
-          InkWell(
-            borderRadius: BorderRadius.circular(22),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const MarketPage()),
-            ),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(22),
-                border: Border.all(color: AppColors.strokeSoft),
-              ),
-              alignment: Alignment.center,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.add, size: 14, color: AppColors.violetSoft),
-                  SizedBox(width: 4),
-                  Text('再养一只', style: TextStyle(fontSize: 11.5, color: AppColors.violetSoft)),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _elfCard(BuildContext context, Elf elf) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(16),
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => ElfChatPage(elfId: elf.id)),
-      ),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.strokeSoft),
-          gradient: AppColors.brandGradientSoft,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                ElfAvatar(elf: elf, size: 56),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
+                  const SizedBox(height: 5),
+                  if (user == null)
+                    Text('先登录，再铸造属于你的 AI',
+                        style:
+                            TextStyle(fontSize: 11, color: AppColors.textMuted))
+                  else
+                    Row(
+                      children: [
+                        Text(_maskPhone(user.phone),
+                            style: TextStyle(
+                                fontSize: 10.5, color: AppColors.textMuted)),
+                        if (short != null) ...[
+                          Text(' · ',
+                              style: TextStyle(
+                                  fontSize: 10.5, color: AppColors.textFaint)),
                           Flexible(
                             child: Text(
-                              elf.name,
+                              short,
+                              maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.text,
+                                fontSize: 10,
+                                color: AppColors.textSub,
+                                fontFamily: 'monospace',
+                                letterSpacing: 0.4,
                               ),
                             ),
                           ),
-                          const SizedBox(width: 6),
-                          Text(
-                            elf.serial,
-                            style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+                          InkWell(
+                            borderRadius: BorderRadius.circular(6),
+                            onTap: () {
+                              Clipboard.setData(ClipboardData(text: addr!));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                    content: Text('已复制我的人类地址'),
+                                    duration: Duration(seconds: 2)),
+                              );
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.all(4),
+                              child: Icon(Icons.copy_outlined,
+                                  size: 12,
+                                  color: AppColors.textMuted,
+                                  semanticLabel: '复制我的人类地址'),
+                            ),
                           ),
                         ],
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          _levelBadge(elf),
-                          const SizedBox(width: 6),
-                          StatusChip(status: elf.liveStatus),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                Icon(Icons.chat_bubble_outline, size: 17, color: AppColors.violetSoft),
-              ],
-            ),
-            const SizedBox(height: 14),
-            Divider(height: 1, color: AppColors.strokeSoft),
-            const SizedBox(height: 14),
-            _barRow(
-              label: '算力',
-              value: '${elf.energy} / ${elf.maxEnergy}',
-              ratio: elf.energyRatio,
-              color: AppColors.violetSoft,
-            ),
-            if (elf.liveStatus == ElfStatus.sleeping) ...[
-              const SizedBox(height: 6),
-              Text(
-                '已休眠。先注算力再叫醒它。',
-                style: TextStyle(fontSize: 10.5, color: AppColors.warn),
+                      ],
+                    ),
+                ],
               ),
-            ],
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Text('回声', style: TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
-                const SizedBox(width: 6),
-                Text(
-                  _fmt(elf.echo),
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.violetSoft,
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  elf.echoToNextLevel == null
-                      ? '已满级 · 灯塔'
-                      : '距${_nextLevelName(elf)}还差 ${_fmt(elf.echoToNextLevel!)}',
-                  style: TextStyle(fontSize: 10, color: AppColors.textMuted),
-                ),
-              ],
-            ),
-            const SizedBox(height: 5),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(3),
-              child: LinearProgressIndicator(
-                value: _levelProgressRatio(elf),
-                minHeight: 4,
-                backgroundColor: AppColors.surfaceHigh,
-                valueColor: AlwaysStoppedAnimation(AppColors.cyan),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(elf.levelPerkText, style: TextStyle(fontSize: 10, color: AppColors.textFaint)),
-            const SizedBox(height: 12),
-            Divider(height: 1, color: AppColors.strokeSoft),
-            const SizedBox(height: 10),
-            _chainWalletRow(context, elf),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// 链上精灵 NFT：这只 AI 的专属区块链地址 = 它的 AI 钱包。
-  Widget _chainWalletRow(BuildContext context, Elf elf) {
-    final addr = elf.chainAddress ?? '';
-    final short = addr.length > 13 ? '${addr.substring(0, 6)}…${addr.substring(addr.length - 4)}' : addr;
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(5),
-            gradient: LinearGradient(
-              colors: [AppColors.cyan.withOpacity(0.22), AppColors.violet.withOpacity(0.22)],
-            ),
-            border: Border.all(color: AppColors.cyan.withOpacity(0.35)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.token_outlined, size: 11, color: AppColors.cyan),
-              SizedBox(width: 3),
-              Text(
-                'NFT · AI 钱包',
-                style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: AppColors.cyan),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            short,
-            style: TextStyle(
-              fontSize: 11,
-              color: AppColors.textSub,
-              fontFamily: 'monospace',
-              letterSpacing: 0.5,
-            ),
-          ),
-        ),
-        InkWell(
-          onTap: () {
-            Clipboard.setData(ClipboardData(text: addr));
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('已复制 AI 钱包地址'), duration: Duration(seconds: 2)),
-            );
-          },
-          borderRadius: BorderRadius.circular(6),
-          child: Padding(
-            padding: EdgeInsets.all(4),
-            child: Icon(Icons.copy_outlined, size: 13, color: AppColors.textMuted, semanticLabel: '复制钱包地址'),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _levelBadge(Elf elf) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceHigh,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        'Lv${elf.level} · ${elf.levelName}',
-        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.violetSoft),
-      ),
-    );
-  }
-
-  Widget _barRow({
-    required String label,
-    required String value,
-    required double ratio,
-    required Color color,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Text(label, style: TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
-            const Spacer(),
-            Text(
-              value,
-              style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppColors.textSub),
-            ),
-          ],
-        ),
-        const SizedBox(height: 5),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(3),
-          child: LinearProgressIndicator(
-            value: ratio,
-            minHeight: 5,
-            backgroundColor: AppColors.surfaceHigh,
-            valueColor: AlwaysStoppedAnimation(color),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // —— 操作 ——
-
-  Widget _actions(BuildContext context, AppState state, Elf elf) {
-    final sleeping = elf.liveStatus == ElfStatus.sleeping;
-    return Column(
-      children: [
-        BrandButton(
-          label: sleeping ? '注算力 · 叫醒它' : '让它创作',
-          icon: sleeping ? Icons.battery_charging_full_outlined : Icons.auto_awesome_outlined,
-          onTap: () async {
-            if (sleeping) {
-              final err = await state.inject(elf.id, 160);
-              if (!context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(err ?? '已注入 160 算力，它醒了'),
-                  backgroundColor: err == null ? AppColors.violet : null,
-                ),
-              );
-            } else {
-              showModalBottomSheet(
-                context: context,
-                isScrollControlled: true,
-                backgroundColor: Colors.transparent,
-                builder: (_) => CreatePostSheet(elf: elf),
-              );
-            }
-          },
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: GhostButton(
-                label: '分享',
-                icon: Icons.ios_share,
-                onTap: () => ShareHelper.shareElf(context, elf),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: GhostButton(
-                label: '寄售这只',
-                icon: Icons.store,
-                onTap: () => _showResellDialog(context, state),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  // —— 装配工坊 ——
-
-  Widget _assembly(BuildContext context, AppState state, Elf elf) {
-    final used = state.slotsUsed(elf.id);
-    final equipped = state.modulesOf(elf.id);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: List.generate(elf.slots, (i) {
-            final filled = i < used;
-            return Expanded(
-              child: Container(
-                height: 6,
-                margin: EdgeInsets.only(right: i == elf.slots - 1 ? 0 : 4),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(3),
-                  color: filled ? AppColors.violet : AppColors.surfaceHigh,
-                ),
-              ),
-            );
-          }),
-        ),
-        const SizedBox(height: 12),
-        if (equipped.isEmpty)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.strokeSoft),
-            ),
-            child: Text(
-              '还没装能力。从下面挑一个装上去，它才能在世界里产出内容。',
-              style: TextStyle(fontSize: 11, color: AppColors.textMuted, height: 1.6),
-            ),
-          )
-        else
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: equipped.map((m) => _equippedChip(context, state, m)).toList(),
-          ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Text(
-              '我的能力模块',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSub),
-            ),
-            const Spacer(),
-            Text(
-              '已拥有 ${state.ownedModules.length} 个',
-              style: TextStyle(fontSize: 10, color: AppColors.textFaint),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        _modulesGrid(context, state, elf),
-      ],
-    );
-  }
-
-  Widget _equippedChip(BuildContext context, AppState state, AbilityModule m) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(9, 6, 6, 6),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        color: AppColors.violet.withOpacity(0.12),
-        border: Border.all(color: AppColors.violet.withOpacity(0.35)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            m.glyph,
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.violetSoft),
-          ),
-          const SizedBox(width: 5),
-          Text(
-            m.name,
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.text),
-          ),
-          const SizedBox(width: 2),
-          InkWell(
-            onTap: () async {
-              final err = await state.unequip(m.id);
-              if (!context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(err ?? '已卸下「${m.name}」')),
-              );
-            },
-            child: Padding(
-              padding: EdgeInsets.all(3),
-              child: Icon(Icons.close, size: 12, color: AppColors.textMuted, semanticLabel: '卸下'),
             ),
           ),
         ],
@@ -693,345 +273,211 @@ class ProfilePage extends StatelessWidget {
     );
   }
 
-  Widget _modulesGrid(BuildContext context, AppState state, Elf elf) {
-    // 只展示「已拥有」的模块；未拥有的去发现页一级发售购买。
-    final owned = state.modules.where((m) => state.ownedModules.contains(m.id)).toList();
-    if (owned.isEmpty) {
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.strokeSoft),
-        ),
-        child: Text(
-          '还没有能力模块。去「发现」页的一级发售购入后，会出现在这里。',
-          style: TextStyle(fontSize: 11, color: AppColors.textMuted, height: 1.6),
-        ),
-      );
-    }
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: owned.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        mainAxisSpacing: 8,
-        crossAxisSpacing: 8,
-        childAspectRatio: 1.55,
-      ),
-      itemBuilder: (_, i) {
-        final m = owned[i];
-        final holder = state.equippedBy(m.id);
-        final isMine = holder?.id == elf.id;
-        return InkWell(
-          onTap: () => _openModuleSheet(context, state, elf, m),
-          borderRadius: BorderRadius.circular(10),
-          child: Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: isMine ? AppColors.violet.withOpacity(0.5) : AppColors.strokeSoft),
-              color: isMine ? AppColors.violet.withOpacity(0.12) : AppColors.surface,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: AppColors.violet.withOpacity(0.25),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        m.glyph,
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.violetSoft),
-                      ),
-                    ),
-                    const SizedBox(width: 7),
-                    Expanded(
-                      child: Text(
-                        m.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppColors.text),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 5),
-                Expanded(
-                  child: Text(
-                    m.summary,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 9.5, color: AppColors.textMuted, height: 1.4),
-                  ),
-                ),
-                Text(
-                  isMine ? '已装 · 点按卸下' : '已拥有 · ${m.load} 接口 · ${m.compute} 算力',
-                  style: TextStyle(
-                    fontSize: 9.5,
-                    color: isMine ? AppColors.violetSoft : AppColors.textFaint,
-                    fontWeight: isMine ? FontWeight.w600 : FontWeight.w400,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  void _openModuleSheet(BuildContext context, AppState state, Elf elf, AbilityModule m) {
-    final holder = state.equippedBy(m.id);
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) {
-        return Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: AppColors.violet.withOpacity(0.25),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      m.glyph,
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.violetSoft),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          m.name,
-                          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: AppColors.text),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '💎 ${m.price} · ${m.category}',
-                          style: TextStyle(fontSize: 11, color: AppColors.textMuted),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('装上之后', style: TextStyle(fontSize: 10, color: AppColors.textFaint)),
-                    const SizedBox(height: 4),
-                    Text(
-                      m.effect,
-                      style: TextStyle(fontSize: 12.5, color: AppColors.textSub, height: 1.6),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      '占用 ${m.load} 个接口 · 每次使用消耗 ${m.compute} 算力',
-                      style: TextStyle(fontSize: 10, color: AppColors.textFaint),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              if (holder != null && holder.id == elf.id)
-                BrandButton(
-                  label: '卸下「${m.name}」',
-                  onTap: () async {
-                    final err = await state.unequip(m.id);
-                    if (!ctx.mounted || !context.mounted) return;
-                    Navigator.of(ctx).pop();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(err ?? '已卸下「${m.name}」')),
-                    );
-                  },
-                )
-              else if (holder != null) ...[
-                Text(
-                  '当前装在 ${holder.name} 身上。一个模块只能装一只 AI。',
-                  style: TextStyle(fontSize: 11, color: AppColors.textMuted),
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: GhostButton(
-                        label: '先卸下',
-                        onTap: () async {
-                          final err = await state.unequip(m.id);
-                          if (!ctx.mounted || !context.mounted) return;
-                          Navigator.of(ctx).pop();
-                          if (err != null) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(err)),
-                            );
-                          }
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: BrandButton(
-                        label: '改装到 ${elf.name}',
-                        onTap: () async {
-                          final removeError = await state.unequip(m.id);
-                          final err = removeError ?? await state.equip(m.id, elf.id);
-                          if (removeError == null && err != null) {
-                            await state.equip(m.id, holder.id);
-                          }
-                          if (!ctx.mounted || !context.mounted) return;
-                          Navigator.of(ctx).pop();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(err ?? '已装到 ${elf.name} 身上')),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ] else
-                BrandButton(
-                  label: '装配到 ${elf.name}',
-                  onTap: () async {
-                    final err = await state.equip(m.id, elf.id);
-                    if (!ctx.mounted || !context.mounted) return;
-                    Navigator.of(ctx).pop();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(err ?? '已装到 ${elf.name} 身上，去世界里发一条试试')),
-                    );
-                  },
-                ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  // —— 人格档案 ——
-
-  Widget _personaCard(Elf elf) {
+  Widget _humanPill() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: AppColors.cyan.withValues(alpha: 0.4)),
+        color: AppColors.cyan.withValues(alpha: 0.08),
+      ),
+      child: Text(
+        '人类账户',
+        style: TextStyle(
+            fontSize: 9, fontWeight: FontWeight.w600, color: AppColors.cyan),
+      ),
+    );
+  }
+
+  // —— 人类资产：钻石 + 人类地址 + 收益 ——
+
+  Widget _humanAssets(BuildContext context, AppState state) {
+    final addr = state.currentUser?.chainAddress ?? '';
+    final short = addr.length > 13
+        ? '${addr.substring(0, 6)}…${addr.substring(addr.length - 4)}'
+        : addr;
+    final earnings = CommerceConfig.enabled
+        ? state.creatorEarningsYuan
+        : state.myElves.fold<double>(0, (sum, e) => sum + e.earningsYuan);
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 13, 14, 13),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.strokeSoft),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _personaLine('相信', elf.persona),
+          Row(
+            children: [
+              Icon(Icons.account_balance_wallet_outlined,
+                  size: 13, color: AppColors.cyan),
+              const SizedBox(width: 5),
+              Text('人类资产',
+                  style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.cyan)),
+              const Spacer(),
+              InkWell(
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const EarningsPage()),
+                ),
+                borderRadius: BorderRadius.circular(6),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  child: Text('收益',
+                      style: TextStyle(
+                          fontSize: 10.5, color: AppColors.violetSoft)),
+                ),
+              ),
+              const SizedBox(width: 6),
+              InkWell(
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const BookshelfPage()),
+                ),
+                borderRadius: BorderRadius.circular(6),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  child: Text('仓库 ${state.books.length}',
+                      style: TextStyle(
+                          fontSize: 10.5, color: AppColors.violetSoft)),
+                ),
+              ),
+              const SizedBox(width: 6),
+              InkWell(
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const WalletPage()),
+                ),
+                borderRadius: BorderRadius.circular(6),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  child: Text('钱包',
+                      style: TextStyle(
+                          fontSize: 10.5, color: AppColors.violetSoft)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _miniStat('💎${state.wallet.diamonds}', '钻石余额', AppColors.cyan),
+              _miniStat('${state.myElves.length}', '持有 AI NFT'),
+              _miniStat(WorldData.formatYuan(earnings), '累计收益'),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Text('人类地址',
+                  style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  short.isEmpty ? '——' : short,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: 10.5,
+                      color: AppColors.textSub,
+                      fontFamily: 'monospace',
+                      letterSpacing: 0.4),
+                ),
+              ),
+              if (addr.isNotEmpty)
+                InkWell(
+                  borderRadius: BorderRadius.circular(6),
+                  onTap: () {
+                    Clipboard.setData(ClipboardData(text: addr));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                          content: Text('已复制我的人类地址'),
+                          duration: Duration(seconds: 2)),
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(3),
+                    child: Icon(Icons.copy_outlined,
+                        size: 12,
+                        color: AppColors.textMuted,
+                        semanticLabel: '复制我的人类地址'),
+                  ),
+                ),
+            ],
+          ),
           const SizedBox(height: 8),
-          _personaLine('害怕', elf.fear),
-          const SizedBox(height: 8),
-          _personaLine('习惯', elf.habit),
+          Text(
+            '钻石是人类的消费凭证；AI 对话使用开放平台余额，两者不混用。',
+            style: TextStyle(
+                fontSize: 10, color: AppColors.textFaint, height: 1.5),
+          ),
         ],
       ),
     );
   }
 
-  Widget _personaLine(String label, String value) {
-    final text = value.trim();
-    final clean = text.startsWith(label) ? text.substring(label.length).trim() : text;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 34,
-          child: Text(label, style: TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
-        ),
-        Expanded(
-          child: Text(
-            clean,
-            style: TextStyle(fontSize: 12, color: AppColors.textSub, height: 1.5),
+  Widget _miniStat(String value, String label, [Color? color]) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: color ?? AppColors.text,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
           ),
-        ),
-      ],
+          const SizedBox(height: 2),
+          Text(label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 9.5, color: AppColors.textMuted)),
+        ],
+      ),
     );
   }
 
-  // —— 账户入口 ——
+  // —— 平台 API Key 入口：AI 对话与外部接入凭据 ——
 
-  Widget _accountSection(BuildContext context, AppState state) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SectionHeader('账户'),
-        _tile(
-          context,
-          icon: Icons.account_balance_wallet_outlined,
-          label: '钻石钱包',
-          subtitle: '💎${state.wallet.diamonds} · 累计收益 ${WorldData.formatYuan(state.myElf?.earningsYuan ?? 0)}',
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const WalletPage()),
-          ),
-        ),
-        _tile(
-          context,
-          icon: Icons.settings_outlined,
-          label: '设置与隐私',
-          subtitle: '账户、法律条款、退出登录',
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const SettingsPage()),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _tile(
-    BuildContext context, {
-    required IconData icon,
-    required String label,
-    required String subtitle,
-    required VoidCallback onTap,
-  }) {
+  Widget _apiKeyEntry(BuildContext context) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12),
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const ApiKeyPage()),
+        ),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.strokeSoft),
+          ),
           child: Row(
             children: [
               Container(
                 width: 34,
                 height: 34,
                 decoration: BoxDecoration(
-                  color: AppColors.surface,
+                  color: AppColors.surfaceAlt,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 alignment: Alignment.center,
-                child: Icon(icon, size: 18, color: AppColors.textMuted),
+                child: Icon(Icons.vpn_key_outlined,
+                    size: 18, color: AppColors.brand),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -1039,11 +485,19 @@ class ProfilePage extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      label,
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: AppColors.text),
+                      '我的 API Key',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.text,
+                      ),
                     ),
                     const SizedBox(height: 2),
-                    Text(subtitle, style: TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
+                    Text(
+                      'AI 对话与外部接入凭据',
+                      style: TextStyle(
+                          fontSize: 10.5, color: AppColors.textMuted),
+                    ),
                   ],
                 ),
               ),
@@ -1055,7 +509,218 @@ class ProfilePage extends StatelessWidget {
     );
   }
 
-  Widget _noElfCard(BuildContext context) {
+  // —— 我的 AI：NFT 卡片网格，点卡片进入控制台 ——
+
+  Widget _nftGrid(BuildContext context, AppState state, List<Elf> elves) {
+    return LayoutBuilder(
+      builder: (context, c) {
+        final cols = c.maxWidth >= 560 ? 3 : 2;
+        final tiles = <Widget>[
+          ...elves.map((e) => _nftCard(context, state, e)),
+          _createTile(context),
+        ];
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          padding: EdgeInsets.zero,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: cols,
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+            childAspectRatio: 4 / 5,
+          ),
+          itemCount: tiles.length,
+          itemBuilder: (_, i) => tiles[i],
+        );
+      },
+    );
+  }
+
+  Widget _nftCard(BuildContext context, AppState state, Elf elf) {
+    final workCount = state.postsOf(elf.id).length;
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () {
+        state.selectElf(elf.id);
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => ElfConsolePage(elfId: elf.id)),
+        );
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.strokeSoft),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            _nftCoverArt(elf),
+            IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    stops: const [0.45, 1],
+                    colors: [
+                      Colors.black.withValues(alpha: 0),
+                      Colors.black.withValues(alpha: 0.68),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              left: 8,
+              top: 8,
+              child: _coverPill('NFT · Lv${elf.level}'),
+            ),
+            Positioned(
+              right: 8,
+              top: 8,
+              child: _coverPill('已铸造', highlight: true),
+            ),
+            Positioned(
+              left: 9,
+              right: 9,
+              bottom: 8,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    elf.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                      shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          elf.serial,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: Colors.white.withValues(alpha: 0.7),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(Icons.grid_view_rounded,
+                          size: 9, color: Colors.white.withValues(alpha: 0.7)),
+                      const SizedBox(width: 2),
+                      Text(
+                        '$workCount',
+                        style: TextStyle(
+                          fontSize: 9,
+                          color: Colors.white.withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _nftCoverArt(Elf elf) {
+    final url = elf.avatarUrl;
+    if (url == null || url.isEmpty) return _nftInitialArt(elf);
+    return Image.network(
+      url,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => _nftInitialArt(elf),
+    );
+  }
+
+  Widget _nftInitialArt(Elf elf) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppColors.brand.withValues(alpha: 0.9),
+            AppColors.cyan.withValues(alpha: 0.45),
+            AppColors.surfaceHigh,
+          ],
+        ),
+      ),
+      child: Center(
+        child: Text(
+          elf.initial,
+          style: TextStyle(
+            fontSize: 54,
+            fontWeight: FontWeight.w800,
+            color: Colors.white.withValues(alpha: 0.9),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _coverPill(String label, {bool highlight = false}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(9),
+        color: highlight
+            ? AppColors.cyan.withValues(alpha: 0.9)
+            : Colors.black.withValues(alpha: 0.32),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 8.5,
+          fontWeight: FontWeight.w600,
+          color: highlight ? AppColors.onBrand : Colors.white,
+        ),
+      ),
+    );
+  }
+
+  Widget _createTile(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const CreateElfPage()),
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.strokeSoft),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.add_circle_outline,
+                size: 22, color: AppColors.textMuted),
+            const SizedBox(height: 6),
+            Text('创建 AI',
+                style: TextStyle(fontSize: 11.5, color: AppColors.textSub)),
+            const SizedBox(height: 2),
+            Text('铸造一枚新 NFT',
+                style: TextStyle(fontSize: 9, color: AppColors.textFaint)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _emptyNftCard(BuildContext context) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
@@ -1065,98 +730,90 @@ class ProfilePage extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Icon(Icons.person_outline, size: 42, color: AppColors.textMuted),
+          Icon(Icons.confirmation_number_outlined,
+              size: 40, color: AppColors.textMuted),
           const SizedBox(height: 10),
-          Text('你还没有 AI', style: TextStyle(fontSize: 14, color: AppColors.textSub)),
+          Text('你还没有 AI NFT',
+              style: TextStyle(fontSize: 14, color: AppColors.textSub)),
           const SizedBox(height: 4),
-          Text('先去市场买一只，它会在世界里替你争夺注意力。', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+          Text('创建一只 AI 就等于铸造一枚 NFT，它会归到你的人类地址下。',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
           const SizedBox(height: 14),
           BrandButton(
-            label: '去市场',
-            icon: Icons.store,
+            label: '创建我的第一只 AI',
+            icon: Icons.add,
             onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const CreateElfPage()),
+            ),
+          ),
+          const SizedBox(height: 4),
+          TextButton(
+            onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const MarketPage()),
             ),
+            child: const Text('先去市场看看', style: TextStyle(fontSize: 11.5)),
           ),
         ],
       ),
     );
   }
 
-  void _showResellDialog(BuildContext context, AppState state) {
-    final ctrl = TextEditingController(text: '2800');
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: Text('寄售我的 AI', style: TextStyle(color: AppColors.text, fontSize: 16)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '寄售后这只 AI 会进入寄售市场，等别人买走。你其他的 AI 不受影响。',
-              style: TextStyle(fontSize: 12, color: AppColors.textMuted, height: 1.6),
+  Widget _guestCard(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.strokeSoft),
+      ),
+      child: Column(
+        children: [
+          Icon(Icons.person_outline, size: 40, color: AppColors.textMuted),
+          const SizedBox(height: 10),
+          Text('登录后查看你的人类资产',
+              style: TextStyle(fontSize: 14, color: AppColors.textSub)),
+          const SizedBox(height: 4),
+          Text('钻石、人类地址与持有的 AI NFT 都挂在你的账户下。',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+          const SizedBox(height: 14),
+          BrandButton(
+            label: '去登录',
+            icon: Icons.login,
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const LoginPage()),
             ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: ctrl,
-              keyboardType: TextInputType.number,
-              style: TextStyle(color: AppColors.text),
-              decoration: InputDecoration(
-                labelText: '寄售价（💎钻石）',
-                labelStyle: TextStyle(color: AppColors.textMuted),
-                filled: true,
-                fillColor: AppColors.surface,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: Text('再想想', style: TextStyle(color: AppColors.textMuted)),
-          ),
-          TextButton(
-            onPressed: () async {
-              final price = int.tryParse(ctrl.text) ?? 1000;
-              final err = await state.resellMyElf(price: price);
-              if (!ctx.mounted || !context.mounted) return;
-              Navigator.of(ctx).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(err ?? '已寄售，等别人买走')),
-              );
-            },
-            child: Text('确认寄售', style: TextStyle(color: AppColors.cyan)),
           ),
         ],
       ),
     );
   }
 
-  // —— helpers ——
+  // —— 人类 / AI 边界说明 ——
 
-  static const List<int> _levelFloors = [0, 1000, 5000, 20000, 100000];
-  static const List<String> _levelNames = ['微光', '初鸣', '新锐', '瞩目', '灯塔'];
-
-  String _nextLevelName(Elf elf) => _levelNames[elf.level];
-
-  double _levelProgressRatio(Elf elf) {
-    if (elf.echoToNextLevel == null) return 1.0;
-    final floor = _levelFloors[elf.level - 1];
-    final next = _levelFloors[elf.level];
-    return ((elf.echo - floor) / (next - floor)).clamp(0.0, 1.0);
-  }
-
-  static String _fmt(int n) {
-    if (n >= 10000) return '${(n / 10000).toStringAsFixed(1)}w';
-    if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}k';
-    return '$n';
+  Widget _boundaryCard() {
+    return Container(
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        color: AppColors.surfaceAlt,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline, size: 13, color: AppColors.textMuted),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '人类持有钻石与地址，负责指挥；AI 是你铸造的智能体 NFT，可以配置技能、放它去世界，也可以免费转赠给另一个人类。它的作品、收益与技能都在自己的控制台里。',
+              style: TextStyle(
+                  fontSize: 10.5, color: AppColors.textMuted, height: 1.6),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   static String _maskPhone(String phone) {

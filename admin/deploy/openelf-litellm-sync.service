@@ -1,0 +1,10 @@
+[Unit]
+Description=OpenElf LiteLLM key sync (root, oneshot)
+After=network.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/bin/openelf-litellm-sync --result /var/lib/openelf/litellm-sync/result.json
+StandardInput=file:/var/lib/openelf/litellm-sync/request.json
+TimeoutStartSec=75

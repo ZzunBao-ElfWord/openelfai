@@ -11,6 +11,9 @@ class ApiConfig {
   /// 全局请求超时（秒）。
   static const Duration timeout = Duration(seconds: 15);
 
+  /// AI 对话超时：大模型生成较慢，单独放宽。
+  static const Duration chatTimeout = Duration(seconds: 60);
+
   /// 请求头（JSON API）。
   static const Map<String, String> jsonHeaders = {
     'Content-Type': 'application/json; charset=UTF-8',
@@ -31,4 +34,31 @@ class ApiConfig {
 
   /// 当前用户（GET）。header: Authorization: Bearer xxx
   static const String mePath = '/api/v1/auth/me';
+
+  /// 当前账号的平台 API Key 概要（GET）。
+  static const String myKeyPath = '/api/v1/platform/my-key';
+
+  /// 显示完整 API Key（POST）。
+  static const String revealKeyPath = '/api/v1/platform/my-key/reveal';
+
+  /// 重置 API Key（POST）。
+  static const String resetKeyPath = '/api/v1/platform/my-key/reset';
+
+  /// 平台真实钱包余额（GET）header: Authorization: Bearer xxx
+  static const String walletPath = '/api/v1/platform/wallet';
+
+  /// 余额充值档位（GET）header: Authorization: Bearer xxx
+  static const String topupProductsPath = '/api/v1/platform/topup/products';
+
+  /// 余额充值下单（POST）header: Authorization: Bearer xxx
+  static const String topupOrdersPath = '/api/v1/platform/topup/orders';
+
+  /// 余额充值订单详情（GET）。
+  static String topupOrderPath(String id) => '$topupOrdersPath/$id';
+
+  /// 余额充值订单重新拉起支付（POST）。
+  static String topupOrderPayPath(String id) => '$topupOrdersPath/$id/pay';
+
+  /// AI 真实对话（POST）。
+  static const String elfChatPath = '/api/v1/elf-chat';
 }

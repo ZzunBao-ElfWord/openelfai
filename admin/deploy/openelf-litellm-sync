@@ -1,0 +1,116 @@
+#!/usr/bin/env python3
+"""从请求文件读取厂商密钥，原子写入 LiteLLM 环境文件并重启代理。
+
+由 systemd 单元 openelf-litellm-sync.service 以 root 执行，stdin 来自
+/var/lib/openelf/litellm-sync/request.json，结果写入 result.json（0644）。
+密钥不出现在进程参数里，也不写日志。
+
+请求：{"keys":{"DEEPSEEK_API_KEY":"sk-..."}}
+结果：{"ok":true,"keys":[...]} 或 {"ok":false,"message":"..."}
+"""
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.request
+
+ENV_FILE = "/opt/litellm/.env"
+ALLOWED = {"DEEPSEEK_API_KEY", "VOLCENGINE_API_KEY", "ALIYUN_API_KEY"}
+HEALTH_URL = "http://127.0.0.1:4000/health/liveliness"
+KEY_RE = re.compile(r"^[A-Za-z0-9._\-+/=]{8,512}$")
+RESULT_PATH = None
+
+
+def emit(payload, code):
+    text = json.dumps(payload, ensure_ascii=False)
+    if RESULT_PATH:
+        try:
+            fd, tmp = tempfile.mkstemp(dir=os.path.dirname(RESULT_PATH), prefix=".result.")
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(text)
+            os.chmod(tmp, 0o644)
+            os.replace(tmp, RESULT_PATH)
+        except Exception:
+            pass
+    print(text)
+    sys.exit(code)
+
+
+def fail(message):
+    emit({"ok": False, "message": message}, 2)
+
+
+def main():
+    global RESULT_PATH
+    args = sys.argv[1:]
+    if len(args) == 2 and args[0] == "--result":
+        RESULT_PATH = args[1]
+
+    raw = sys.stdin.buffer.read(65536).decode("utf-8").strip()
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        fail("请求不是合法 JSON")
+    keys = payload.get("keys")
+    if not isinstance(keys, dict) or not keys:
+        fail("keys 不能为空")
+    for name, value in keys.items():
+        if name not in ALLOWED:
+            fail("不允许的环境变量: %s" % name)
+        if not isinstance(value, str):
+            fail("密钥必须是字符串: %s" % name)
+        value = value.strip()
+        if not KEY_RE.match(value):
+            fail("密钥格式非法或含空白: %s" % name)
+        keys[name] = value
+
+    current = {}
+    if os.path.exists(ENV_FILE):
+        with open(ENV_FILE, "r", encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                name, _, value = line.partition("=")
+                current[name.strip()] = value.strip()
+    if "LITELLM_MASTER_KEY" not in current:
+        fail("环境文件中缺少 LITELLM_MASTER_KEY")
+
+    current.update(keys)
+
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(ENV_FILE), prefix=".env.", text=True)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            for name, value in current.items():
+                fh.write("%s=%s\n" % (name, value))
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, ENV_FILE)
+    except Exception as exc:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        fail("写入环境文件失败: %s" % exc)
+
+    subprocess.run(["systemctl", "restart", "litellm-proxy"], check=False,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    healthy = False
+    for _ in range(30):
+        time.sleep(1)
+        try:
+            with urllib.request.urlopen(HEALTH_URL, timeout=2) as resp:
+                if resp.status == 200:
+                    healthy = True
+                    break
+        except Exception:
+            continue
+    if not healthy:
+        fail("LiteLLM 重启后健康检查超时")
+
+    emit({"ok": True, "keys": sorted(keys.keys())}, 0)
+
+
+if __name__ == "__main__":
+    main()

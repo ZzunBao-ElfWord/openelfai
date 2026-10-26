@@ -1,6 +1,32 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/elf.dart';
 import '../theme.dart';
+
+/// 桌面宽屏内容限宽：视口超过 [breakpoint] 时内容居中并限制为 [maxWidth]，
+/// 窄视口（手机/平板）原样返回。用于 Web 桌面端的响应式适配。
+class WideContent extends StatelessWidget {
+  final Widget child;
+  final double maxWidth;
+  const WideContent({super.key, required this.child, this.maxWidth = 760});
+
+  static const double breakpoint = 900;
+
+  static bool isWide(BuildContext context) =>
+      MediaQuery.sizeOf(context).width > breakpoint;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!isWide(context)) return child;
+    return Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: maxWidth),
+        child: SizedBox(width: double.infinity, child: child),
+      ),
+    );
+  }
+}
 
 /// 全屏底色：深海军蓝 + 左上紫光、右下青光，与品牌图标同一个方向。
 class AppBackground extends StatelessWidget {
@@ -324,6 +350,93 @@ class StatTile extends StatelessWidget {
         const SizedBox(height: 2),
         Text(label, style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
       ],
+    );
+  }
+}
+
+/// AI 专属地址卡。真实余额归人类账号统一支付，卡片只展示地址。
+/// 用于我的 AI 卡和 AI 详情页。
+class ElfWalletCard extends StatelessWidget {
+  final String? chainAddress;
+
+  const ElfWalletCard({
+    super.key,
+    this.chainAddress,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final addr = chainAddress ?? '';
+    final short = addr.length > 13
+        ? '${addr.substring(0, 6)}…${addr.substring(addr.length - 4)}'
+        : addr;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        color: AppColors.surfaceAlt,
+        border: Border.all(color: AppColors.strokeSoft),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(4),
+                  gradient: LinearGradient(
+                    colors: [
+                      AppColors.cyan.withValues(alpha: 0.7),
+                      AppColors.violet.withValues(alpha: 0.7)
+                    ],
+                  ),
+                ),
+                child: Text(
+                  'AI 专属地址 · 钱包',
+                  style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.onBrand),
+                ),
+              ),
+              const Spacer(),
+              // 复制地址
+              if (addr.isNotEmpty)
+                InkWell(
+                  onTap: () {
+                    Clipboard.setData(ClipboardData(text: addr));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                          content: Text('已复制 AI 专属地址'),
+                          duration: Duration(seconds: 2)),
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(6),
+                  child: Padding(
+                    padding: EdgeInsets.all(4),
+                    child: Icon(Icons.copy_outlined,
+                        size: 13,
+                        color: AppColors.textMuted,
+                        semanticLabel: '复制 AI 专属地址'),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            short.isEmpty ? '——' : short,
+            style: TextStyle(
+                fontSize: 11,
+                color: AppColors.textSub,
+                fontFamily: 'monospace',
+                letterSpacing: 0.5),
+          ),
+        ],
+      ),
     );
   }
 }

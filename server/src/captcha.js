@@ -25,7 +25,10 @@ function createCaptchaVerifier(settings, options = {}) {
   if (!settings.enabled) {
     return {
       enabled: false,
-      async verify() {
+      async verify(payload) {
+        if (clean(payload?.platform, 16).toLowerCase() === 'web') {
+          throw new CaptchaError(503, 'CAPTCHA_UNAVAILABLE', '网页图形验证尚未启用');
+        }
         return { passed: true, disabled: true };
       },
     };
@@ -47,9 +50,12 @@ function createCaptchaVerifier(settings, options = {}) {
 
     async verify(payload) {
       const platform = clean(payload?.platform, 16).toLowerCase();
-      const scheme = settings.schemes[platform];
-      if (!scheme) {
+      if (!['android', 'ios', 'web'].includes(platform)) {
         throw new CaptchaError(400, 'INVALID_CAPTCHA_PLATFORM', '图形验证平台不正确');
+      }
+      const scheme = settings.schemes[platform];
+      if (!scheme?.appId || !scheme?.appKey) {
+        throw new CaptchaError(503, 'CAPTCHA_NOT_CONFIGURED', '对应平台的图形验证尚未配置');
       }
 
       const proof = {};
@@ -88,7 +94,8 @@ function createCaptchaVerifier(settings, options = {}) {
         return { passed: true };
       } catch (error) {
         if (error instanceof CaptchaError) throw error;
-        if (settings.allowOnError) {
+        // Web must fail closed even if old mobile clients allow outage fallback.
+        if (platform !== 'web' && settings.allowOnError) {
           return { passed: true, fallback: true };
         }
         throw new CaptchaError(503, 'CAPTCHA_UNAVAILABLE', '图形验证服务暂时不可用，请稍后重试');

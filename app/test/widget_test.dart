@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:openelf/main.dart';
 import 'package:openelf/models/user.dart';
 import 'package:openelf/pages/create_elf_page.dart';
+import 'package:openelf/pages/home_shell.dart';
 import 'package:openelf/pages/login_page.dart';
 import 'package:openelf/state/app_state.dart';
 import 'package:openelf/theme.dart';
@@ -44,6 +46,81 @@ void main() {
     });
   });
 
+  testWidgets('桌面宽屏：左侧导航 + 世界流宽内容区', (WidgetTester tester) async {
+    // 避免触发支付插件初始化（测试环境默认 android 平台会走支付宝分支）
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    SharedPreferences.setMockInitialValues({});
+    final state = AppState.instance;
+    state.bootstrapSync();
+    state.currentUser = User(
+      id: 'wide-user',
+      phone: '13800000003',
+      nickname: '宽屏',
+      avatarInitial: '宽',
+      createdAt: DateTime.now(),
+    );
+
+    await tester.pumpWidget(const MaterialApp(home: HomeShell()));
+    await tester.pump();
+
+    // 左侧导航：品牌 + 5 项入口
+    expect(find.text('OpenElf'), findsOneWidget);
+    expect(find.text('我的 AI，我做主'), findsOneWidget);
+    expect(find.text('世界'), findsWidgets); // 导航项 + 页面标题
+    expect(find.text('视频'), findsOneWidget);
+    expect(find.text('创建'), findsOneWidget);
+    expect(find.text('发现'), findsOneWidget);
+
+    // 内容区：世界信息流正常渲染
+    expect(find.text('为你推荐'), findsOneWidget);
+
+    // 点击侧栏「我」切换 tab 不崩溃
+    await tester.tap(find.text('我'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    // 卸载 HomeShell，取消周期 Timer，避免测试收尾报 pending timer
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets('窄屏保持底部 5 格导航', (WidgetTester tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    SharedPreferences.setMockInitialValues({});
+    final state = AppState.instance;
+    state.bootstrapSync();
+    state.currentUser = User(
+      id: 'narrow-user',
+      phone: '13800000004',
+      nickname: '窄屏',
+      avatarInitial: '窄',
+      createdAt: DateTime.now(),
+    );
+
+    await tester.pumpWidget(const MaterialApp(home: HomeShell()));
+    await tester.pump();
+
+    // 窄屏无左侧品牌行，底部导航存在
+    expect(find.text('OpenElf'), findsNothing);
+    expect(find.text('创建'), findsOneWidget);
+    expect(find.text('为你推荐'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+    debugDefaultTargetPlatformOverride = null;
+  });
+
   testWidgets('未登录启动必须进入短信登录，不允许调试绕过', (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -61,8 +138,11 @@ void main() {
     expect(find.text('世界'), findsNothing);
   });
 
-  group('UGC AI 铸造', () {
+  group('UGC AI 创建', () {
     Future<void> signIn({required int diamonds}) async {
+      // 本组验证演示态（无服务端钱包）的本地创建逻辑；安卓真机走服务端。
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
       SharedPreferences.setMockInitialValues({});
       final state = AppState.instance;
       state.bootstrapSync();
@@ -76,7 +156,7 @@ void main() {
       state.wallet.diamonds = diamonds;
     }
 
-    test('钻石不足时拒绝，足额时扣费并生成链上地址', () async {
+    test('钻石不足时拒绝，足额时扣费并生成专属地址', () async {
       await signIn(diamonds: AppState.createElfCost - 1);
       final state = AppState.instance;
 
@@ -233,7 +313,9 @@ void main() {
     expect(find.text('身份证照片'), findsOneWidget);
   });
 
-  testWidgets('登录后三步走完并铸造成功', (WidgetTester tester) async {
+  testWidgets('登录后三步走完并创建成功', (WidgetTester tester) async {
+    // 演示态验证完整创建流程；安卓真机走服务端换取快照。
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -267,15 +349,16 @@ void main() {
     await tester.tap(find.text('下一步 · 合规确认'));
     await tester.pump();
 
-    // 第 3 步：逐条勾选声明后铸造
+    // 第 3 步：逐条勾选声明后创建
     for (final box in tester.widgetList<Checkbox>(find.byType(Checkbox))) {
       box.onChanged!(true);
     }
     await tester.pump();
-    await tester.tap(find.text('铸造 AI NFT · 💎${AppState.createElfCost}'));
+    await tester.tap(find.text('创建 AI · 💎${AppState.createElfCost}'));
     await tester.pumpAndSettle();
 
-    expect(find.text('铸造完成'), findsOneWidget);
+    expect(find.text('AI 已铸造为 NFT'), findsOneWidget);
     expect(state.myElves.any((e) => e.name == '小满'), isTrue);
+    debugDefaultTargetPlatformOverride = null;
   });
 }

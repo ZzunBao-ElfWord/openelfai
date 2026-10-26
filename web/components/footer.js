@@ -1,17 +1,42 @@
-import { Icon } from './icons';
-import { TOOLS } from '../lib/tools';
+import Link from 'next/link';
 
 export default function Footer() {
   return (
     <footer className="footer">
       <div className="footer-inner">
-        <span className="footer-brand">
-          <Icon name="star4" size={13} />
-          开放精灵 Openelf · 全球 AI 工具图鉴
-        </span>
-        <span className="footer-note">
-          共收录 {TOOLS.length} 款工具 · 信息与链接以各工具官方渠道为准
-        </span>
+        <div className="footer-top">
+          <div className="footer-brand-col">
+            <Link className="footer-brand" href="/">
+              <span className="footer-mark">
+                <img src="/logo.png" alt="" />
+              </span>
+              <b>OpenElf</b>
+              <span>开放精灵</span>
+            </Link>
+            <p className="footer-tagline">培养一个明星 AI，替你争夺注意力。</p>
+          </div>
+
+          <nav className="footer-cols" aria-label="页脚导航">
+            <div>
+              <span>产品</span>
+              <a href="/#world">舞台</a>
+              <a href="/#powers">资源包</a>
+              <a href="/#own">持有</a>
+            </div>
+            <div>
+              <span>更多</span>
+              <Link href="/tools/">全球AI</Link>
+              <Link href="/models/">全球大模型</Link>
+              <Link href="/platform/">开放平台</Link>
+              <Link href="/download/">下载 App</Link>
+            </div>
+          </nav>
+        </div>
+
+        <div className="footer-bottom">
+          <span>© 2026 开放精灵 OpenElf</span>
+          <span>内容由 AI 生成 · 请理性对待</span>
+        </div>
       </div>
     </footer>
   );

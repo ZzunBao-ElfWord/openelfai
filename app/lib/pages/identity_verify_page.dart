@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -26,6 +26,8 @@ class _IdentityVerifyPageState extends State<IdentityVerifyPage> {
 
   String? _frontPath;
   String? _backPath;
+  Uint8List? _frontBytes;
+  Uint8List? _backBytes;
   bool _authorized = false;
   bool _submitting = false;
 
@@ -50,11 +52,16 @@ class _IdentityVerifyPageState extends State<IdentityVerifyPage> {
         imageQuality: 88,
       );
       if (file == null || !mounted) return;
+      // 读字节做预览，Web（blob 路径）与原生（文件路径）均可显示。
+      final bytes = await file.readAsBytes();
+      if (!mounted) return;
       setState(() {
         if (front) {
           _frontPath = file.path;
+          _frontBytes = bytes;
         } else {
           _backPath = file.path;
+          _backBytes = bytes;
         }
       });
     } catch (_) {
@@ -252,7 +259,7 @@ class _IdentityVerifyPageState extends State<IdentityVerifyPage> {
         const SizedBox(height: 16),
         _noteRow(Icons.badge_outlined, '身份证人像面仅用于生成「本人形象」AI，不公开、不进入信息流。'),
         _noteRow(Icons.lock_outline, '本地只保留脱敏姓名与证件号，完整号码未留存。'),
-        _noteRow(Icons.sync_alt, '授权记录随 AI NFT 转售转移，接收方需重新完成本人授权。'),
+        _noteRow(Icons.sync_alt, '授权记录随 AI 转赠转移，接收方需重新完成本人授权。'),
       ],
     );
   }
@@ -302,7 +309,7 @@ class _IdentityVerifyPageState extends State<IdentityVerifyPage> {
             Expanded(
               child: _photoSlot(
                 label: '人像面',
-                path: _frontPath,
+                bytes: _frontBytes,
                 onTap: () => _pick(true),
               ),
             ),
@@ -310,7 +317,7 @@ class _IdentityVerifyPageState extends State<IdentityVerifyPage> {
             Expanded(
               child: _photoSlot(
                 label: '国徽面',
-                path: _backPath,
+                bytes: _backBytes,
                 onTap: () => _pick(false),
               ),
             ),
@@ -365,7 +372,7 @@ class _IdentityVerifyPageState extends State<IdentityVerifyPage> {
 
   Widget _photoSlot({
     required String label,
-    required String? path,
+    required Uint8List? bytes,
     required VoidCallback onTap,
   }) {
     return InkWell(
@@ -377,10 +384,10 @@ class _IdentityVerifyPageState extends State<IdentityVerifyPage> {
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-              color: path == null ? AppColors.stroke : AppColors.cyan),
+              color: bytes == null ? AppColors.stroke : AppColors.cyan),
         ),
         clipBehavior: Clip.antiAlias,
-        child: path == null
+        child: bytes == null
             ? Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -399,7 +406,7 @@ class _IdentityVerifyPageState extends State<IdentityVerifyPage> {
             : Stack(
                 fit: StackFit.expand,
                 children: [
-                  Image.file(File(path), fit: BoxFit.cover),
+                  Image.memory(bytes, fit: BoxFit.cover),
                   Positioned(
                     left: 8,
                     bottom: 8,

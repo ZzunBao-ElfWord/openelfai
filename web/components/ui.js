@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Icon } from './icons';
 import {
   CATEGORY_MAP,
+  MODEL_TYPE_MAP,
   REGION_LABEL,
   REGION_SHORT,
   entryOf,
@@ -14,7 +15,8 @@ import {
   listHref
 } from '../lib/tools';
 
-/* ── 首字印章（签名元素：国内朱砂 / 海外靛青） ─────────────── */
+/* ── 首字印章（签名元素：国内朱砂 / 海外靛青）
+ * 已配置官方 Logo 的条目渲染真实 Logo，缺失时回退首字印章。 ─────────────── */
 export function Seal({ tool, size = 52 }) {
   const style = {
     width: size + 'px',
@@ -22,6 +24,14 @@ export function Seal({ tool, size = 52 }) {
     fontSize: Math.round(size * 0.44) + 'px',
     borderRadius: Math.max(8, Math.round(size * 0.22)) + 'px'
   };
+  if (tool.logo_url) {
+    return (
+      <div className="seal seal--logo" style={style}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={tool.logo_url} alt={tool.name} loading="lazy" />
+      </div>
+    );
+  }
   return (
     <div className={'seal seal--' + tool.region} style={style} aria-hidden="true">
       <span>{firstChar(tool.name)}</span>
@@ -48,6 +58,8 @@ export function RegionBadge({ region, full }) {
  */
 export function EntryButton({ tool, size = 'sm' }) {
   const domestic = tool.region === 'domestic';
+  // 模型平台是一个开发控制台，不分国内海外，统一显示「开放平台」
+  const isPlatform = tool.kind === 'model' || tool.category === 'model_platform';
   const href = entryOf(tool);
   const iconSize = size === 'lg' ? 18 : 15;
   return (
@@ -57,22 +69,20 @@ export function EntryButton({ tool, size = 'sm' }) {
       target="_blank"
       rel="noopener noreferrer"
     >
-      <Icon name={domestic ? 'download' : 'external'} size={iconSize} />
-      <span>{domestic ? '下载' : '访问官网'}</span>
+      <Icon name={isPlatform || !domestic ? 'external' : 'download'} size={iconSize} />
+      <span>{isPlatform ? '开放平台' : domestic ? '下载' : '访问官网'}</span>
     </a>
   );
 }
 
 /* ── 工具卡片（首页精选 / 最新、列表、同类推荐共用） ─────────── */
 export function ToolCard({ tool }) {
-  const cat = CATEGORY_MAP[tool.category];
+  const isModel = tool.kind === 'model';
+  const cat = isModel ? MODEL_TYPE_MAP[tool.model_type] : CATEGORY_MAP[tool.category];
+  const detailHref = (isModel ? '/models/' : '/tools/') + tool.id + '/';
   return (
     <article className="card">
-      <Link
-        className="card-cover"
-        href={`/tools/${tool.id}/`}
-        aria-label={tool.name + ' 详情'}
-      ></Link>
+      <Link className="card-cover" href={detailHref} aria-label={tool.name + ' 详情'}></Link>
       <div className="card-top">
         <Seal tool={tool} />
         <div className="card-title">
@@ -87,7 +97,10 @@ export function ToolCard({ tool }) {
       </div>
       <p className="card-desc">{tool.short_desc}</p>
       <div className="card-foot">
-        <Link className="cat-tag" href={listHref({ category: tool.category })}>
+        <Link
+          className="cat-tag"
+          href={isModel ? '/models/?type=' + tool.model_type : listHref({ category: tool.category })}
+        >
           {cat ? cat.name : tool.category}
         </Link>
         <span className="card-date">{formatDate(tool.listed_at)}</span>
@@ -118,7 +131,7 @@ export function EmptyState({ onClear }) {
       <div className="empty-icon">
         <Icon name="searchOff" size={34} />
       </div>
-      <h3 className="empty-title">未找到相关工具</h3>
+      <h3 className="empty-title">未找到相关内容</h3>
       <p className="empty-desc">换个关键词试试，或放宽分类与地区筛选条件。</p>
       <button type="button" className="btn-ghost" onClick={onClear}>
         清空筛选条件

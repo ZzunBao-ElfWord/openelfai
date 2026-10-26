@@ -4,7 +4,9 @@ import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 
-/// 市场挂单详情 + 购买。
+/// 官方首发挂单详情 + 购买。
+///
+/// 持有人之间的 AI 交易已取消，这里只承载官方首发的新 AI。
 class MarketListingPage extends StatelessWidget {
   final MarketListing listing;
   const MarketListingPage({super.key, required this.listing});
@@ -12,21 +14,19 @@ class MarketListingPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = AppState.instance;
-    final isPrimary = listing.market == 'primary';
-
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: AppBackground(
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
-            _hero(context, isPrimary),
+            _hero(context),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // edition + 卖家信息
+                  // edition
                   Row(
                     children: [
                       Container(
@@ -34,18 +34,14 @@ class MarketListingPage extends StatelessWidget {
                             horizontal: 7, vertical: 3),
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(5),
-                          color: isPrimary
-                              ? AppColors.cyan.withOpacity(0.18)
-                              : AppColors.violet.withOpacity(0.18),
+                          color: AppColors.cyan.withOpacity(0.18),
                         ),
                         child: Text(
-                          isPrimary ? '官方首发' : '用户转售',
+                          '官方首发',
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
-                            color: isPrimary
-                                ? AppColors.cyan
-                                : AppColors.violetSoft,
+                            color: AppColors.cyan,
                           ),
                         ),
                       ),
@@ -56,14 +52,6 @@ class MarketListingPage extends StatelessWidget {
                           style: TextStyle(
                               fontSize: 11, color: AppColors.textMuted),
                         ),
-                      if (!isPrimary && listing.sellerLabel != null) ...[
-                        const SizedBox(width: 8),
-                        Text(
-                          '卖家 ${listing.sellerLabel}',
-                          style: TextStyle(
-                              fontSize: 11, color: AppColors.textMuted),
-                        ),
-                      ],
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -76,59 +64,8 @@ class MarketListingPage extends StatelessWidget {
                   ),
                   const SizedBox(height: 18),
 
-                  // 寄售装备 carry
-                  if (!isPrimary &&
-                      listing.equippedCarry != null &&
-                      listing.equippedCarry!.isNotEmpty) ...[
-                    const SectionHeader('随 AI 转让的装备', trailing: '买了就有'),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: listing.equippedCarry!.map((mid) {
-                        final m = state.module(mid);
-                        return Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: AppColors.strokeSoft),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                width: 22,
-                                height: 22,
-                                decoration: BoxDecoration(
-                                  color: AppColors.violet.withOpacity(0.3),
-                                  borderRadius: BorderRadius.circular(5),
-                                ),
-                                alignment: Alignment.center,
-                                child: Text(
-                                  m?.glyph ?? '?',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.violetSoft,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                m?.name ?? mid,
-                                style: TextStyle(
-                                    fontSize: 11, color: AppColors.textSub),
-                              ),
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 18),
-                  ],
-
-                  // 一级市场 note
-                  if (isPrimary && listing.note != null) ...[
+                  // note
+                  if (listing.note != null) ...[
                     Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
@@ -182,7 +119,7 @@ class MarketListingPage extends StatelessWidget {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          isPrimary ? '官方定价' : '卖家出价',
+                          '官方定价',
                           style: TextStyle(
                               fontSize: 11, color: AppColors.textMuted),
                         ),
@@ -191,9 +128,9 @@ class MarketListingPage extends StatelessWidget {
                   ),
                   const SizedBox(height: 22),
 
-                  // 购买按钮
                   Opacity(
-                    opacity: state.wallet.diamonds < listing.price ? 0.45 : 1.0,
+                    opacity:
+                        state.wallet.diamonds < listing.price ? 0.45 : 1.0,
                     child: BrandButton(
                       label: '买下它 · 💎${listing.price}',
                       icon: Icons.shopping_bag_outlined,
@@ -225,7 +162,8 @@ class MarketListingPage extends StatelessWidget {
                       child: Center(
                         child: Text(
                           '💎${state.wallet.diamonds} / 要 💎${listing.price}，差 💎${listing.price - state.wallet.diamonds}',
-                          style: TextStyle(fontSize: 11, color: AppColors.violetSoft),
+                          style: TextStyle(
+                              fontSize: 11, color: AppColors.violetSoft),
                         ),
                       ),
                     ),
@@ -233,9 +171,8 @@ class MarketListingPage extends StatelessWidget {
                   const SizedBox(height: 10),
                   Center(
                     child: Text(
-                      isPrimary
-                          ? '官方首发的 AI 都是新编号、新编号。'
-                          : '寄售市场的 AI 装备随它一起转让，算力剩余按现状交付。',
+                      '官方首发的 AI 都是新编号、新地址；买入后可在控制台免费转赠给其他持有人。',
+                      textAlign: TextAlign.center,
                       style: TextStyle(
                           fontSize: 10.5,
                           color: AppColors.textFaint.withOpacity(0.9)),
@@ -251,7 +188,7 @@ class MarketListingPage extends StatelessWidget {
     );
   }
 
-  Widget _hero(BuildContext context, bool isPrimary) {
+  Widget _hero(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
       decoration: BoxDecoration(
@@ -259,9 +196,7 @@ class MarketListingPage extends StatelessWidget {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            isPrimary
-                ? AppColors.violet.withOpacity(0.25)
-                : AppColors.surfaceAlt,
+            AppColors.violet.withOpacity(0.25),
             AppColors.bg,
           ],
         ),
@@ -292,10 +227,7 @@ class MarketListingPage extends StatelessWidget {
                   height: 82,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(22),
-                    gradient: isPrimary
-                        ? AppColors.brandGradient
-                        : const LinearGradient(
-                            colors: [Color(0xFF7949DD), Color(0xFF64BAF7)]),
+                    gradient: AppColors.brandGradient,
                   ),
                   alignment: Alignment.center,
                   child: Text(
@@ -321,7 +253,7 @@ class MarketListingPage extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        isPrimary ? '官方首发' : '用户转售',
+                        '官方首发',
                         style: TextStyle(
                             fontSize: 11, color: AppColors.textMuted),
                       ),

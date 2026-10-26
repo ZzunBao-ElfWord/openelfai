@@ -112,7 +112,7 @@ class WalletPage extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              '钻石余额 · 购买 AI / 能力包 / 打赏 / 注算力',
+              '钻石余额 · 购买 AI / 技能书 / 打赏',
               style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
             ),
             const SizedBox(height: 14),
@@ -123,7 +123,7 @@ class WalletPage extends StatelessWidget {
                 _stat('累计充值', '💎${state.wallet.totalRecharged}'),
                 _stat('累计消费', '💎${state.wallet.totalSpent}'),
                 _stat(
-                  '我的 AI 收益',
+                  'AI 创作收益',
                   WorldData.formatYuan(state.creatorEarningsYuan),
                 ),
               ],
@@ -133,7 +133,7 @@ class WalletPage extends StatelessWidget {
               Text('退款欠额：${state.wallet.refundDebt} 钻石。消费已暂停，下次充值优先补足欠额。',
                   style: const TextStyle(color: Colors.orange, fontSize: 12)),
             Text(
-              '消费后钻石不再流通：10💎 = ¥1，创作者获得 50%，平台收取 50%。',
+              '消费后钻石不再流通：10💎 = ¥1。打赏礼物的 50% 作为服务费结算给创作者，收益过冷静期后可提现。',
               style: TextStyle(fontSize: 10.5, color: AppColors.textFaint),
             ),
           ],

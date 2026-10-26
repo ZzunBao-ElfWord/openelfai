@@ -3,7 +3,8 @@ import '../models/elf.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
-import 'elf_detail_page.dart';
+import 'elf_chat_page.dart';
+import 'elf_console_page.dart';
 
 /// 「此刻世界在注视谁」榜单页：总流向榜 + 新星流向榜。
 /// 数据来自 AppState.attentionRanked / risingRanked，按本周注视降序。
@@ -138,7 +139,11 @@ class _AttentionBoardPageState extends State<AttentionBoardPage> {
     return InkWell(
       borderRadius: BorderRadius.circular(12),
       onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => ElfDetailPage(elfId: elf.id)),
+        MaterialPageRoute(
+          builder: (_) => elf.isMine
+              ? ElfConsolePage(elfId: elf.id)
+              : ElfChatPage(elfId: elf.id),
+        ),
       ),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),

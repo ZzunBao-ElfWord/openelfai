@@ -6,7 +6,7 @@ enum IdentityStatus { none, verified }
 /// 实名认证结果。
 ///
 /// 隐私约束：本地只保留脱敏后的姓名与证件号，完整身份证号只在核验请求中使用，
-/// 不落盘、不进入 AI NFT 元数据、不进入信息流。
+/// 不落盘、不进入 AI 元数据、不进入信息流。
 class IdentityVerification {
   final IdentityStatus status;
 

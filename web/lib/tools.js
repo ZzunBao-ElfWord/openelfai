@@ -19,6 +19,17 @@ export const CATEGORY_MAP = Object.fromEntries(
   CATEGORIES.map((c) => [c.code, c])
 );
 
+/* 大模型厂商的类型：与「AI 工具应用」分属两套目录 */
+export const MODEL_TYPES = [
+  { code: 'llm', name: '语言大模型', desc: '自研通用语言与多模态大模型' },
+  { code: 'generation', name: '生成模型', desc: '图像、视频与语音生成模型' },
+  { code: 'hosting', name: '平台与托管', desc: '企业级模型托管与推理平台' }
+];
+
+export const MODEL_TYPE_MAP = Object.fromEntries(
+  MODEL_TYPES.map((c) => [c.code, c])
+);
+
 export const REGION_LABEL = { domestic: '国内工具', overseas: '海外工具' };
 export const REGION_SHORT = { domestic: '国内', overseas: '海外' };
 
@@ -34,9 +45,15 @@ function filterActive(list) {
   });
 }
 
-export const TOOLS = filterActive(rawTools);
+/* 目录一分为二：AI 工具应用（apps）与大模型厂商/平台（models） */
+export const APPS = filterActive(rawTools.filter((t) => t.kind !== 'model'));
+export const MODELS = filterActive(rawTools.filter((t) => t.kind === 'model'));
 
-export const TOOL_MAP = Object.fromEntries(TOOLS.map((t) => [t.id, t]));
+/* 兼容旧调用：TOOLS 始终指 AI 工具应用 */
+export const TOOLS = APPS;
+
+export const TOOL_MAP = Object.fromEntries(APPS.map((t) => [t.id, t]));
+export const MODEL_MAP = Object.fromEntries(MODELS.map((t) => [t.id, t]));
 
 /* 入口链接：国内 → download_url（下载）；海外 → official_url（官网） */
 export function entryOf(tool) {
@@ -70,14 +87,21 @@ function byLatest(a, b) {
 function byName(a, b) {
   return (a.name || '').localeCompare(b.name || '', 'zh');
 }
+/* 知名度降序，分值相同按收录时间 */
+function byHot(a, b) {
+  const pa = a.popularity || 0;
+  const pb = b.popularity || 0;
+  if (pa !== pb) return pb - pa;
+  return byLatest(a, b);
+}
 
 export function sortTools(list, mode) {
   const copy = list.slice();
-  copy.sort(mode === 'name' ? byName : byLatest);
+  copy.sort(mode === 'name' ? byName : mode === 'latest' ? byLatest : byHot);
   return copy;
 }
 
-/* 首字符占位（logo 缺失时用名称首字符占位，当前 107 条 logo_url 均为空） */
+/* 首字符占位（logo 缺失时用名称首字符占位） */
 export function firstChar(name) {
   const n = (name || '').trim();
   return n ? n.charAt(0).toUpperCase() : '·';
@@ -111,7 +135,7 @@ export function latestTools(list, n) {
 export function relatedTools(tool, list, n) {
   return sortTools(
     list.filter((t) => t.category === tool.category && t.id !== tool.id),
-    'latest'
+    'hot'
   ).slice(0, n || 6);
 }
 

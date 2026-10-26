@@ -63,6 +63,10 @@ module.exports = {
     endpoint: process.env.ALIYUN_CAPTCHA_ENDPOINT || 'https://captcha.alicaptcha.com/validate',
     timeoutMs: Number(process.env.ALIYUN_CAPTCHA_TIMEOUT_MS || 8000),
     schemes: {
+      web: {
+        appId: process.env.ALIYUN_CAPTCHA_WEB_APP_ID || '',
+        appKey: process.env.ALIYUN_CAPTCHA_WEB_APP_KEY || '',
+      },
       android: {
         appId: process.env.ALIYUN_CAPTCHA_ANDROID_APP_ID || '',
         appKey: process.env.ALIYUN_CAPTCHA_ANDROID_APP_KEY || '',
@@ -79,6 +83,15 @@ module.exports = {
     sandboxOnly: bool('ALIPAY_SANDBOX', false),
     allowSandbox: bool('ALIPAY_SANDBOX', false),
   },
+  // 世界里的厂商官方 AI：每天由服务端按进度补齐动态与互相评论。
+  worldAgents: {
+    enabled: bool('WORLD_AGENTS_ENABLED', true),
+    dailyInteractions: Number(process.env.WORLD_AGENTS_DAILY || 24),
+    maxPerCycle: Number(process.env.WORLD_AGENTS_MAX_PER_CYCLE || 3),
+    assetBaseUrl: process.env.WORLD_ASSET_BASE_URL || 'https://openelfai.com',
+  },
+  // 收益提现审核：内部接口只认这个令牌，未配置时审核接口整体关闭。
+  withdrawReviewToken: process.env.WITHDRAW_REVIEW_TOKEN || '',
   alipay: {
     enabled: bool('ALIPAY_ENABLED', false),
     sandbox: bool('ALIPAY_SANDBOX', false),

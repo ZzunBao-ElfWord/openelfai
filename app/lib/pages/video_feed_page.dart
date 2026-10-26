@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
@@ -7,6 +9,7 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/share_card.dart';
 import 'elf_chat_page.dart';
+import 'login_page.dart';
 
 /// 视频 tab：站内第二个曝光渠道。
 /// 参考抖音首页的竖屏单列视频流 —— 上下滑动切视频，当前条自动播放，
@@ -39,7 +42,10 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
     super.initState();
     // 互动计数变化时只刷新 UI，不重排当前列表（避免播放中被换走）
     _state.addListener(_onStateChanged);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadFeed());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_state.loadFeed(channel: 'video', sort: 'hot'));
+      _loadFeed();
+    });
   }
 
   @override
@@ -70,7 +76,11 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
   }
 
   void _onStateChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {});
+    // 服务端追加了新的一页时把列表接上，保持当前这条不变。
+    final latest = _state.feedVideo();
+    if (latest.length != _posts.length) _loadFeed(keepIndex: true);
   }
 
   void _loadFeed({bool keepIndex = false}) {
@@ -184,17 +194,25 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
     setState(() => _index = i);
     _watchCurrent();
     _playCurrent();
+    // 快到底部时预取下一页，滑动不中断。
+    if (i >= _posts.length - 3 && _state.feedHasMore('video', sort: 'hot')) {
+      unawaited(_state.loadFeed(channel: 'video', sort: 'hot'));
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     if (_posts.isEmpty) return _empty();
-    return PageView.builder(
-      controller: _pc,
-      scrollDirection: Axis.vertical,
-      itemCount: _posts.length,
-      onPageChanged: _onPageChanged,
-      itemBuilder: (context, i) => _item(_posts[i], i),
+    // 桌面宽屏：竖屏视频收窄居中，两侧留给黑底，类似抖音网页版。
+    return WideContent(
+      maxWidth: 520,
+      child: PageView.builder(
+        controller: _pc,
+        scrollDirection: Axis.vertical,
+        itemCount: _posts.length,
+        onPageChanged: _onPageChanged,
+        itemBuilder: (context, i) => _item(_posts[i], i),
+      ),
     );
   }
 
@@ -317,14 +335,18 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                     color: _state.isLiked(p.id) ? AppColors.danger : Colors.white,
                     label: _fmt(p.likes),
                     semantic: '点赞',
-                    onTap: () => _state.toggleLike(p.id),
+                    onTap: () {
+                      if (checkLoginOrPrompt(context)) _state.toggleLike(p.id);
+                    },
                   ),
                   const SizedBox(height: 16),
                   _railButton(
                     icon: Icons.mode_comment_outlined,
                     label: _fmt(p.replies),
                     semantic: '评论',
-                    onTap: () => _commentsSheet(p, elf),
+                    onTap: () {
+                      if (checkLoginOrPrompt(context)) _commentsSheet(p, elf);
+                    },
                   ),
                   const SizedBox(height: 16),
                   _railButton(
@@ -332,7 +354,9 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                     color: _state.isCollected(p.id) ? AppColors.warn : Colors.white,
                     label: _fmt(p.collects),
                     semantic: '收藏',
-                    onTap: () => _state.toggleCollect(p.id),
+                    onTap: () {
+                      if (checkLoginOrPrompt(context)) _state.toggleCollect(p.id);
+                    },
                   ),
                   const SizedBox(height: 16),
                   _railButton(
@@ -351,7 +375,9 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                     label: '打赏',
                     semantic: '打赏',
                     color: elf.isMine ? Colors.white38 : AppColors.cyan,
-                    onTap: elf.isMine ? null : () => _tipSheet(p, elf),
+                    onTap: elf.isMine ? null : () {
+                      if (checkLoginOrPrompt(context)) _tipSheet(p, elf);
+                    },
                   ),
                 ],
               ),
@@ -546,7 +572,7 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
               Text(
                 mine == null
                     ? '先去市场买一只 AI，再给它装上「视频生成」。'
-                    : '给它装上「视频生成」，然后在「我的 AI」里让它创作，视频会出现在这里。',
+                    : '给它装上「视频生成」，然后在它的 AI 控制台里让它创作，视频会出现在这里。',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 11.5, color: AppColors.textMuted, height: 1.7),
               ),
@@ -567,10 +593,12 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
 
   void _commentsSheet(ElfPost p, Elf elf) {
     final input = TextEditingController();
-    void send() {
-      final err = _state.addComment(p.id, input.text);
+    Future<void> send() async {
+      // 评论要等服务端回执，先取出 messenger 避免跨 await 使用 context。
+      final messenger = ScaffoldMessenger.of(context);
+      final err = await _state.addComment(p.id, input.text);
       if (err != null) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
+        messenger.showSnackBar(SnackBar(content: Text(err)));
         return;
       }
       input.clear();

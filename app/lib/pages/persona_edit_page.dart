@@ -6,7 +6,9 @@ import '../widgets/common.dart';
 /// 人格编辑器（v1.3）：编辑我的 AI 的「相信 / 害怕 / 习惯」。
 /// 人格关键词会影响 AI 自选能力时的权重（见 AppState._personaAffinity）。
 class PersonaEditPage extends StatefulWidget {
-  const PersonaEditPage({super.key});
+  /// 要编辑的 AI；不传时编辑当前选中的那只。
+  final String? elfId;
+  const PersonaEditPage({super.key, this.elfId});
 
   @override
   State<PersonaEditPage> createState() => _PersonaEditPageState();
@@ -22,7 +24,8 @@ class _PersonaEditPageState extends State<PersonaEditPage> {
   @override
   void initState() {
     super.initState();
-    final elf = AppState.instance.myElf;
+    final state = AppState.instance;
+    final elf = widget.elfId == null ? state.myElf : state.elf(widget.elfId!);
     String seed(String v) => v == _empty ? '' : v;
     _persona = TextEditingController(text: seed(elf?.persona ?? ''));
     _fear = TextEditingController(text: seed(elf?.fear ?? ''));
@@ -39,6 +42,7 @@ class _PersonaEditPageState extends State<PersonaEditPage> {
 
   void _save() {
     AppState.instance.updatePersona(
+      elfId: widget.elfId,
       persona: _persona.text.isEmpty ? _empty : _persona.text,
       fear: _fear.text.isEmpty ? _empty : _fear.text,
       habit: _habit.text.isEmpty ? _empty : _habit.text,

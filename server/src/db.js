@@ -2,6 +2,7 @@
 
 const mysql = require('mysql2/promise');
 const { PAYMENT_TABLES } = require('./payment_store');
+const { PLATFORM_TABLES } = require('./platform/tables');
 
 const TABLES = [
   `CREATE TABLE IF NOT EXISTS users (
@@ -82,7 +83,39 @@ const TABLES = [
     INDEX idx_sandbox_iap_user (user_id),
     CONSTRAINT fk_sandbox_iap_user FOREIGN KEY (user_id) REFERENCES users(id)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  ...PLATFORM_TABLES,
 ];
+
+// CREATE TABLE IF NOT EXISTS 不会给已存在的生产表补列，这里做幂等迁移。
+const PLATFORM_API_KEY_COLUMN_MIGRATIONS = [
+  ['key_cipher', 'ALTER TABLE platform_api_keys ADD COLUMN key_cipher TEXT NULL'],
+  ['is_default', 'ALTER TABLE platform_api_keys ADD COLUMN is_default TINYINT(1) NOT NULL DEFAULT 0'],
+];
+
+// 创作者收益三档余额：老库已有 earnings_fen，补三列即可。
+const WALLET_META_COLUMN_MIGRATIONS = [
+  ['pending_cents', 'ALTER TABLE payment_wallet_meta ADD COLUMN pending_cents BIGINT UNSIGNED NOT NULL DEFAULT 0'],
+  ['available_cents', 'ALTER TABLE payment_wallet_meta ADD COLUMN available_cents BIGINT UNSIGNED NOT NULL DEFAULT 0'],
+  ['withdrawn_cents', 'ALTER TABLE payment_wallet_meta ADD COLUMN withdrawn_cents BIGINT UNSIGNED NOT NULL DEFAULT 0'],
+];
+
+async function migrateColumns(pool, table, migrations) {
+  const [rows] = await pool.query(
+    `SELECT COLUMN_NAME FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`, [table],
+  );
+  const existing = new Set(rows.map((row) => row.COLUMN_NAME));
+
+  for (const [column, statement] of migrations) {
+    if (existing.has(column)) continue;
+    try {
+      await pool.query(statement);
+    } catch (error) {
+      // 多实例同时启动时，另一个实例可能已经补过列。
+      if (error.code !== 'ER_DUP_FIELDNAME') throw error;
+    }
+  }
+}
 
 async function createPool(config) {
   const pool = mysql.createPool({
@@ -101,6 +134,9 @@ async function createPool(config) {
   for (const statement of [...TABLES, ...PAYMENT_TABLES]) {
     await pool.query(statement);
   }
+
+  await migrateColumns(pool, 'platform_api_keys', PLATFORM_API_KEY_COLUMN_MIGRATIONS);
+  await migrateColumns(pool, 'payment_wallet_meta', WALLET_META_COLUMN_MIGRATIONS);
 
   return pool;
 }

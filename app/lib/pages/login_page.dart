@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:openelf_ali_captcha/openelf_ali_captcha.dart';
@@ -20,6 +20,47 @@ class LoginPage extends StatefulWidget {
 
   @override
   State<LoginPage> createState() => _LoginPageState();
+}
+
+/// 游客模式（Web 免登录体验）：互动操作前检查登录态。
+/// 已登录返回 true；未登录弹登录提醒并返回 false。
+/// 注意：用 showDialog 而非 SnackBar，避免被底部弹层遮挡。
+bool checkLoginOrPrompt(BuildContext context) {
+  if (AppState.instance.currentUser != null) return true;
+  showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: AppColors.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      title: Text(
+        '登录后继续',
+        style: TextStyle(
+            fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.text),
+      ),
+      content: Text(
+        '登录后即可点赞、评论、打赏、聊天，并创建属于你自己的 AI',
+        style: TextStyle(fontSize: 13, height: 1.5, color: AppColors.textSub),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(),
+          child: Text('先逛逛', style: TextStyle(color: AppColors.textMuted)),
+        ),
+        TextButton(
+          onPressed: () {
+            Navigator.of(ctx).pop();
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const LoginPage()),
+            );
+          },
+          child: Text('去登录',
+              style:
+                  TextStyle(color: AppColors.cyan, fontWeight: FontWeight.w700)),
+        ),
+      ],
+    ),
+  );
+  return false;
 }
 
 class _LoginPageState extends State<LoginPage> {
@@ -82,12 +123,22 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<CaptchaProof?> _verifyCaptcha() async {
+    // Web 端没有阿里云原生图形验证 SDK，发送依赖服务端 IP/手机号频率限制兜底。
+    if (kIsWeb) {
+      return const CaptchaProof(
+        platform: 'web',
+        lotNumber: 'web',
+        passToken: 'web',
+        genTime: 'web',
+        captchaOutput: 'web',
+      );
+    }
     final String platform;
     final String captchaId;
-    if (Platform.isAndroid) {
+    if (defaultTargetPlatform == TargetPlatform.android) {
       platform = 'android';
       captchaId = CaptchaConfig.androidId;
-    } else if (Platform.isIOS) {
+    } else if (defaultTargetPlatform == TargetPlatform.iOS) {
       platform = 'ios';
       captchaId = CaptchaConfig.iosId;
     } else {
@@ -175,11 +226,16 @@ class _LoginPageState extends State<LoginPage> {
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: AppBackground(
-        child: SafeArea(
-          bottom: false,
-          child: SingleChildScrollView(
+        child: Stack(
+          children: [
+            SafeArea(
+              bottom: false,
+              child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
-            child: Column(
+            // 桌面宽屏：登录表单收窄居中
+            child: WideContent(
+              maxWidth: 420,
+              child: Column(
               children: [
                 // Logo + 标题
                 const SizedBox(height: 40),
@@ -361,7 +417,24 @@ class _LoginPageState extends State<LoginPage> {
                 ),
               ],
             ),
+            ),
           ),
+            ),
+            // 游客从提醒弹层 push 进来时提供返回入口
+            if (Navigator.canPop(context))
+              Positioned(
+                top: 4,
+                left: 4,
+                child: SafeArea(
+                  bottom: false,
+                  child: IconButton(
+                    icon: Icon(Icons.arrow_back_ios_new,
+                        size: 18, color: AppColors.textSub),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );

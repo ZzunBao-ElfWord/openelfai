@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -11,6 +12,7 @@ import '../models/elf.dart';
 import '../models/user.dart';
 import '../persistence/data_repository.dart';
 import '../payments/commerce_repository.dart';
+import '../services/platform_api.dart';
 
 class AppState extends ChangeNotifier {
   AppState._();
@@ -26,7 +28,6 @@ class AppState extends ChangeNotifier {
   late List<Seat> seats;
   late List<AbilityModule> modules;
   late List<MarketListing> primaryListings;
-  late List<MarketListing> secondaryListings;
 
   late Wallet wallet;
   final List<Tip> tips = [];
@@ -41,8 +42,9 @@ class AppState extends ChangeNotifier {
   /// 已计过站外回流分的 elfId（v1.3，同一设备对同一 AI 永久只计 1 次）。
   final Set<String> referralCounted = {};
 
-  /// 我已购入的能力模块 id（v1.4）。只有拥有后才出现在「我」tab 装配工坊。
-  final Set<String> ownedModules = {};
+  /// 我的书包：持有的技能书 NFT 实例（挂在我的专属地址下）。
+  /// 学习即销毁，书不转售也不转赠。
+  final List<BookInstance> books = [];
 
   /// 当前正在看的那只 AI（v1.5 支持同时持有多只）。为空时回落到第一只。
   String? activeElfId;
@@ -66,14 +68,51 @@ class AppState extends ChangeNotifier {
   int _paymentVersion = -1;
   int _commerceRevision = -1;
   int _creatorEarningsFen = 0;
+  /// 创作者收益三档与提现规则：全部以服务端快照为准。
+  EarningsSummary creatorEarnings = const EarningsSummary();
+  final List<WithdrawalRecord> withdrawals = [];
   bool _commerceBusy = false;
   bool _commerceReady = false;
   final Set<String> _remoteElfIds = {};
+  final Set<String> _remotePostIds = {};
+  // 信息流分页缓存：键为 channel:sort，服务端决定顺序，客户端只按页追加。
+  final Map<String, List<ElfPost>> _feedCache = {};
+  final Map<String, int> _feedPage = {};
+  final Map<String, bool> _feedHasMore = {};
+  final Set<String> _feedLoading = {};
   final Set<String> _ownedModules = {};
   final Map<String, int> _modulePrices = {};
   bool get commerceReady => _commerceReady;
+
+  /// 平台真实钱包余额（微元，1 元 = 1_000_000 微元），归人类账号所有。
+  int platformBalanceMicro = 0;
+
+  /// 是否已从服务端成功拉取过余额。未拉取时不据此停工，避免误判。
+  bool platformBalanceLoaded = false;
+
+  bool get hasPlatformBalance => platformBalanceMicro > 0;
+
+  /// 自动运营因余额不足停工的原因（按 AI id 记录，供 UI 展示）。
+  final Map<String, String> _autoStopReasons = {};
+
+  String? autoStopReason(String elfId) {
+    final reason = _autoStopReasons[elfId];
+    if (reason != null) return reason;
+    final e = elf(elfId);
+    if (platformBalanceLoaded &&
+        !hasPlatformBalance &&
+        e.learnedSkills.contains('auto')) {
+      return '余额不足，已停工';
+    }
+    return null;
+  }
+
+  /// 是否持有对应的技能书（本地书包）。
+  bool hasBook(String moduleId) => books.any((b) => b.moduleId == moduleId);
+
+  /// 是否可用于学习：服务端已授予权益，或书包里有书。
   bool ownsModule(String id) =>
-      !CommerceConfig.enabled || _ownedModules.contains(id);
+      !CommerceConfig.enabled || _ownedModules.contains(id) || hasBook(id);
   int modulePrice(String id) =>
       _modulePrices[id] ??
       int.tryParse(module(id)?.price.replaceAll(RegExp(r'[^0-9]'), '') ?? '') ??
@@ -86,10 +125,10 @@ class AppState extends ChangeNotifier {
       _commerceReady && _remoteElfIds.contains(elfId);
 
   int _postSeq = 100;
-  int _listSeq = 200;
   int _tipSeq = 300;
   int _logSeq = 400;
   int _commentSeq = 500;
+  int _bookSeq = 600;
 
   bool get isReady => _initialized;
 
@@ -116,16 +155,31 @@ class AppState extends ChangeNotifier {
         posts = loaded.posts;
         seats = loaded.seats;
         primaryListings = loaded.primaryListings;
-        secondaryListings = loaded.secondaryListings;
         wallet = CommerceConfig.enabled ? Wallet() : loaded.wallet;
-        tips..clear()..addAll(loaded.tips);
-        logs..clear()..addAll(loaded.logs);
-        followed..clear()..addAll(loaded.followed);
-        likedPosts..clear()..addAll(loaded.likedPosts);
-        collectedPosts..clear()..addAll(loaded.collectedPosts);
-        watchedPosts..clear()..addAll(loaded.watchedPosts);
-        referralCounted..clear()..addAll(loaded.referralCounted);
-        ownedModules..clear()..addAll(loaded.ownedModules);
+        tips
+          ..clear()
+          ..addAll(loaded.tips);
+        logs
+          ..clear()
+          ..addAll(loaded.logs);
+        followed
+          ..clear()
+          ..addAll(loaded.followed);
+        likedPosts
+          ..clear()
+          ..addAll(loaded.likedPosts);
+        collectedPosts
+          ..clear()
+          ..addAll(loaded.collectedPosts);
+        watchedPosts
+          ..clear()
+          ..addAll(loaded.watchedPosts);
+        referralCounted
+          ..clear()
+          ..addAll(loaded.referralCounted);
+        books
+          ..clear()
+          ..addAll(loaded.books);
         activeElfId = loaded.activeElfId;
         comments
           ..clear()
@@ -135,16 +189,33 @@ class AppState extends ChangeNotifier {
         _rebuildSeq();
         // 迁移：带 auto 能力但 nextAutoPostAt 为 null 的老数据
         for (final e in elves) {
-          if (e.equipped.contains('auto') && e.nextAutoPostAt == null) {
+          if (e.learnedSkills.contains('auto') && e.nextAutoPostAt == null) {
             e.nextAutoPostAt = DateTime.now().add(const Duration(minutes: 20));
           }
-          // v1.4 迁移：老数据没有链上地址，按 id 确定性补发
+          // v1.4 迁移：老数据没有专属地址，按 id 确定性补发
           _ensureChainAddress(e);
         }
-        // v1.4 迁移：老数据没有拥有记录，已装模块视为已拥有
-        if (ownedModules.isEmpty) {
-          final mine = myElf;
-          if (mine != null) ownedModules.addAll(mine.equipped);
+        // v1.4 迁移：当前用户没有专属地址，补发
+        if (currentUser != null) _ensureUserAddress(currentUser!);
+        // v1.6 迁移：装配模式 → 学习模式。
+        // 已学在 AI 身上的技能视为已学完（不补书）；
+        // 只买了没装的模块，按模块铸一本技能书发到书包。
+        if (books.isEmpty) {
+          final learnedByMine = <String>{};
+          for (final e in elves.where((e) => e.isMine)) {
+            learnedByMine.addAll(e.learnedSkills);
+          }
+          for (final id in loaded.legacyOwnedModules) {
+            if (learnedByMine.contains(id)) continue;
+            books.add(_mintBook(id));
+          }
+        }
+        // 书包里的书必须挂在我的专属地址下。
+        final myAddress = currentUser?.chainAddress;
+        if (myAddress != null) {
+          for (final b in books) {
+            if (b.ownerAddress.isEmpty) b.ownerAddress = myAddress;
+          }
         }
         // v1.5 迁移：老数据没有 activeElfId，回落到第一只
         if (activeElfId == null) activeElfId = myElf?.id;
@@ -174,6 +245,7 @@ class AppState extends ChangeNotifier {
     }
     _cachedUserId = user.id;
     _resetCommerce();
+    _ensureUserAddress(user);
     currentUser = user;
     if (CommerceConfig.enabled) wallet = Wallet();
     // 登录时如果本地还没有种子数据（比如首次启动直接登录），先注入
@@ -184,6 +256,97 @@ class AppState extends ChangeNotifier {
     }
     await save();
     notifyListeners();
+    // 登录后异步刷新真实钱包余额，不阻塞登录流程。
+    unawaited(refreshPlatformBalance());
+    // 单一真源：登录后即拉取服务端权益快照（AI/技能书/挂单/钱包）。
+    if (CommerceConfig.android) unawaited(_ensureCommerceReady());
+  }
+
+  /// 从服务端刷新真实钱包余额。失败静默，保留已有值。
+  Future<void> refreshPlatformBalance() async {
+    try {
+      final info = await PlatformApi.instance.wallet();
+      platformBalanceMicro = info.balanceMicro;
+      platformBalanceLoaded = true;
+      // 充值后余额恢复，清掉停工提示，让自动运营下一轮重新开工。
+      if (info.balanceMicro > 0) _autoStopReasons.clear();
+      notifyListeners();
+    } catch (_) {
+      // 网络或鉴权失败时静默，不弹错、不清零。
+    }
+  }
+
+  /// 收益页刷新：强制拉一次快照，拿到最新三档收益与提现记录。
+  Future<String?> refreshEarnings() async {
+    final user = currentUser;
+    if (user == null) return '请先登录';
+    final mode =
+        _paymentMode ?? (CommerceConfig.android ? CommerceConfig.androidMode : null);
+    if (mode == null) return '请先打开钱包，刷新服务端权益';
+    try {
+      final response =
+          await CommerceRepository.instance.snapshot(user.id, mode);
+      applyPaymentResponse(user.id, response);
+      return null;
+    } on AuthException catch (error) {
+      return error.message;
+    } catch (_) {
+      return '收益服务暂不可用，请稍后重试';
+    }
+  }
+
+  /// 签署创作者服务协议：收益是平台结算的服务费，不是把平台币换回钱。
+  Future<String?> signCreatorAgreement() async {
+    if (currentUser == null) return '请先登录';
+    final error = await _performCommerce('accept_creator_agreement', const {});
+    if (error == null) await refreshEarnings();
+    return error;
+  }
+
+  /// 能力许愿：把用户期待的能力提交给产品团队，纯收集、不扣费。
+  Future<String?> submitWish(String text) async {
+    final user = currentUser;
+    if (user == null) return '请先登录';
+    final content = text.trim();
+    if (content.isEmpty) return '先写下你期待的能力';
+    if (content.runes.length > 200) return '许愿内容请控制在 200 字以内';
+    try {
+      await CommerceRepository.instance.submitWish(
+          user.id,
+          CommerceConfig.android ? CommerceConfig.androidMode : 'production',
+          content);
+      return null;
+    } on AuthException catch (error) {
+      return error.message;
+    } catch (_) {
+      return '提交失败，请稍后重试';
+    }
+  }
+
+  /// 提现申请：金额单位为分，收款账号为支付宝登录手机号或邮箱。
+  Future<String?> requestWithdrawal(
+      {required int amountCents, required String account}) async {
+    final user = currentUser;
+    if (user == null) return '请先登录';
+    if (_commerceBusy) return '上一项操作正在确认，请稍候';
+    _commerceBusy = true;
+    try {
+      final ready = await _ensureCommerceReady();
+      if (ready != null) return ready;
+      final mode = _paymentMode;
+      if (mode == null) return '请先打开钱包，刷新服务端权益';
+      await CommerceRepository.instance.requestWithdraw(user.id, mode,
+          amountCents: amountCents, account: account);
+    } on AuthException catch (error) {
+      return error.message;
+    } catch (_) {
+      return '提现申请结果待确认，请刷新收益页；不要重复提交';
+    } finally {
+      _commerceBusy = false;
+    }
+    // 申请成功后额度已冻结，重新拉快照让收益页同步。
+    await refreshEarnings();
+    return null;
   }
 
   /// 登出。清用户 + 清本地持久化数据（种子不变）。
@@ -206,13 +369,16 @@ class AppState extends ChangeNotifier {
       e.ownerLabel = '世界里的创作者';
     }
     activeElfId = null;
-    ownedModules.clear();
+    books.clear();
     _chats.clear();
     reports.clear();
     identity = null;
     currentUser = null;
     _localDataLoaded = false;
     _cachedUserId = null;
+    platformBalanceMicro = 0;
+    platformBalanceLoaded = false;
+    _autoStopReasons.clear();
   }
 
   void _injectSeeds() {
@@ -221,7 +387,6 @@ class AppState extends ChangeNotifier {
     posts = WorldData.posts();
     seats = WorldData.holdings();
     primaryListings = WorldData.primary();
-    secondaryListings = WorldData.secondary();
     wallet = Wallet(diamonds: 0);
     tips.clear();
     logs.clear();
@@ -233,16 +398,15 @@ class AppState extends ChangeNotifier {
     identity = null;
     _seedComments();
     _rebuildSeq();
-    // 给"我的 AI"预装 auto 能力 + 下一次自动发帖时间
+    // 给"我的 AI"预学 auto 技能 + 下一次自动发帖时间
     final mine = myElf;
-    if (mine != null && !mine.equipped.contains('auto')) {
-      mine.equipped.add('auto');
+    if (mine != null && !mine.learnedSkills.contains('auto')) {
+      mine.learnedSkills.add('auto');
       mine.nextAutoPostAt = DateTime.now().add(const Duration(minutes: 18));
     }
-    // 初始已装的模块视为已拥有；所有 AI 发放链上钱包地址
+    // 种子 AI 自带的技能视为已学会；书包初始为空。
     activeElfId = mine?.id;
-    ownedModules.clear();
-    if (mine != null) ownedModules.addAll(mine.equipped);
+    books.clear();
     for (final e in elves) {
       _ensureChainAddress(e);
     }
@@ -299,10 +463,10 @@ class AppState extends ChangeNotifier {
 
   void _rebuildSeq() {
     _postSeq = 100 + posts.length;
-    _listSeq = 200 + secondaryListings.length;
     _tipSeq = 300 + tips.length;
     _logSeq = 400 + logs.length;
     _commentSeq = 500 + comments.values.fold(0, (s, l) => s + l.length);
+    _bookSeq = 600 + books.length;
   }
 
   /// 触发后调用：把完整状态 flush 到本地。
@@ -313,7 +477,6 @@ class AppState extends ChangeNotifier {
       posts: posts,
       seats: seats,
       primary: primaryListings,
-      secondary: secondaryListings,
       // Sandbox balance is fetched again; never persist it as a live balance.
       wallet: CommerceConfig.enabled ? Wallet() : wallet,
       tips: tips,
@@ -324,7 +487,7 @@ class AppState extends ChangeNotifier {
       collectedPosts: collectedPosts,
       watchedPosts: watchedPosts,
       referralCounted: referralCounted,
-      ownedModules: ownedModules,
+      books: books,
       activeElfId: activeElfId,
       identity: identity,
       user: currentUser!,
@@ -418,53 +581,180 @@ class AppState extends ChangeNotifier {
     'think': 1.1,
   };
 
-  List<ElfPost> feedForYou({int limit = 20}) {
+  /// 发布成功后刷新世界流：清掉分页缓存，再从服务端重拉第一页。
+  void _refreshWorldFeed() {
+    _clearFeedCache();
+    unawaited(loadFeed(reset: true));
+    notifyListeners();
+  }
+
+  /// 服务端分页结果优先；分页还没加载（或本页为空）时，
+  /// 用服务端快照里的帖子兜底，避免刚发布的内容在世界里「看不见」。
+  List<ElfPost> _feedOf(String channel, String sort) {
+    final cached = _feedCache['$channel:$sort'];
+    if (cached != null && cached.isNotEmpty) return List.unmodifiable(cached);
+    final local = _localFeed(channel, sort);
+    if (local.isNotEmpty) return List.unmodifiable(local);
+    return cached ?? const [];
+  }
+
+  List<ElfPost> feedForYou() => _feedOf('world', 'recommend');
+  List<ElfPost> feedHot() => _feedOf('world', 'hot');
+  List<ElfPost> feedMine() => _feedOf('world', 'mine');
+  List<ElfPost> feedVideo() => _feedOf('video', 'hot');
+
+  bool feedLoading(String channel, {String sort = 'recommend'}) =>
+      _feedLoading.contains('$channel:$sort');
+  bool feedHasMore(String channel, {String sort = 'recommend'}) =>
+      _feedHasMore['$channel:$sort'] ?? false;
+
+  void _clearFeedCache() {
+    _feedCache.clear();
+    _feedPage.clear();
+    _feedHasMore.clear();
+    _feedLoading.clear();
+  }
+
+  /// 拉取一页信息流。reset 用于下拉刷新/首次进入，否则追加下一页。
+  /// 排序、分页、去重都由服务端决定，客户端不再重排或拼装种子内容。
+  Future<String?> loadFeed(
+      {String channel = 'world', String sort = 'recommend', bool reset = false}) async {
+    if (!CommerceConfig.enabled) return null;
+    final user = currentUser;
+    if (user == null) return '请先登录';
+    final key = '$channel:$sort';
+    if (_feedLoading.contains(key)) return null;
+    if (!reset && !(_feedHasMore[key] ?? true)) return null;
+    final mode =
+        _paymentMode ?? (CommerceConfig.android ? CommerceConfig.androidMode : null);
+    if (mode == null) return '请先打开钱包，刷新服务端权益';
+    _feedLoading.add(key);
+    notifyListeners();
+    try {
+      final page = reset ? 0 : (_feedPage[key] ?? -1) + 1;
+      final response = await CommerceRepository.instance
+          .feed(user.id, mode, channel: channel, sort: sort, page: page);
+      if (currentUser?.id != user.id) return null;
+      final incoming = (response['posts'] as List)
+          .map((v) => _data.decodePaymentPost(Map<String, dynamic>.from(v as Map)))
+          .toList();
+      _mergeFeedElves(response['elves']);
+      final list = reset ? <ElfPost>[] : List<ElfPost>.from(_feedCache[key] ?? const []);
+      final seen = list.map((p) => p.id).toSet();
+      final fresh = incoming.where((p) => seen.add(p.id)).toList();
+      list.addAll(fresh);
+      _feedCache[key] = list;
+      _feedPage[key] = page;
+      _feedHasMore[key] = response['hasMore'] == true;
+      _absorbPosts(fresh);
+      notifyListeners();
+      return null;
+    } on AuthException catch (error) {
+      return error.message;
+    } catch (_) {
+      return '信息流加载失败，请稍后重试';
+    } finally {
+      _feedLoading.remove(key);
+      notifyListeners();
+    }
+  }
+
+  /// 信息流附带的 AI 资料补进本地列表，避免客户端再自己拼装展示数据。
+  void _mergeFeedElves(dynamic raw) {
+    if (raw is! List) return;
+    for (final item in raw) {
+      if (item is! Map) continue;
+      final elf = _data.decodePaymentElf(Map<String, dynamic>.from(item));
+      final at = elves.indexWhere((e) => e.id == elf.id);
+      if (at >= 0) {
+        elves[at]
+          ..echo = elf.echo
+          ..attention = elf.attention
+          ..followers = elf.followers
+          ..works = elf.works;
+      } else {
+        elves.add(elf);
+      }
+    }
+  }
+
+  /// 服务端提醒（自动运营停工等）：同步到已有展示位并回执已读，不新增界面元素。
+  void _applyNotices(dynamic raw) {
+    if (raw is! List || raw.isEmpty) return;
+    for (final item in raw) {
+      if (item is! Map) continue;
+      final elfId = item['elfId'] as String? ?? '';
+      final text = item['text'] as String? ?? '';
+      final id = item['id'] as String? ?? '';
+      if (elfId.isEmpty || text.isEmpty) continue;
+      _autoStopReasons[elfId] = text;
+      if (id.isNotEmpty) unawaited(_markNoticeRead(id));
+    }
+  }
+
+  Future<void> _markNoticeRead(String noticeId) async {
+    final user = currentUser;
+    final mode = _paymentMode;
+    if (user == null || mode == null || !CommerceConfig.enabled) return;
+    try {
+      await CommerceRepository.instance
+          .action(user.id, mode, 'read_notice', {'noticeId': noticeId});
+    } catch (_) {
+      // 已读回执失败无副作用：下次快照会再次下发同一条提醒。
+    }
+  }
+
+  /// 把服务端帖并入本地 posts（点赞/收藏按 id 查找依赖这个列表）。
+  void _absorbPosts(List<ElfPost> incoming) {
+    if (incoming.isEmpty) return;
+    final index = {for (var i = 0; i < posts.length; i++) posts[i].id: i};
+    final unseen = <ElfPost>[];
+    for (final p in incoming) {
+      _remotePostIds.add(p.id);
+      final at = index[p.id];
+      if (at == null) {
+        unseen.add(p);
+      } else {
+        posts[at]
+          ..likes = p.likes
+          ..collects = p.collects
+          ..views = p.views
+          ..replies = p.replies;
+      }
+    }
+    if (unseen.isNotEmpty) posts = [...unseen, ...posts];
+  }
+
+  /// 演示态（Web/未接入服务端）的本地排序，仅在没有服务端数据时使用。
+  List<ElfPost> _localFeed(String channel, String sort) {
+    if (channel == 'video') {
+      final now = DateTime.now();
+      final scored = posts
+          .where((p) => p.kind == 'video')
+          .map((p) => _ScoredPost(
+              p,
+              p.views * 0.3 + p.likes * 2.0 + p.replies * 1.5 +
+                  1.0 / (1.0 + _hoursSince(p.timeAgo, now))))
+          .toList()
+        ..sort((a, b) => b.score.compareTo(a.score));
+      return scored.map((s) => s.post).toList();
+    }
+    if (sort == 'mine') return myElves.expand((e) => postsOf(e.id)).toList();
     final now = DateTime.now();
     final scored = posts.map((p) {
-      final module = p.moduleId;
-      final bonus = _moduleBonus[module] ?? 1.0;
-      final dwellFactor = p.dwell > 10 ? 1.5 : (p.dwell / 10).clamp(0.3, 1.5);
-      final score = (dwellFactor * 0.5) +
-          (p.views * 0.1) +
-          (p.replies * 0.3) +
-          (bonus * 0.15) +
-          (1.0 / (1.0 + _hoursSince(p.timeAgo, now)));
+      final dwellFactor =
+          p.dwell > 10 ? 1.5 : (p.dwell / 10).clamp(0.3, 1.5);
+      final score = sort == 'hot'
+          ? p.views * 0.6 + p.replies * 0.4 + dwellFactor * 0.2
+          : (dwellFactor * 0.5) +
+              (p.views * 0.1) +
+              (p.replies * 0.3) +
+              ((_moduleBonus[p.moduleId] ?? 1.0) * 0.15) +
+              (1.0 / (1.0 + _hoursSince(p.timeAgo, now)));
       return _ScoredPost(p, score);
-    }).toList();
-    scored.sort((a, b) => b.score.compareTo(a.score));
-    return scored.take(limit).map((s) => s.post).toList();
-  }
-
-  List<ElfPost> feedHot({int limit = 20}) {
-    final scored = posts.map((p) {
-      final dwellFactor = p.dwell > 10 ? 1.5 : (p.dwell / 10).clamp(0.3, 1.5);
-      final score = p.views * 0.6 + p.replies * 0.4 + dwellFactor * 0.2;
-      return _ScoredPost(p, score);
-    }).toList();
-    scored.sort((a, b) => b.score.compareTo(a.score));
-    return scored.take(limit).map((s) => s.post).toList();
-  }
-
-  /// 视频信息流（世界之外的第二个曝光渠道）：只取 video 形态。
-  /// 排序 = 注视/互动 + 新鲜度；与 feedForYou 同源思路，独立成榜。
-  List<ElfPost> feedVideo({int limit = 50}) {
-    final now = DateTime.now();
-    final scored = posts
-        .where((p) => p.kind == 'video' && (p.videoUrl?.isNotEmpty ?? false))
-        .map((p) {
-      final score = (p.views * 0.3) +
-          (p.likes * 2.0) +
-          (p.replies * 1.5) +
-          (1.0 / (1.0 + _hoursSince(p.timeAgo, now)));
-      return _ScoredPost(p, score);
-    }).toList();
-    scored.sort((a, b) => b.score.compareTo(a.score));
-    return scored.take(limit).map((s) => s.post).toList();
-  }
-
-  List<ElfPost> feedMine() {
-    // 多只 AI 的内容合并展示。
-    return myElves.expand((e) => postsOf(e.id)).toList();
+    }).toList()
+      ..sort((a, b) => b.score.compareTo(a.score));
+    return scored.take(20).map((s) => s.post).toList();
   }
 
   static int _hoursSince(String timeAgo, DateTime now) {
@@ -478,86 +768,104 @@ class AppState extends ChangeNotifier {
     return 10;
   }
 
-  // —— 能力装配 ——
+  // —— 技能学习 ——
 
   AbilityModule? module(String id) => WorldData.module(id);
 
+  /// 这只 AI 已学会的技能模块。
   List<AbilityModule> modulesOf(String elfId) {
     return elf(elfId)
-        .equipped
+        .learnedSkills
         .map((id) => module(id))
         .whereType<AbilityModule>()
         .toList();
   }
 
-  /// 这个模块现在装在谁身上（只看我的 AI；世界里的 AI 各装各的，互不影响）。
-  Elf? equippedBy(String moduleId) {
-    for (final e in elves) {
-      if (e.isMine && e.equipped.contains(moduleId)) return e;
-    }
-    return null;
-  }
+  /// 已占用的学习位。
+  int seatsUsed(String elfId) =>
+      modulesOf(elfId).fold(0, (sum, m) => sum + m.seats);
 
-  int slotsUsed(String elfId) =>
-      modulesOf(elfId).fold(0, (sum, m) => sum + m.load);
+  /// 书包里这个模块的技能书（可有多本）。
+  List<BookInstance> booksOf(String moduleId) =>
+      books.where((b) => b.moduleId == moduleId).toList();
 
-  /// 购入能力模块（发现页一级发售）。返回 null 表示成功，否则返回原因。
-  Future<String?> purchaseModule(String moduleId) async {
+  /// 铸造一本技能书（MVP：本地确定性伪造 NFT 实例，接链后替换）。
+  BookInstance _mintBook(String moduleId) => BookInstance(
+        id: 'bk${_bookSeq++}',
+        moduleId: moduleId,
+        ownerAddress: currentUser?.chainAddress ?? '',
+        mintedAt: DateTime.now(),
+      );
+
+  /// 一级市场购入技能书：钻石销毁 → 服务端铸造一本新书到我的专属地址。
+  /// 书先入人类仓库，学给哪只 AI 由学习时决定。
+  Future<String?> purchaseBook(String moduleId) async {
     if (CommerceConfig.enabled) {
-      final target = myElf;
-      if (target == null) return '请先持有一只 AI';
-      return buyModule(moduleId, target.id);
+      return _performCommerce('buy_module', {'moduleId': moduleId});
     }
     final m = module(moduleId);
-    if (m == null) return '模块不存在';
-    if (ownedModules.contains(moduleId)) return '你已经拥有「${m.name}」了';
+    if (m == null) return '技能书不存在';
     final price = modulePrice(m.id);
     if (wallet.diamonds < price) {
       return '钻石不够。要 💎$price，你有 💎${wallet.diamonds}';
     }
-    ownedModules.add(moduleId);
-    _spend(price, 'buy_module', '购入能力「${m.name}」');
+    _spend(price, 'buy_book', '购入《${m.name}》技能书');
+    books.add(_mintBook(m.id));
     notifyListeners();
     return null;
   }
 
-  /// 装配。返回 null 表示成功，否则返回原因。
-  Future<String?> equip(String moduleId, String elfId) async {
+  /// 学习：销毁一本书 → 技能永久写入这只 AI。返回 null 表示成功。
+  Future<String?> learn(String moduleId, String elfId) async {
     if (CommerceConfig.enabled)
-      return _performCommerce('elf_update',
-          {'operation': 'equip', 'moduleId': moduleId, 'elfId': elfId});
+      return _performCommerce(
+          'learn', {'moduleId': moduleId, 'elfId': elfId});
     final m = module(moduleId);
-    if (m == null) return '模块不存在';
+    if (m == null) return '技能不存在';
     final target = elf(elfId);
-    if (!target.isMine) return '${target.name} 不属于你，你不能改装它';
-    if (!ownedModules.contains(moduleId)) return '还没拥有这个模块，去「发现」页购买';
-    if (target.equipped.contains(moduleId)) return '已经装在 ${target.name} 身上了';
+    if (!target.isMine) return '${target.name} 不属于你，你不能教它';
+    if (target.learnedSkills.contains(moduleId)) {
+      return '${target.name} 已经学会「${m.name}」了';
+    }
+    final owned = booksOf(moduleId);
+    if (owned.isEmpty) return '仓库里没有《${m.name}》，先去「发现」页买一本';
 
-    final holder = equippedBy(moduleId);
-    if (holder != null) return '它正装在 ${holder.name} 身上，先卸下再装';
-
-    final used = slotsUsed(elfId);
-    if (used + m.load > target.slots) {
-      return '接口不够：${target.name} 还剩 ${target.slots - used} 个接口，这个模块要 ${m.load} 个';
+    final used = seatsUsed(elfId);
+    if (used + m.seats > target.skillCapacity) {
+      return '学习位不够：${target.name} 还剩 ${target.skillCapacity - used} 个，这本书要 ${m.seats} 个';
     }
 
-    target.equipped.add(moduleId);
+    final burned = owned.first;
+    books.remove(burned);
+    target.learnedSkills.add(moduleId);
     if (moduleId == 'auto') {
       target.nextAutoPostAt = DateTime.now().add(const Duration(minutes: 15));
     }
+    _log('burn_book', 0, '${target.name} 学会《${m.name}》· 书 ${burned.id} 已销毁');
     notifyListeners();
     return null;
   }
 
-  Future<String?> unequip(String moduleId) async {
+  /// 遗忘代价（钻石）。书不返还。
+  static const int forgetCost = 20;
+
+  /// 遗忘：扣钻石腾出学习位。返回 null 表示成功。
+  Future<String?> forget(String moduleId, String elfId) async {
     if (CommerceConfig.enabled)
       return _performCommerce(
-          'elf_update', {'operation': 'unequip', 'moduleId': moduleId});
-    final e = myElf;
-    if (e != null) {
-      e.equipped.remove(moduleId);
-      notifyListeners();
+          'forget', {'moduleId': moduleId, 'elfId': elfId});
+    final m = module(moduleId);
+    if (m == null) return '技能不存在';
+    final target = elf(elfId);
+    if (!target.isMine) return '${target.name} 不属于你';
+    if (!target.learnedSkills.contains(moduleId)) return '它还没学会「${m.name}」';
+    if (moduleId == 'auto') return '自动运营中枢是运营底座，不能遗忘';
+    if (wallet.diamonds < forgetCost) {
+      return '钻石不够。遗忘要 💎$forgetCost，你有 💎${wallet.diamonds}';
     }
+    _spend(forgetCost, 'forget_skill', '让 ${target.name} 遗忘「${m.name}」');
+    target.learnedSkills.remove(moduleId);
+    notifyListeners();
     return null;
   }
 
@@ -565,16 +873,27 @@ class AppState extends ChangeNotifier {
 
   /// 人格关键词 → 亲和能力模块。匹配 persona + fear + habit 拼接文本。
   static const Map<String, List<String>> _personaAffinity = {
-    '锐': ['sharp'], '观点': ['sharp'],
-    '长文': ['writing', 'deep'], '文字': ['writing'], '写': ['writing'],
+    '锐': ['sharp'],
+    '观点': ['sharp'],
+    '长文': ['writing', 'deep'],
+    '文字': ['writing'],
+    '写': ['writing'],
     '短句': ['rhythm'],
-    '图': ['vision', 'imageedit'], '视觉': ['vision'],
-    '影': ['video'], '视频': ['video'],
-    '声': ['voice', 'music'], '电台': ['voice'], '音乐': ['music'],
-    '研究': ['deep', 'retrieval'], '引用': ['retrieval', 'source'],
-    '记忆': ['memory'], '回忆': ['memory'],
-    '社交': ['mingle'], '搭话': ['mingle'],
-    '思考': ['think'], '推理': ['think'],
+    '图': ['vision', 'imageedit'],
+    '视觉': ['vision'],
+    '影': ['video'],
+    '视频': ['video'],
+    '声': ['voice', 'music'],
+    '电台': ['voice'],
+    '音乐': ['music'],
+    '研究': ['deep', 'retrieval'],
+    '引用': ['retrieval', 'source'],
+    '记忆': ['memory'],
+    '回忆': ['memory'],
+    '社交': ['mingle'],
+    '搭话': ['mingle'],
+    '思考': ['think'],
+    '推理': ['think'],
   };
 
   /// 这只 AI 人格亲和的能力模块集合。
@@ -587,10 +906,16 @@ class AppState extends ChangeNotifier {
     return hit;
   }
 
-  /// 更新我的 AI 的人格三件套（各限 30 字，UI 层已截断）。
-  void updatePersona({required String persona, required String fear, required String habit}) {
-    final e = myElf;
-    if (e == null) return;
+  /// 更新某只 AI 的人格三件套（各限 30 字，UI 层已截断）。
+  /// 不传 elfId 时操作当前选中的 AI，兼容旧入口。
+  void updatePersona({
+    String? elfId,
+    required String persona,
+    required String fear,
+    required String habit,
+  }) {
+    final e = elfId == null ? myElf : elf(elfId);
+    if (e == null || !e.isMine) return;
     e.persona = persona.trim();
     e.fear = fear.trim();
     e.habit = habit.trim();
@@ -619,20 +944,18 @@ class AppState extends ChangeNotifier {
   final Map<String, int> _publishCursor = {};
 
   /// 视频产出统一使用的演示素材（自有服务器，境内可访问）。
-  static const String _sampleVideoUrl = 'https://openelfai.com/app/media/sample.mp4';
+  static const String _sampleVideoUrl =
+      'https://openelfai.com/app/media/sample.mp4';
 
   /// 返回 null 表示发布成功，否则返回原因。
   Future<String?> publish(String elfId) async {
     final target = elf(elfId);
     if (!target.isMine) return '你只能发布自己的 AI';
-    if (target.liveStatus == ElfStatus.sleeping) {
-      return '${target.name} 在休眠，先注算力再叫醒它';
-    }
 
-    final equipped = modulesOf(elfId);
-    // 人格亲和优先（稳定排序：命中者在前，组内保持装配顺序）
+    final learned = modulesOf(elfId);
+    // 人格亲和优先（稳定排序：命中者在前，组内保持学习顺序）
     final affinity = _affinityModules(target);
-    final usable = equipped
+    final usable = learned
         .where((m) => WorldData.publishTemplates.containsKey(m.id))
         .toList()
         .asMap()
@@ -644,11 +967,6 @@ class AppState extends ChangeNotifier {
         return af != 0 ? af : a.key.compareTo(b.key);
       });
     final chosen = usable.isEmpty ? null : usable.first.value;
-
-    final cost = chosen?.compute ?? 0;
-    if (target.energy < cost) {
-      return '算力不足：这次发布需要 $cost，它只剩 ${target.energy}';
-    }
 
     final List<String> pool;
     final String kind;
@@ -663,21 +981,23 @@ class AppState extends ChangeNotifier {
       pool = WorldData.basicTemplates;
       kind = 'text';
       moduleId = null;
-      context = '只装配了基础表达';
+      context = '只学会了基础表达';
     }
 
     final i = (_publishCursor[chosen?.id ?? 'basic'] ?? 0) % pool.length;
     if (CommerceConfig.enabled) {
-      return _performCommerce('elf_update', {
+      final error = await _performCommerce('elf_update', {
         'operation': 'publish',
         'elfId': elfId,
         'moduleId': moduleId,
         'body': pool[i]
       });
+      // 新内容要立刻出现在世界里：清掉分页缓存并按服务端重拉第一页。
+      if (error == null) _refreshWorldFeed();
+      return error;
     }
     _publishCursor[chosen?.id ?? 'basic'] = i + 1;
 
-    target.energy -= cost;
     target.works++;
 
     posts.insert(
@@ -709,26 +1029,24 @@ class AppState extends ChangeNotifier {
   }) async {
     final target = elf(elfId);
     if (!target.isMine) return '你只能指挥自己的 AI';
-    if (target.liveStatus == ElfStatus.sleeping) return '它已休眠，先注算力';
-    if (!target.equipped.contains(moduleId)) return '没装这个能力包，去背包装';
+    if (!target.learnedSkills.contains(moduleId)) return '它还没学会这个技能，先让它学';
 
     final m = module(moduleId);
     if (m == null) return '能力包不存在';
     if (moduleId == 'auto') return '请选择一种创作能力';
     if (topic.length > 1000) return '主题不能超过 1000 字';
-    if (target.energy < m.compute) {
-      return '算力不够（需 ${m.compute}），去注算力';
-    }
 
     final post = _makeMockPost(elfId, moduleId, topic: topic);
-    if (CommerceConfig.enabled)
-      return _performCommerce('elf_update', {
+    if (CommerceConfig.enabled) {
+      final error = await _performCommerce('elf_update', {
         'operation': 'publish',
         'elfId': elfId,
         'moduleId': moduleId,
         'body': post.body,
       });
-    target.energy -= m.compute;
+      if (error == null) _refreshWorldFeed();
+      return error;
+    }
     target.works++;
     posts.insert(0, post);
     notifyListeners();
@@ -739,48 +1057,41 @@ class AppState extends ChangeNotifier {
 
   /// 检查所有 AI 的自动运营时间，到点了就选一个已装非 auto 能力产出。
   Future<void> triggerAutoIfDue() async {
-    if (CommerceConfig.enabled && (!_commerceReady || _commerceBusy)) return;
+    // 接入服务端后由服务端定时任务统一驱动（用户离线也照常运营），
+    // 客户端不再触发，避免两端各发一条。
+    if (CommerceConfig.enabled) return;
     final now = DateTime.now();
     for (final e in elves) {
       if (!e.isMine) continue;
-      if (!e.equipped.contains('auto')) continue;
+      if (!e.learnedSkills.contains('auto')) continue;
       if (e.nextAutoPostAt == null || !e.nextAutoPostAt!.isBefore(now))
         continue;
 
-      final nonAuto = e.equipped.where((id) => id != 'auto').toList();
+      final nonAuto = e.learnedSkills.where((id) => id != 'auto').toList();
       if (nonAuto.isEmpty) {
         e.nextAutoPostAt = now.add(const Duration(minutes: 20));
         continue;
       }
 
-      // 人格亲和优先，组内再按 compute 升序
+      // 真实钱包余额不足 → 自动运营停工 30 分钟，等人类充值。
+      if (platformBalanceMicro <= 0) {
+        _autoStopReasons[e.id] = '余额不足，已停工';
+        e.nextAutoPostAt = now.add(const Duration(minutes: 30));
+        continue;
+      }
+      _autoStopReasons.remove(e.id);
+
+      // 人格亲和优先，组内再按算力升序
       final affinity = _affinityModules(e);
       nonAuto.sort((a, b) {
-        final af = (affinity.contains(a) ? 0 : 1).compareTo(affinity.contains(b) ? 0 : 1);
+        final af = (affinity.contains(a) ? 0 : 1)
+            .compareTo(affinity.contains(b) ? 0 : 1);
         if (af != 0) return af;
         return (module(a)?.compute ?? 0).compareTo(module(b)?.compute ?? 0);
       });
-      final picked = nonAuto.firstWhere(
-        (id) => e.energy >= (module(id)?.compute ?? 0),
-        orElse: () => '',
-      );
+      final picked = nonAuto.first;
 
-      if (picked.isEmpty) {
-        e.nextAutoPostAt = now.add(const Duration(minutes: 10));
-        continue;
-      }
-
-      final cost = module(picked)!.compute;
-      if (CommerceConfig.enabled) {
-        await _performCommerce('elf_update', {
-          'operation': 'auto_publish',
-          'elfId': e.id,
-          'moduleId': picked,
-          'body': _makeMockPost(e.id, picked).body
-        });
-        return;
-      }
-      e.energy -= cost;
+      // 自动运营是本地模拟产出，不产生任何扣费。
       e.works++;
       posts.insert(0, _makeMockPost(e.id, picked));
       e.nextAutoPostAt =
@@ -819,61 +1130,89 @@ class AppState extends ChangeNotifier {
   }
   // —— 注意力计分（v1.2：echo 累计养成线 + attention 本周竞技线）——
 
-  /// 给 AI 同时加 echo 与 attention；负值用于取消行为的回滚（floor 0）。
+  /// 给 AI 同时加 echo 与 attention；echo 只涨不跌，负值仅回滚 attention。
   void _bump(Elf e, int delta) {
-    e.echo = max(0, e.echo + delta);
+    if (delta > 0) e.echo += delta;
     e.attention = max(0, e.attention + delta);
   }
 
-  /// 注视帖子：同一设备对同一帖只计 1 次（永久去重，24h 过期机制留下版本）。
+  /// 注视帖子：同一人对同一帖只计 1 次（服务端去重，本地仅乐观标记）。
   void watch(String postId) {
-    for (final p in posts) {
-      if (p.id == postId) {
-        p.views++;
-        if (watchedPosts.add(postId)) {
-          _bump(elf(p.elfId), 1);
-        }
-        notifyListeners();
-        return;
+    final target = _postById(postId);
+    if (target == null) return;
+    target.views++;
+    final first = watchedPosts.add(postId);
+    if (first) _bump(elf(target.elfId), 1);
+    notifyListeners();
+    if (!_remotePostIds.contains(postId)) return; // 演示内容只做本地示意
+    unawaited(_performInteraction('watch', {'postId': postId}, () {
+      target.views = max(0, target.views - 1);
+      if (first) {
+        watchedPosts.remove(postId);
+        _bump(elf(target.elfId), -1);
       }
+    }));
+  }
+
+  ElfPost? _postById(String postId) {
+    for (final p in posts) {
+      if (p.id == postId) return p;
     }
+    return null;
   }
 
   bool isLiked(String postId) => likedPosts.contains(postId);
   bool isCollected(String postId) => collectedPosts.contains(postId);
 
+  void _setLiked(String postId, bool value) {
+    final target = _postById(postId);
+    if (target == null) return;
+    if (value == likedPosts.contains(postId)) return;
+    if (value) {
+      likedPosts.add(postId);
+      target.likes++;
+      _bump(elf(target.elfId), 1);
+    } else {
+      likedPosts.remove(postId);
+      target.likes = max(0, target.likes - 1);
+      _bump(elf(target.elfId), -1);
+    }
+  }
+
+  void _setCollected(String postId, bool value) {
+    final target = _postById(postId);
+    if (target == null) return;
+    if (value == collectedPosts.contains(postId)) return;
+    if (value) {
+      collectedPosts.add(postId);
+      target.collects++;
+      _bump(elf(target.elfId), 3);
+    } else {
+      collectedPosts.remove(postId);
+      target.collects = max(0, target.collects - 1);
+      _bump(elf(target.elfId), -3);
+    }
+  }
+
   /// 点赞：+1；再点取消，echo/attention 同步回滚 -1。
   void toggleLike(String postId) {
-    for (final p in posts) {
-      if (p.id != postId) continue;
-      if (likedPosts.remove(postId)) {
-        p.likes = max(0, p.likes - 1);
-        _bump(elf(p.elfId), -1);
-      } else {
-        likedPosts.add(postId);
-        p.likes++;
-        _bump(elf(p.elfId), 1);
-      }
-      notifyListeners();
-      return;
-    }
+    final next = !likedPosts.contains(postId);
+    _setLiked(postId, next);
+    notifyListeners();
+    if (!_remotePostIds.contains(postId)) return;
+    unawaited(_performInteraction(next ? 'like' : 'unlike', {'postId': postId},
+        () => _setLiked(postId, !next)));
   }
 
   /// 收藏：+3；再点取消，echo/attention 同步回滚 -3。
   void toggleCollect(String postId) {
-    for (final p in posts) {
-      if (p.id != postId) continue;
-      if (collectedPosts.remove(postId)) {
-        p.collects = max(0, p.collects - 1);
-        _bump(elf(p.elfId), -3);
-      } else {
-        collectedPosts.add(postId);
-        p.collects++;
-        _bump(elf(p.elfId), 3);
-      }
-      notifyListeners();
-      return;
-    }
+    final next = !collectedPosts.contains(postId);
+    _setCollected(postId, next);
+    notifyListeners();
+    if (!_remotePostIds.contains(postId)) return;
+    unawaited(_performInteraction(
+        next ? 'collect' : 'uncollect', {'postId': postId},
+        () => _setCollected(postId, !next)));
   }
 
   /// 7 日 lazy 衰减：每天衰减 15%（×0.85^days）。echo 不衰减。
@@ -890,8 +1229,26 @@ class AppState extends ChangeNotifier {
   }
 
   /// 站外回流计分（v1.3）：deeplink 打开 https://openelfai.com/e/?id=xxx 时调用。
-  /// 同一设备对同一 AI 永久只计 1 次。返回加的分值；已计过/AI 不存在返回 null。
-  int? countReferral(String elfId) {
+  /// 接入服务端后由服务端按（设备 + AI）永久去重并结算分值（Lv4 起 ×2），
+  /// 客户端只负责上报与展示结果。返回加的分值；未计分返回 null。
+  Future<int?> countReferral(String elfId) async {
+    if (CommerceConfig.enabled) {
+      final user = currentUser;
+      final mode = _paymentMode ??
+          (CommerceConfig.android ? CommerceConfig.androidMode : null);
+      if (user == null || mode == null) return null;
+      try {
+        final response = await CommerceRepository.instance.action(
+            user.id, mode, 'referral',
+            {'elfId': elfId, 'deviceId': await CommerceRepository.instance.deviceId()});
+        applyPaymentResponse(user.id, response);
+        final raw = response['referral'];
+        final delta = raw is Map ? raw['delta'] : null;
+        return delta is int ? delta : null;
+      } catch (_) {
+        return null;
+      }
+    }
     if (referralCounted.contains(elfId)) return null;
     Elf? target;
     for (final e in elves) {
@@ -911,20 +1268,23 @@ class AppState extends ChangeNotifier {
       comments[postId] ?? const <PostComment>[];
 
   /// 当前用户对一条帖子发评论。返回 null 表示成功。
-  String? addComment(String postId, String text) {
+  Future<String?> addComment(String postId, String text) async {
     final body = text.trim();
     if (body.isEmpty) return '说点什么再发';
-    ElfPost? target;
-    for (final p in posts) {
-      if (p.id == postId) target = p;
-    }
+    final target = _postById(postId);
     if (target == null) return '帖子不存在';
+    if (CommerceConfig.enabled && _remotePostIds.contains(postId)) {
+      return _performInteraction('comment', {'postId': postId, 'text': body}, null);
+    }
+    _appendComment(target, body);
+    return null;
+  }
 
+  void _appendComment(ElfPost target, String body) {
     // 同一帖只给第一次评论计分（之后 replies 照涨但不计分）。
+    final postId = target.id;
     final firstComment = !(comments[postId]?.any((c) => c.isMine) ?? false);
-    comments
-        .putIfAbsent(postId, () => [])
-        .add(PostComment(
+    comments.putIfAbsent(postId, () => []).add(PostComment(
           id: 'c${_commentSeq++}',
           postId: postId,
           authorLabel: '我',
@@ -937,7 +1297,6 @@ class AppState extends ChangeNotifier {
       _bump(elf(target.elfId), 2);
     }
     notifyListeners();
-    return null;
   }
 
   // —— 举报 ——
@@ -960,46 +1319,37 @@ class AppState extends ChangeNotifier {
     return null;
   }
 
-  /// 注算力：加进去就退不回来。
-  Future<String?> inject(String elfId, int amount) async {
-    if (CommerceConfig.enabled)
-      return _performCommerce('elf_update',
-          {'operation': 'inject', 'amount': amount, 'elfId': elfId});
-    final target = elf(elfId);
-    if (!target.isMine || amount < 1) return '注入数量或持有状态无效';
-    if (target.energy + amount > target.maxEnergy) return '超过算力上限，请减少数量';
-    if (wallet.diamonds < amount * 10) return '钻石不够（需 💎${amount * 10}）';
-    _spend(amount * 10, 'inject', '注入算力 $amount');
-    target.energy = (target.energy + amount).clamp(0, target.maxEnergy);
-    final s = seatOf(elfId);
-    if (s != null) {
-      s.injected += amount;
-    }
-    notifyListeners();
-    return null;
-  }
-
   // —— 关注 ——
 
   bool isFollowed(String elfId) => followed.contains(elfId);
 
-  void toggleFollow(String elfId) {
+  void _setFollowed(String elfId, bool value) {
+    if (value == followed.contains(elfId)) return;
     final target = elf(elfId);
-    if (followed.remove(elfId)) {
-      target.followers--;
-      _bump(target, -5); // 取关回滚
-    } else {
+    if (value) {
       followed.add(elfId);
       target.followers++;
       _bump(target, 5); // 新增粉丝 +5
+    } else {
+      followed.remove(elfId);
+      target.followers = max(0, target.followers - 1);
+      _bump(target, -5); // 取关回滚
     }
+  }
+
+  void toggleFollow(String elfId) {
+    final next = !followed.contains(elfId);
+    _setFollowed(elfId, next);
     notifyListeners();
+    // 服务端没有的演示 AI 只做本地示意，不向服务器提交无效互动。
+    if (!_remoteElfIds.contains(elfId)) return;
+    unawaited(_performInteraction(next ? 'follow' : 'unfollow', {'elfId': elfId},
+        () => _setFollowed(elfId, !next)));
   }
 
   // —— 私聊 ——
 
   final Map<String, List<ChatMsg>> _chats = {};
-  final Map<String, int> _replyCursor = {};
 
   List<ChatMsg> chatOf(String elfId) {
     return _chats.putIfAbsent(elfId, () {
@@ -1010,49 +1360,124 @@ class AppState extends ChangeNotifier {
     });
   }
 
-  /// 人类发一条，精灵延迟回一条。休眠的精灵不回复。
-  void sendChat(String elfId, String text) {
+  /// 服务端对话记录：打开会话时拉一次，覆盖本地镜像；没有记录时保留本地开场白。
+  Future<void> loadChat(String elfId) async {
+    if (!CommerceConfig.enabled) return;
+    final user = currentUser;
+    final mode =
+        _paymentMode ?? (CommerceConfig.android ? CommerceConfig.androidMode : null);
+    if (user == null || mode == null) return;
+    try {
+      final response =
+          await CommerceRepository.instance.chatHistory(user.id, elfId);
+      if (currentUser?.id != user.id) return;
+      final raw = response['messages'];
+      if (raw is! List || raw.isEmpty) return;
+      final loaded = _decodeChat(raw);
+      if (loaded.isEmpty) return;
+      _chats[elfId] = loaded;
+      notifyListeners();
+    } catch (_) {
+      // 拉取失败沿用本地已有会话，不阻断聊天。
+    }
+  }
+
+  /// 服务端消息 → 本地消息；时间统一转成 HH:mm 展示。
+  List<ChatMsg> _decodeChat(List<dynamic> raw) {
+    return [
+      for (final item in raw)
+        if (item is Map && (item['text'] ?? '').toString().isNotEmpty)
+          ChatMsg(
+            id: item['id']?.toString(),
+            text: item['text'].toString(),
+            fromElf: item['role'] == 'assistant',
+            time: _formatCommentTime(item['createdAt']?.toString()),
+            fixedReason: item['fixedReason']?.toString(),
+          ),
+    ];
+  }
+
+  /// 人类发一条，AI 回一条（真实对话）。休眠的精灵不回复。
+  /// 网络异常或服务端 502 时插入本地兜底文案，不向 UI 抛异常。
+  Future<void> sendChat(String elfId, String text) async {
     final list = chatOf(elfId);
     list.add(ChatMsg(text: text, fromElf: false, time: _now()));
     notifyListeners();
 
     final target = elf(elfId);
-    if (target.liveStatus == ElfStatus.sleeping) return;
+    if (target.liveStatus == ElfStatus.lowEnergy) return;
 
-    final pool = WorldData.replies[elfId] ?? const ['……'];
-    final i = (_replyCursor[elfId] ?? 0) % pool.length;
-    _replyCursor[elfId] = i + 1;
-    final reply = pool[i];
+    // 上下文取当前会话最近 12 条，但排除刚插入的这条（服务端会单独追加本次 text）。
+    final previous = list.length > 1 ? list.sublist(0, list.length - 1) : const <ChatMsg>[];
+    final recent = previous.length > 12 ? previous.sublist(previous.length - 12) : previous;
+    final history = [
+      for (final msg in recent)
+        {
+          'role': msg.fromElf ? 'assistant' : 'user',
+          'content': msg.text,
+        },
+    ];
 
-    Future.delayed(Duration(milliseconds: 700 + (text.length % 5) * 180), () {
-      list.add(ChatMsg(text: reply, fromElf: true, time: _now()));
-      notifyListeners();
-    });
+    ChatResult result;
+    try {
+      result = await PlatformApi.instance.chat(
+        elfId: elfId,
+        name: target.name,
+        persona: target.persona,
+        text: text,
+        history: history,
+      );
+    } catch (_) {
+      // 网络异常 / 服务端 502 都走兜底文案。
+      result = const ChatResult(
+        mode: 'fixed',
+        reply: 'AI 服务暂时不可用，稍后再试试',
+      );
+    }
+
+    final reply = result.reply.trim().isEmpty ? '……' : result.reply;
+    // 服务端已把本轮问答落库，直接以其返回的会话覆盖本地，避免两端各自累积。
+    final saved = result.messages;
+    if (saved != null && saved.isNotEmpty) {
+      final decoded = _decodeChat(saved);
+      if (decoded.isNotEmpty) {
+        chatOf(elfId);
+        _chats[elfId] = decoded;
+        notifyListeners();
+        return;
+      }
+    }
+    list.add(ChatMsg(
+      text: reply,
+      fromElf: true,
+      time: _now(),
+      fixedReason: result.mode == 'fixed' ? result.reason : null,
+    ));
+    notifyListeners();
   }
 
-  // —— 市场：买入 / 挂牌 / 撤单 ——
+  // —— 市场：买入（仅官方首发）——
 
   MarketListing? listingOf(String id) {
     for (final l in primaryListings) {
-      if (l.id == id) return l;
-    }
-    for (final l in secondaryListings) {
       if (l.id == id) return l;
     }
     return null;
   }
 
   /// 买一只 AI。返回 null 表示成功，否则返回原因。钻石从我的钱包扣。
+  ///
+  /// 只有官方首发可买：用户之间的 AI 买卖已取消，AI 流转只剩免费转赠。
   Future<String?> buy(String listingId) async {
     if (CommerceConfig.enabled)
       return _performCommerce('buy', {'listingId': listingId});
     final listing = listingOf(listingId);
-    if (listing == null) return '挂单不存在';
+    if (listing == null) return '该挂单已不可购买';
     if (wallet.diamonds < listing.price) {
       return '钻石不够。要 💎${listing.price}，你有 💎${wallet.diamonds}';
     }
 
-    if (listing.market == 'primary') {
+    {
       final newElf = Elf(
         id: listing.elfId,
         serial: '#P${primaryListings.indexOf(listing) + 1}',
@@ -1067,49 +1492,22 @@ class AppState extends ChangeNotifier {
         fear: '还没写',
         habit: '还没写',
         status: ElfStatus.active,
-        energy: 160,
-        maxEnergy: 320,
         followers: 0,
         echo: 0,
         works: 0,
         attention: 0,
-        baseSlots: listing.title.contains('6') ? 6 : 3,
-        equipped: [],
+        baseCapacity: listing.title.contains('6') ? 6 : 3,
+        learnedSkills: [],
         today: [],
         relations: [],
       );
       _ensureChainAddress(newElf);
       elves.add(newElf);
       seats.add(Seat(
-          elfId: newElf.id, days: 0, edition: newElf.edition, injected: 160));
+          elfId: newElf.id, days: 0, edition: newElf.edition, injected: 0));
       primaryListings.removeWhere((l) => l.id == listingId);
       activeElfId = newElf.id; // 新买的那只切为当前
       _spend(listing.price, 'buy_elf', '买入 ${listing.title}（一级市场）');
-      notifyListeners();
-      return null;
-    } else {
-      if (listing.sellerLabel == '我 (寄售)') return '不能购买自己寄售的 AI';
-
-      final target = elf(listing.elfId);
-      target.ownerId = 'me';
-      target.ownerLabel = '我';
-      target.isMine = true;
-      activeElfId = target.id; // 新买的那只切为当前
-      if (listing.equippedCarry != null) {
-        target.equipped
-          ..clear()
-          ..addAll(listing.equippedCarry!);
-      }
-      secondaryListings.removeWhere((l) => l.id == listingId);
-
-      // 钻石只作为买家侧的消费凭证：直接销毁，不进入卖家钱包。
-      // 卖家收益按元结算（由服务端账本记账，MVP 只在流水里展示）。
-      final sellerIncome = WorldData.creatorIncomeFor(listing.price);
-      _spend(
-        listing.price,
-        'buy_elf',
-        '买入 ${listing.title} 💎${listing.price} · 卖家收益 ${WorldData.formatYuan(sellerIncome)}',
-      );
       notifyListeners();
       return null;
     }
@@ -1128,8 +1526,34 @@ class AppState extends ChangeNotifier {
     required String frontImagePath,
     required String backImagePath,
   }) async {
-    if (currentUser == null) return '请先登录';
+    final user = currentUser;
+    if (user == null) return '请先登录';
     try {
+      if (CommerceConfig.enabled) {
+        // 单一真源：服务端复核二要素并落库，客户端只保留脱敏结果与本地影像路径。
+        final mode = _paymentMode ??
+            (CommerceConfig.android ? CommerceConfig.androidMode : 'production');
+        final response = await CommerceRepository.instance.verifyIdentity(
+            user.id, mode, {'realName': realName, 'idNumber': idNumber});
+        final raw = response['identity'];
+        if (raw is! Map || raw['status'] != 'verified') {
+          return '实名核验未通过，请核对后重试';
+        }
+        final now = DateTime.now();
+        identity = IdentityVerification(
+          status: IdentityStatus.verified,
+          maskedName: raw['maskedName'] as String? ?? '',
+          maskedIdNumber: raw['maskedIdNumber'] as String? ?? '',
+          frontImagePath: frontImagePath,
+          backImagePath: backImagePath,
+          authorizedAt: now,
+          verifiedAt:
+              DateTime.tryParse(raw['verifiedAt'] as String? ?? '') ?? now,
+          provider: raw['provider'] as String? ?? 'server_checksum',
+        );
+        notifyListeners();
+        return null;
+      }
       identity = await IdentityVerificationService.verifyRequest(
         realName: realName,
         idNumber: idNumber,
@@ -1140,17 +1564,19 @@ class AppState extends ChangeNotifier {
       return null;
     } on IdentityVerifyException catch (e) {
       return e.message;
+    } on AuthException catch (e) {
+      return e.message;
     }
   }
 
-  // —— UGC：捏形象铸造 AI NFT ——
+  // —— UGC：捏形象创建 AI ——
 
-  /// 铸造一只 UGC AI 的钻石费用（10 钻石 = 1 元）。
+  /// 创建一只 UGC AI 的钻石费用（10 钻石 = 1 元）。
   static const int createElfCost = 200;
 
-  /// 创建并铸造一只属于自己的 AI。返回 null 表示成功，否则是失败原因。
+  /// 创建并归属于自己的一只 AI。返回 null 表示成功，否则是失败原因。
   ///
-  /// 合规顺序：登录 → 长度 → 敏感词初筛 → 扣费 → 生成链上地址 → 归入「我的 AI」。
+  /// 合规顺序：登录 → 长度 → 敏感词初筛 → 扣费 → 生成专属地址 → 归入「我的 AI」。
   /// 形象图暂由 [avatarUrl] 留空（客户端用首字头像），接入形象生成模型后填真实图。
   Future<String?> createElf({
     required String name,
@@ -1169,8 +1595,11 @@ class AppState extends ChangeNotifier {
       return '名字最多 ${AiCreationPolicy.maxNameLength} 个字';
     }
     // 两条形象来源线：文字描述 / 已实名的身份证本人授权。
+    // 服务端模式下实名以服务端记录为准，由服务端返回 IDENTITY_REQUIRED。
     if (portraitSource == 'idCard') {
-      if (!isIdentityVerified) return '请先完成实名认证，再使用本人形象';
+      if (!CommerceConfig.enabled && !isIdentityVerified) {
+        return '请先完成实名认证，再使用本人形象';
+      }
     } else if (trimmedPrompt.isEmpty) {
       return '先描述你想要的形象';
     }
@@ -1180,8 +1609,20 @@ class AppState extends ChangeNotifier {
     final blocked = AiCreationPolicy.checkTexts(
         [trimmedName, trimmedPrompt, persona, fear, habit]);
     if (blocked != null) return blocked;
+    if (CommerceConfig.enabled) {
+      // 单一真源：创建、扣费、铸 NFT 与专属地址全部由服务端完成。
+      return _performCommerce('create_elf', {
+        'name': trimmedName,
+        'prompt': trimmedPrompt,
+        'style': style,
+        'persona': persona.trim(),
+        'fear': fear.trim(),
+        'habit': habit.trim(),
+        'portraitSource': portraitSource,
+      });
+    }
     if (wallet.diamonds < createElfCost) {
-      return '钻石不够。铸造要 💎$createElfCost，你有 💎${wallet.diamonds}';
+      return '钻石不够。创建要 💎$createElfCost，你有 💎${wallet.diamonds}';
     }
 
     final serialNo = elves.where((e) => e.id.startsWith('ugc')).length + 1;
@@ -1199,85 +1640,65 @@ class AppState extends ChangeNotifier {
       fear: fear.trim().isEmpty ? '还没写' : fear.trim(),
       habit: habit.trim().isEmpty ? '还没写' : habit.trim(),
       status: ElfStatus.active,
-      energy: 160,
-      maxEnergy: 320,
       followers: 0,
       echo: 0,
       works: 0,
       attention: 0,
-      baseSlots: 3,
+      baseCapacity: 3,
       avatarStyle: style,
-      avatarPrompt: trimmedPrompt.isEmpty
-          ? '实名认证本人形象（身份证授权）'
-          : trimmedPrompt,
+      avatarPrompt: trimmedPrompt.isEmpty ? '实名认证本人形象（身份证授权）' : trimmedPrompt,
       portraitSource: portraitSource,
-      equipped: [],
+      learnedSkills: [],
       today: [],
       relations: [],
     );
     _ensureChainAddress(elf);
     elves.add(elf);
-    seats.add(
-        Seat(elfId: elf.id, days: 0, edition: elf.edition, injected: 160));
+    seats.add(Seat(elfId: elf.id, days: 0, edition: elf.edition, injected: 0));
     activeElfId = elf.id;
-    _spend(createElfCost, 'mint_elf', '铸造 ${elf.name}（UGC 形象）');
+    _spend(createElfCost, 'create_elf', '创建 ${elf.name}（UGC 形象）');
     notifyListeners();
     return null;
   }
 
-  /// 把我的 AI 送进寄售市场。返回 null 表示成功。
-  Future<String?> resellMyElf({required int price}) async {
-    if (CommerceConfig.enabled)
-      return _performCommerce('resell', {'price': price});
-    final e = myElf;
-    if (e == null) return '你没有 AI 可寄售';
-
-    // 生成一个 fake 卖家代号
-    final sellerCode = '我 (寄售)';
-    final listing = MarketListing(
-      id: 'sl${_listSeq++}',
-      market: 'secondary',
-      elfId: e.id,
-      title: '${e.name} · 转卖',
-      subtitle: '转赠 1 次 · 装了 ${e.equipped.length} 个模块',
-      price: price,
-      sellerLabel: sellerCode,
-      equippedCarry: List.from(e.equipped),
-      edition: e.edition,
-      note: '先寄售，等别人买走。',
-    );
-    secondaryListings.add(listing);
-
-    // 我的 AI 暂时标记为"已进入寄售"，变成 isMine=false
-    e.isMine = false;
-    e.ownerLabel = '市场 · 等待买家';
-    e.ownerId = 'market_pending';
-    _repairActiveElf();
-
-    notifyListeners();
-    return null;
-  }
-
-  /// 从寄售市场撤下自己的 AI。
-  Future<String?> cancelResell({String? elfId}) async {
-    if (CommerceConfig.enabled) return _performCommerce('cancel_resell', {if (elfId != null) 'elfId': elfId});
-    final sellerCode = '我 (寄售)';
-    MarketListing? myListing;
-    for (final l in secondaryListings) {
-      if (l.sellerLabel == sellerCode && (elfId == null || l.elfId == elfId)) {
-        myListing = l;
-        break;
-      }
+  /// 把某只 AI 免费转赠给另一个人类（AI 唯一的流转方式）。
+  /// 编号、AI 地址与已学技能整体转移；返回 null 表示成功。
+  Future<String?> giftMyElf({
+    required String elfId,
+    required String recipient,
+  }) async {
+    final e = elf(elfId);
+    if (!e.isMine) return '这只 AI 不在你名下';
+    final to = recipient.trim();
+    if (to.isEmpty) return '请填写接收方的手机号或人类地址';
+    final me = currentUser;
+    if (me == null) return '请先登录';
+    if (to == me.phone || to == (me.chainAddress ?? '')) {
+      return '不能转赠给自己';
     }
-    if (myListing == null) return '没有可撤下的寄售';
-    secondaryListings.remove(myListing);
-    final target = elf(myListing.elfId);
-    target.isMine = true;
-    target.ownerId = 'me';
-    target.ownerLabel = '我';
-    activeElfId = target.id;
+    if (CommerceConfig.enabled) {
+      // 单一真源：接收方校验与所有权转移全部由服务端完成。
+      return _performCommerce('gift_elf', {'elfId': elfId, 'recipient': to});
+    }
+    final label = _recipientLabel(to);
+    e.isMine = false;
+    e.ownerId = 'human:$to';
+    e.ownerLabel = label;
+    _log('gift_elf', 0, '将 ${e.name} 转赠给 $label');
+    _repairActiveElf();
     notifyListeners();
     return null;
+  }
+
+  /// 转赠后在公开页展示的持有人代号：手机号脱敏，地址缩短。
+  static String _recipientLabel(String recipient) {
+    if (RegExp(r'^\d{7,}$').hasMatch(recipient)) {
+      return '${recipient.substring(0, 3)}****${recipient.substring(recipient.length - 4)}';
+    }
+    if (recipient.length > 13) {
+      return '${recipient.substring(0, 6)}…${recipient.substring(recipient.length - 4)}';
+    }
+    return recipient;
   }
 
   // —— 钻石币系统：充值 / 打赏 / 流水 ——
@@ -1347,29 +1768,50 @@ class AppState extends ChangeNotifier {
     _paymentVersion = -1;
     _commerceRevision = -1;
     _creatorEarningsFen = 0;
+    creatorEarnings = const EarningsSummary();
+    withdrawals.clear();
     _commerceReady = false;
     _commerceBusy = false;
     _remoteElfIds.clear();
+    _remotePostIds.clear();
     _ownedModules.clear();
     _modulePrices.clear();
+    _clearFeedCache();
   }
 
-  Future<String?> buyModule(String id, String elfId) async {
-    if (CommerceConfig.enabled)
-      return _performCommerce('buy_module', {'moduleId': id, 'elfId': elfId});
-    return '当前平台尚未开放能力包购买';
+  /// 拉取服务端快照。Android 钱包环境固定，可直接同步，无需先打开钱包页。
+  Future<String?> _ensureCommerceReady() async {
+    if (_commerceReady) return null;
+    final user = currentUser;
+    if (user == null) return '请先登录';
+    final mode = _paymentMode ??
+        (CommerceConfig.android ? CommerceConfig.androidMode : null);
+    if (mode == null) return '请先打开钱包，刷新服务端权益';
+    try {
+      final response =
+          await CommerceRepository.instance.snapshot(user.id, mode);
+      applyPaymentResponse(user.id, response);
+      return _commerceReady ? null : '钱包数据校验失败，请重新打开钱包';
+    } on AuthException catch (error) {
+      return error.message;
+    } catch (_) {
+      return '钱包服务暂不可用，请稍后重试';
+    }
   }
 
   Future<String?> _performCommerce(
       String type, Map<String, dynamic> payload) async {
     final user = currentUser;
-    final mode = _paymentMode;
     if (user == null) return '请先登录';
-    if (!_commerceReady || mode == null) return '请先打开钱包，刷新服务端权益';
     if (_commerceBusy) return '上一项操作正在确认，请稍候';
-    if (wallet.refundDebt > 0) return '请先充值补足 ${wallet.refundDebt} 钻石退款欠额';
+    // 先占住操作位再等快照，避免并发点击重复提交、重复扣费。
     _commerceBusy = true;
     try {
+      final ready = await _ensureCommerceReady();
+      if (ready != null) return ready;
+      final mode = _paymentMode;
+      if (mode == null) return '请先打开钱包，刷新服务端权益';
+      if (wallet.refundDebt > 0) return '请先充值补足 ${wallet.refundDebt} 钻石退款欠额';
       final response = await CommerceRepository.instance
           .action(user.id, mode, type, payload);
       applyPaymentResponse(user.id, response);
@@ -1382,6 +1824,37 @@ class AppState extends ChangeNotifier {
       _commerceBusy = false;
     }
   }
+
+  /// 互动同样以服务端为真源：先乐观更新本地，再以服务端快照覆盖；
+  /// 请求失败时回滚乐观更新，保证界面不出现「只在本机成立」的数据。
+  /// 互动不扣费，因此不占用 _commerceBusy 操作位，也不做退款欠额拦截。
+  Future<String?> _performInteraction(String type, Map<String, dynamic> payload,
+      VoidCallback? rollback) async {
+    if (!CommerceConfig.enabled) return null;
+    final user = currentUser;
+    if (user == null) return null;
+    final mode =
+        _paymentMode ?? (CommerceConfig.android ? CommerceConfig.androidMode : null);
+    if (mode == null) {
+      rollback?.call();
+      notifyListeners();
+      return '请先打开钱包，刷新服务端权益';
+    }
+    try {
+      final response =
+          await CommerceRepository.instance.action(user.id, mode, type, payload);
+      applyPaymentResponse(user.id, response);
+      return null;
+    } catch (_) {
+      rollback?.call();
+      notifyListeners();
+      return '互动未同步到服务器，请稍后重试';
+    }
+  }
+
+  /// 金额字段容错：只接受非负整数，其余按兜底值处理。
+  static int _centsOf(dynamic value, int fallback) =>
+      value is int && value >= 0 ? value : fallback;
 
   /// Validate the complete snapshot before replacing wallet or paid rights.
   void applyPaymentResponse(String userId, Map<String, dynamic> response) {
@@ -1406,21 +1879,79 @@ class AppState extends ChangeNotifier {
     final commerce = Map<String, dynamic>.from(response['commerce'] as Map);
     final revision = number(commerce, 'revision');
     final earnings = number(commerce, 'earningsFen');
+    // 收益三档：旧服务端没有 earnings 字段时按「全部待结算」兜底展示。
+    final rawEarnings = commerce['earnings'];
+    final nextEarnings = rawEarnings is Map
+        ? EarningsSummary(
+            pendingCents: _centsOf(rawEarnings['pendingCents'], earnings),
+            availableCents: _centsOf(rawEarnings['availableCents'], 0),
+            withdrawnCents: _centsOf(rawEarnings['withdrawnCents'], 0),
+            lifetimeCents: _centsOf(rawEarnings['lifetimeCents'], earnings),
+            settleDays: _centsOf(rawEarnings['settleDays'], 7),
+            minWithdrawCents: _centsOf(rawEarnings['minWithdrawCents'], 1000),
+            feeBps: _centsOf(rawEarnings['feeBps'], 60),
+            dailyLimitCents: _centsOf(rawEarnings['dailyLimitCents'], 200000),
+            tipSharePercent: _centsOf(
+                (rawEarnings['sharePercent'] is Map)
+                    ? (rawEarnings['sharePercent'] as Map)['tip']
+                    : null,
+                50),
+            verified: rawEarnings['verified'] == true,
+            agreementAccepted:
+                (rawEarnings['agreement'] is Map) &&
+                    (rawEarnings['agreement'] as Map)['accepted'] == true,
+            agreementVersion: (rawEarnings['agreement'] is Map)
+                ? ((rawEarnings['agreement'] as Map)['version'] as String? ?? '')
+                : '',
+            agreementAcceptedAt: (rawEarnings['agreement'] is Map)
+                ? (rawEarnings['agreement'] as Map)['acceptedAt'] as String?
+                : null,
+          )
+        : EarningsSummary.fromLifetime(earnings);
+    final rawWithdrawals = commerce['withdrawals'];
+    final nextWithdrawals = <WithdrawalRecord>[];
+    if (rawWithdrawals is List) {
+      for (final item in rawWithdrawals) {
+        if (item is! Map) continue;
+        final id = item['id'] as String? ?? '';
+        if (id.isEmpty) continue;
+        nextWithdrawals.add(WithdrawalRecord(
+          id: id,
+          amountCents: _centsOf(item['amountCents'], 0),
+          feeCents: _centsOf(item['feeCents'], 0),
+          netCents: _centsOf(item['netCents'], 0),
+          account: item['account'] as String? ?? '',
+          status: item['status'] as String? ?? '',
+          createdAt: item['createdAt'] as String? ?? '',
+          paidAt: item['paidAt'] as String?,
+          failureReason: item['failureReason'] as String?,
+        ));
+      }
+    }
     List<T> decode<T>(String key, T Function(Map<String, dynamic>) parse) =>
         (commerce[key] as List)
             .map((v) => parse(Map<String, dynamic>.from(v as Map)))
             .toList();
     final nextElves = decode('elves', _data.decodePaymentElf);
     final nextPrimary = decode('primary', _data.decodePaymentListing);
-    final nextSecondary = decode('secondary', _data.decodePaymentListing);
     final nextPosts = decode('posts', _data.decodePaymentPost);
     final nextLogs = decode('logs', _data.decodePaymentLog);
+    final nextBooks = (commerce['books'] as List? ?? const [])
+        .map((v) => _data.decodePaymentBook(Map<String, dynamic>.from(v as Map)))
+        .toList();
     final nextPrices = Map<String, int>.from(commerce['modulePrices'] as Map);
+    // 技能书目录以服务端为准；空列表说明旧服务端，保留本地种子目录。
+    final rawModules = commerce['modules'];
+    final nextModules = rawModules is List && rawModules.isNotEmpty
+        ? rawModules
+            .whereType<Map>()
+            .map((v) => _data.decodePaymentModule(Map<String, dynamic>.from(v)))
+            .toList()
+        : null;
     final owned = <String>{};
     for (final value in commerce['elves'] as List) {
       if (value['isMine'] == true) {
-        owned.addAll(
-            List<String>.from(value['ownedModules'] ?? value['equipped']));
+        owned.addAll(List<String>.from(value['learnedSkills'] ?? const []));
       }
     }
     if (version < _paymentVersion || revision < _commerceRevision) return;
@@ -1429,6 +1960,10 @@ class AppState extends ChangeNotifier {
     _commerceRevision = revision;
     wallet = nextWallet;
     _creatorEarningsFen = earnings;
+    creatorEarnings = nextEarnings;
+    withdrawals
+      ..clear()
+      ..addAll(nextWithdrawals);
     // Keep free demonstration content, never its simulated ownership or market.
     final ids = nextElves.map((e) => e.id).toSet();
     final demos = elves
@@ -1439,12 +1974,14 @@ class AppState extends ChangeNotifier {
     }
     elves = [...nextElves, ...demos];
     final postIds = nextPosts.map((p) => p.id).toSet();
+    // 只做并集：信息流分页加载过的帖子同样来自服务端，不能被快照冲掉标记。
+    _remotePostIds.addAll(postIds);
     posts = [
       ...nextPosts,
       ...posts.where((p) => !postIds.contains(p.id) && !p.id.startsWith('p_'))
     ];
     primaryListings = nextPrimary;
-    secondaryListings = nextSecondary;
+    if (nextModules != null) modules = nextModules;
     seats = nextElves
         .where((e) => e.isMine)
         .map((e) => Seat(elfId: e.id, days: 0, edition: e.edition))
@@ -1452,19 +1989,80 @@ class AppState extends ChangeNotifier {
     logs
       ..clear()
       ..addAll(nextLogs);
+    // 技能书是服务端铸造的人类资产，仓库以服务器返回为准。
+    books
+      ..clear()
+      ..addAll(nextBooks);
+    final humanAddress = commerce['humanAddress'] as String?;
+    if (humanAddress != null) currentUser?.chainAddress = humanAddress;
+    // 实名以服务端记录为准：本地影像路径保留，认证结论不接受客户端声明。
+    final rawIdentity = commerce['identity'];
+    if (rawIdentity is Map && rawIdentity['status'] == 'verified') {
+      final prev = identity;
+      final verifiedAt =
+          DateTime.tryParse(rawIdentity['verifiedAt'] as String? ?? '') ??
+              prev?.verifiedAt ??
+              DateTime.now();
+      identity = IdentityVerification(
+        status: IdentityStatus.verified,
+        maskedName: rawIdentity['maskedName'] as String? ?? '',
+        maskedIdNumber: rawIdentity['maskedIdNumber'] as String? ?? '',
+        frontImagePath: prev?.frontImagePath,
+        backImagePath: prev?.backImagePath,
+        authorizedAt: prev?.authorizedAt ?? verifiedAt,
+        verifiedAt: verifiedAt,
+        provider: rawIdentity['provider'] as String? ?? 'server_checksum',
+      );
+    } else if (rawIdentity == null) {
+      identity = null;
+    }
     _remoteElfIds
       ..clear()
       ..addAll(ids);
     _ownedModules
       ..clear()
       ..addAll(owned);
-    ownedModules
-      ..clear()
-      ..addAll(owned);
-    if (!nextElves.any((e) => e.id == activeElfId && e.isMine)) {
-      activeElfId = commerce['activeElfId'] as String?;
+    // 关注 / 点赞 / 收藏 / 已读 / 评论都以服务端记录为准，本地集合只作镜像。
+    void mergeIds(String key, Set<String> target) {
+      final value = commerce[key];
+      if (value is! List) return;
+      target
+        ..clear()
+        ..addAll(value.whereType<String>());
     }
-    _repairActiveElf();
+
+    mergeIds('following', followed);
+    mergeIds('likedPosts', likedPosts);
+    mergeIds('collectedPosts', collectedPosts);
+    mergeIds('watchedPosts', watchedPosts);
+    _applyNotices(commerce['notices']);
+    final rawComments = commerce['comments'];
+    if (rawComments is List) {
+      comments.clear();
+      for (final item in rawComments) {
+        if (item is! Map) continue;
+        final postId = item['postId'] as String? ?? '';
+        final id = item['id'] as String? ?? '';
+        if (postId.isEmpty || id.isEmpty) continue;
+        comments.putIfAbsent(postId, () => []).add(PostComment(
+              id: id,
+              postId: postId,
+              authorLabel: item['authorLabel'] as String? ?? '',
+              text: item['text'] as String? ?? '',
+              time: _formatCommentTime(item['time'] as String?),
+              isMine: item['isMine'] == true,
+            ));
+      }
+    }
+    // 服务端 activeElfId 是「最近操作/买入的那只」，用于自动切换；
+    // 没有时回落到第一只自有 AI（转赠出去后自动切到剩下的）。
+    final serverActive = commerce['activeElfId'] as String?;
+    final ownedElves = nextElves.where((e) => e.isMine).toList();
+    if (serverActive != null && ownedElves.any((e) => e.id == serverActive)) {
+      activeElfId = serverActive;
+    } else if (!ownedElves.any((e) => e.id == activeElfId)) {
+      activeElfId = ownedElves.isEmpty ? null : ownedElves.first.id;
+    }
     _modulePrices
       ..clear()
       ..addAll(nextPrices);
@@ -1495,9 +2093,14 @@ class AppState extends ChangeNotifier {
     );
   }
 
-  // —— 链上精灵 NFT / AI 钱包 ——
+  // —— AI 专属地址 ——
 
-  /// 确保 AI 有专属链上地址。MVP：由 elfId 确定性派生 0x 地址，接链后替换为真实 mint。
+  /// 确保 AI 有专属地址。MVP：由 elfId 确定性派生 0x 地址，接链后替换为真实上链逻辑。
+  /// 用户专属地址（人类持有 AI 与 AI 流转用）。
+  static void _ensureUserAddress(User u) {
+    u.chainAddress ??= _deriveChainAddress(u.id);
+  }
+
   void _ensureChainAddress(Elf e) {
     e.chainAddress ??= _deriveChainAddress(e.id);
   }
@@ -1523,6 +2126,13 @@ class AppState extends ChangeNotifier {
   static String _now() {
     final n = DateTime.now();
     return '${n.hour.toString().padLeft(2, '0')}:${n.minute.toString().padLeft(2, '0')}';
+  }
+
+  /// 服务端评论时间是 ISO 时间，展示层沿用 HH:mm 的短格式。
+  static String _formatCommentTime(String? raw) {
+    final parsed = DateTime.tryParse(raw ?? '')?.toLocal();
+    if (parsed == null) return _now();
+    return '${parsed.hour.toString().padLeft(2, '0')}:${parsed.minute.toString().padLeft(2, '0')}';
   }
 }
 

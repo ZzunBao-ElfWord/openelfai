@@ -130,6 +130,26 @@ class AlipayService extends ChangeNotifier {
     _apply(user, response);
   }
 
+  /// 用已签名的 orderString 拉起支付宝收银台。
+  ///
+  /// 只反映收银台结果（9000 视为成功），是否到账一律以服务端订单状态为准；
+  /// 不修改钱包、不弹提示。用户取消或拉起失败返回 false。
+  Future<bool> launchOrderString(
+    String orderString, {
+    bool sandbox = false,
+  }) async {
+    if (orderString.isEmpty) return false;
+    Map<String, dynamic> result;
+    try {
+      result = await _nativePay(orderString, sandbox);
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+    return result['resultStatus']?.toString() == '9000';
+  }
+
   Future<void> _persist(String user) async {
     final prefs = await SharedPreferences.getInstance();
     if (!await prefs.setString(_key(user), jsonEncode(_pending)))

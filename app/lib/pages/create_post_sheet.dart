@@ -37,11 +37,9 @@ class _CreatePostSheetState extends State<CreatePostSheet> {
   @override
   Widget build(BuildContext context) {
     final state = AppState.instance;
-    // 已装的非 auto 能力（auto 是自动运营中枢，不走手动创作）
-    final installed = state
-        .modulesOf(widget.elf.id)
-        .where((m) => m.id != 'auto')
-        .toList();
+    // 已学会的非 auto 技能（auto 是自动运营中枢，不走手动创作）
+    final installed =
+        state.modulesOf(widget.elf.id).where((m) => m.id != 'auto').toList();
     final all = state.modules.where((m) => m.id != 'auto').toList();
 
     return Container(
@@ -95,12 +93,14 @@ class _CreatePostSheetState extends State<CreatePostSheet> {
                 Text(
                   '让 ${widget.elf.name} 创作',
                   style: TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.text,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.text,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '选一个它已装的能力，给个方向',
+                  '选一个它已学会的技能，给个方向',
                   style: TextStyle(fontSize: 10.5, color: AppColors.textMuted),
                 ),
               ],
@@ -130,21 +130,28 @@ class _CreatePostSheetState extends State<CreatePostSheet> {
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
         child: Text(
           _trackLabels[track] ?? track,
-          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSub),
+          style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textSub),
         ),
       ));
       list.addAll(byTrack[track]!.map((m) => _moduleTile(m)));
     }
     // 未装的灰色展示
     final installedIds = installed.map((m) => m.id).toSet();
-    final notInstalled = all.where((m) => !installedIds.contains(m.id)).toList();
+    final notInstalled =
+        all.where((m) => !installedIds.contains(m.id)).toList();
     if (notInstalled.isNotEmpty) {
       list.add(const SizedBox(height: 8));
       list.add(Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Text(
-          '未装（去「我的 AI」装配）',
-          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textFaint),
+          '未学会（去「发现」买技能书）',
+          style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textFaint),
         ),
       ));
       list.addAll(notInstalled.map((m) => _moduleTile(m, installed: false)));
@@ -162,9 +169,7 @@ class _CreatePostSheetState extends State<CreatePostSheet> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: selected
-                ? AppColors.cyan
-                : AppColors.strokeSoft,
+            color: selected ? AppColors.cyan : AppColors.strokeSoft,
           ),
           color: !installed ? AppColors.surface.withOpacity(0.4) : null,
         ),
@@ -177,7 +182,10 @@ class _CreatePostSheetState extends State<CreatePostSheet> {
                 gradient: selected
                     ? AppColors.brandGradient
                     : LinearGradient(
-                        colors: [AppColors.violet.withOpacity(0.3), AppColors.cyan.withOpacity(0.15)],
+                        colors: [
+                          AppColors.violet.withOpacity(0.3),
+                          AppColors.cyan.withOpacity(0.15)
+                        ],
                       ),
                 borderRadius: BorderRadius.circular(8),
               ),
@@ -185,7 +193,8 @@ class _CreatePostSheetState extends State<CreatePostSheet> {
               child: Text(
                 m.glyph,
                 style: TextStyle(
-                  fontSize: 15, fontWeight: FontWeight.w700,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
                   color: selected ? AppColors.onBrand : AppColors.violetSoft,
                 ),
               ),
@@ -196,7 +205,7 @@ class _CreatePostSheetState extends State<CreatePostSheet> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    installed ? m.name : '${m.name} · 未装',
+                    installed ? m.name : '${m.name} · 未学会',
                     style: TextStyle(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w600,
@@ -205,8 +214,9 @@ class _CreatePostSheetState extends State<CreatePostSheet> {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '算力 ${m.compute} · ${m.summary}',
-                    style: TextStyle(fontSize: 10.5, color: AppColors.textMuted),
+                    m.summary,
+                    style:
+                        TextStyle(fontSize: 10.5, color: AppColors.textMuted),
                   ),
                 ],
               ),
@@ -229,14 +239,14 @@ class _CreatePostSheetState extends State<CreatePostSheet> {
             Icon(Icons.backpack_outlined, size: 40, color: AppColors.textFaint),
             const SizedBox(height: 12),
             Text(
-              '先给它装一个能力包，再指挥它创作',
+              '先给它学一个技能，再指挥它创作',
               style: TextStyle(fontSize: 12, color: AppColors.textMuted),
             ),
             const SizedBox(height: 16),
             BrandButton(
-              label: '去装配能力',
+              label: '去「发现」买技能书',
               icon: Icons.tune,
-              // 装配区已内嵌在「我的 AI」页，关掉弹层即可看到
+              // 仓库在「我」tab，关掉弹层即可去发现页购书
               onTap: () => Navigator.of(context).pop(),
             ),
           ],
@@ -256,7 +266,8 @@ class _CreatePostSheetState extends State<CreatePostSheet> {
           hintStyle: TextStyle(fontSize: 11.5, color: AppColors.textFaint),
           filled: true,
           fillColor: AppColors.surface,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
             borderSide: BorderSide.none,
@@ -273,9 +284,7 @@ class _CreatePostSheetState extends State<CreatePostSheet> {
         children: [
           Expanded(
             child: Text(
-              _selectedModuleId == null
-                  ? '先选一个能力'
-                  : '算力消耗：${state.module(_selectedModuleId!)?.compute ?? 0} · AI 剩余 ${widget.elf.energy}',
+              _selectedModuleId == null ? '先选一个技能' : '选好后直接产出，不额外收费',
               style: TextStyle(fontSize: 11, color: AppColors.textMuted),
             ),
           ),
