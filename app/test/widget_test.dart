@@ -357,7 +357,7 @@ void main() {
     await tester.tap(find.text('创建 AI · 💎${AppState.createElfCost}'));
     await tester.pumpAndSettle();
 
-    expect(find.text('AI 已铸造为 NFT'), findsOneWidget);
+    expect(find.text('AI 智能体已创建'), findsOneWidget);
     expect(state.myElves.any((e) => e.name == '小满'), isTrue);
     debugDefaultTargetPlatformOverride = null;
   });

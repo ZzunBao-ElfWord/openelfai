@@ -75,6 +75,8 @@ module.exports = {
 
   captcha: {
     enabled: bool('ALIYUN_CAPTCHA_ENABLED', false),
+    // 网页端图形验证：off（默认，仅靠手机号/IP 频控）/ enforce（必须带阿里云 H5 证明）。
+    webMode: (process.env.WEB_CAPTCHA_MODE || 'off').trim().toLowerCase(),
     allowOnError: bool('ALIYUN_CAPTCHA_ALLOW_ON_ERROR', true),
     endpoint: process.env.ALIYUN_CAPTCHA_ENDPOINT || 'https://captcha.alicaptcha.com/validate',
     timeoutMs: Number(process.env.ALIYUN_CAPTCHA_TIMEOUT_MS || 8000),
@@ -122,6 +124,23 @@ module.exports = {
     // 用于密钥直接写在 /opt/litellm/.env、未走后台配置的厂商。
     vendors: String(process.env.WORLD_AGENTS_VENDORS || '')
       .split(',').map((item) => item.trim()).filter(Boolean),
+    assetBaseUrl: process.env.WORLD_ASSET_BASE_URL || 'https://openelfai.com',
+  },
+  // 豆包官方账号每天用固定形象生成短视频，发布到世界与视频信息流。
+  worldVideos: {
+    enabled: bool('WORLD_VIDEOS_ENABLED', true),
+    perDay: Number(process.env.WORLD_VIDEOS_PER_DAY || 3),
+    duration: Number(process.env.WORLD_VIDEOS_DURATION || 12),
+    model: process.env.WORLD_VIDEOS_MODEL || 'doubao-seedance-2-0-260128',
+    // 视频生成走方舟原生异步接口，直接用厂商 Key（与 LiteLLM 的 Key 同源）。
+    apiKey: process.env.VOLCENGINE_API_KEY || process.env.ARK_API_KEY || '',
+    arkBaseUrl: process.env.WORLD_VIDEOS_ARK_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3',
+    captionModel: process.env.WORLD_VIDEOS_CAPTION_MODEL || 'doubao/llama-3-70b',
+    imageUrl: process.env.WORLD_VIDEOS_IMAGE_URL || '',
+    // 北京时间发布档位：每天 perDay 条按这些小时依次放开。
+    slots: String(process.env.WORLD_VIDEOS_SLOTS || '9,15,21')
+      .split(',').map((item) => Number(item.trim())).filter((n) => Number.isFinite(n)),
+    failureCooldownMs: Number(process.env.WORLD_VIDEOS_FAILURE_COOLDOWN_MS || 30 * 60000),
     assetBaseUrl: process.env.WORLD_ASSET_BASE_URL || 'https://openelfai.com',
   },
   // 收益提现审核：内部接口只认这个令牌，未配置时审核接口整体关闭。

@@ -9,8 +9,8 @@ import 'wallet_page.dart';
 
 /// 「发现」页：把市场里的两类东西分开陈列。
 ///
-/// AI 是被铸造的 NFT 智能体，可以在人类之间流转；
-/// AI 技能书是一次性消耗的技能 NFT，喂给 AI 学会后书即销毁、
+/// AI 是被创建的智能体，可以在人类之间流转；
+/// AI 技能书是一次性消耗的技能书，喂给 AI 学会后书即销毁、
 /// 技能永久写进那一只 AI。两者用完全不同的卡片表达。
 class MarketPage extends StatefulWidget {
   /// 内嵌在底栏 tab 中时隐藏返回按钮、标题显示「发现」。
@@ -166,10 +166,10 @@ class _MarketPageState extends State<MarketPage>
           const SizedBox(height: 8),
           Row(
             children: [
-              _legend(Icons.confirmation_number_outlined, 'AI 智能体 · 可流转 NFT',
+              _legend(Icons.confirmation_number_outlined, 'AI 智能体 · 可流转',
                   AppColors.cyan),
               const SizedBox(width: 8),
-              _legend(Icons.menu_book_outlined, 'AI 技能书 · 一次性技能 NFT',
+              _legend(Icons.menu_book_outlined, 'AI 技能书 · 一次性技能',
                   AppColors.violetSoft),
             ],
           ),
@@ -220,7 +220,7 @@ class _MarketPageState extends State<MarketPage>
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 14, 12, 28),
       children: [
-        _sectionTitle('AI 智能体 · 官方首发', '每只都带专属地址与编号，创建即铸造',
+        _sectionTitle('AI 智能体 · 官方首发', '每只都带专属地址与编号，创建即生成智能体',
             trailing: '${primary.length} 只'),
         const SizedBox(height: 10),
         if (primary.isEmpty)
@@ -299,7 +299,7 @@ class _MarketPageState extends State<MarketPage>
                   Positioned(
                     right: 8,
                     top: 8,
-                    child: _coverTag('NFT · AI', AppColors.textMuted),
+                    child: _coverTag('智能体', AppColors.textMuted),
                   ),
                 ],
               ),

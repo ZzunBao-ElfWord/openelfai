@@ -13,6 +13,7 @@ import '../models/user.dart';
 import '../persistence/data_repository.dart';
 import '../payments/commerce_repository.dart';
 import '../services/platform_api.dart';
+import '../services/stage_bind_service.dart';
 
 class AppState extends ChangeNotifier {
   AppState._();
@@ -42,7 +43,7 @@ class AppState extends ChangeNotifier {
   /// 已计过站外回流分的 elfId（v1.3，同一设备对同一 AI 永久只计 1 次）。
   final Set<String> referralCounted = {};
 
-  /// 我的书包：持有的技能书 NFT 实例（挂在我的专属地址下）。
+  /// 我的仓库：持有的技能书实例（挂在我的专属地址下）。
   /// 学习即销毁，书不转售也不转赠。
   final List<BookInstance> books = [];
 
@@ -247,6 +248,8 @@ class AppState extends ChangeNotifier {
     _resetCommerce();
     _ensureUserAddress(user);
     currentUser = user;
+    // 第三方账号（舞台）绑定态跟随当前账号加载。
+    await StageBindService.instance.load(user.id);
     if (CommerceConfig.enabled) wallet = Wallet();
     // 登录时如果本地还没有种子数据（比如首次启动直接登录），先注入
     if (!_initialized) {
@@ -374,6 +377,7 @@ class AppState extends ChangeNotifier {
     reports.clear();
     identity = null;
     currentUser = null;
+    StageBindService.instance.reset();
     _localDataLoaded = false;
     _cachedUserId = null;
     platformBalanceMicro = 0;
@@ -789,7 +793,7 @@ class AppState extends ChangeNotifier {
   List<BookInstance> booksOf(String moduleId) =>
       books.where((b) => b.moduleId == moduleId).toList();
 
-  /// 铸造一本技能书（MVP：本地确定性伪造 NFT 实例，接链后替换）。
+  /// 生成一本技能书（MVP：本地确定性伪造实例，接链后替换）。
   BookInstance _mintBook(String moduleId) => BookInstance(
         id: 'bk${_bookSeq++}',
         moduleId: moduleId,
@@ -1051,6 +1055,41 @@ class AppState extends ChangeNotifier {
     posts.insert(0, post);
     notifyListeners();
     return null;
+  }
+
+  // —— 人类直接上传 AI 生成的视频 ——
+
+  /// 上传 AI 生成的视频：服务端校验视频格式与 AI 归属后发布成视频帖。
+  /// 上传不扣费，因此不走钱包就绪与操作位，只要求已登录且 AI 属于自己。
+  Future<String?> uploadAiVideo({
+    required String elfId,
+    required String caption,
+    required List<int> bytes,
+  }) async {
+    if (!myElves.any((e) => e.id == elfId)) return '只能上传到你自己的 AI 名下';
+    final text = caption.trim();
+    if (text.isEmpty) return '请填写视频文案';
+    if (text.length > 200) return '文案不能超过 200 字';
+    if (bytes.isEmpty) return '请选择视频文件';
+    final user = currentUser;
+    if (user == null) return '请先登录';
+    final mode = _paymentMode ??
+        (CommerceConfig.android ? CommerceConfig.androidMode : 'production');
+    try {
+      await CommerceRepository.instance.uploadVideo(
+        user.id,
+        mode,
+        elfId: elfId,
+        caption: text,
+        bytes: bytes,
+      );
+      _refreshWorldFeed();
+      return null;
+    } on AuthException catch (error) {
+      return error.message;
+    } catch (_) {
+      return '视频上传失败，请稍后重试';
+    }
   }
 
   // —— 自动运营中枢：装上 auto 能力的 AI 定时自动发 ——
@@ -1619,7 +1658,7 @@ class AppState extends ChangeNotifier {
         [trimmedName, trimmedPrompt, persona, fear, habit]);
     if (blocked != null) return blocked;
     if (CommerceConfig.enabled) {
-      // 单一真源：创建、扣费、铸 NFT 与专属地址全部由服务端完成。
+      // 单一真源：创建、扣费、生成智能体与专属地址全部由服务端完成。
       return _performCommerce('create_elf', {
         'name': trimmedName,
         'prompt': trimmedPrompt,

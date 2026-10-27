@@ -3,6 +3,7 @@ import '../config/iap_config.dart';
 import '../config/commerce_config.dart';
 import '../data/world_data.dart';
 import '../models/elf.dart';
+import '../services/app_content_service.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -133,7 +134,7 @@ class WalletPage extends StatelessWidget {
               Text('退款欠额：${state.wallet.refundDebt} 钻石。消费已暂停，下次充值优先补足欠额。',
                   style: const TextStyle(color: Colors.orange, fontSize: 12)),
             Text(
-              '消费后钻石不再流通：10💎 = ¥1。打赏礼物的 50% 作为服务费结算给创作者，收益过冷静期后可提现。',
+              AppContentService.instance.content.value.text('app.wallet.rule'),
               style: TextStyle(fontSize: 10.5, color: AppColors.textFaint),
             ),
           ],

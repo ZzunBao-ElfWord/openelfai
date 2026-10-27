@@ -19,7 +19,7 @@ import 'wallet_page.dart';
 
 /// 「我」tab：人类自己的主页。
 ///
-/// 这里只承载人类账户：头像/昵称/人类地址、钻石与收益、持有的 AI NFT 卡片、
+/// 这里只承载人类账户：头像/昵称/人类地址、钻石与收益、持有的智能体卡片、
 /// 账户入口。AI 的一切数据与配置都不放在这里——点卡片进入那只 AI 的
 /// 专属「AI 控制台」，人类与 AI 的边界因此保持清晰。
 class ProfilePage extends StatefulWidget {
@@ -65,7 +65,7 @@ class _ProfilePageState extends State<ProfilePage> {
                             _emptyNftCard(context)
                           else ...[
                             SectionHeader(
-                              '我的 AI · NFT',
+                              '我的 AI 智能体',
                               trailing: '${elves.length} 个 · 点卡片进入控制台',
                             ),
                             _nftGrid(context, state, elves),
@@ -217,7 +217,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                   const SizedBox(height: 5),
                   if (user == null)
-                    Text('先登录，再铸造属于你的 AI',
+                    Text('先登录，再创建属于你的 AI',
                         style:
                             TextStyle(fontSize: 11, color: AppColors.textMuted))
                   else
@@ -369,7 +369,7 @@ class _ProfilePageState extends State<ProfilePage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _miniStat('💎${state.wallet.diamonds}', '钻石余额', AppColors.cyan),
-              _miniStat('${state.myElves.length}', '持有 AI NFT'),
+              _miniStat('${state.myElves.length}', '持有智能体'),
               _miniStat(WorldData.formatYuan(earnings), '累计收益'),
             ],
           ),
@@ -509,7 +509,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // —— 我的 AI：NFT 卡片网格，点卡片进入控制台 ——
+  // —— 我的 AI：智能体卡片网格，点卡片进入控制台 ——
 
   Widget _nftGrid(BuildContext context, AppState state, List<Elf> elves) {
     return LayoutBuilder(
@@ -574,12 +574,12 @@ class _ProfilePageState extends State<ProfilePage> {
             Positioned(
               left: 8,
               top: 8,
-              child: _coverPill('NFT · Lv${elf.level}'),
+              child: _coverPill('智能体 · Lv${elf.level}'),
             ),
             Positioned(
               right: 8,
               top: 8,
-              child: _coverPill('已铸造', highlight: true),
+              child: _coverPill('已上链', highlight: true),
             ),
             Positioned(
               left: 9,
@@ -709,10 +709,10 @@ class _ProfilePageState extends State<ProfilePage> {
             Icon(Icons.add_circle_outline,
                 size: 22, color: AppColors.textMuted),
             const SizedBox(height: 6),
-            Text('创建 AI',
+            Text('创建智能体',
                 style: TextStyle(fontSize: 11.5, color: AppColors.textSub)),
             const SizedBox(height: 2),
-            Text('铸造一枚新 NFT',
+            Text('一只会成长的 AI',
                 style: TextStyle(fontSize: 9, color: AppColors.textFaint)),
           ],
         ),
@@ -733,10 +733,10 @@ class _ProfilePageState extends State<ProfilePage> {
           Icon(Icons.confirmation_number_outlined,
               size: 40, color: AppColors.textMuted),
           const SizedBox(height: 10),
-          Text('你还没有 AI NFT',
+          Text('你还没有 AI 智能体',
               style: TextStyle(fontSize: 14, color: AppColors.textSub)),
           const SizedBox(height: 4),
-          Text('创建一只 AI 就等于铸造一枚 NFT，它会归到你的人类地址下。',
+          Text('创建一只 AI 就是创建一位智能体，它会归到你的人类地址下。',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
           const SizedBox(height: 14),
@@ -774,7 +774,7 @@ class _ProfilePageState extends State<ProfilePage> {
           Text('登录后查看你的人类资产',
               style: TextStyle(fontSize: 14, color: AppColors.textSub)),
           const SizedBox(height: 4),
-          Text('钻石、人类地址与持有的 AI NFT 都挂在你的账户下。',
+          Text('钻石、人类地址与持有的 AI 智能体都挂在你的账户下。',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
           const SizedBox(height: 14),
@@ -806,7 +806,7 @@ class _ProfilePageState extends State<ProfilePage> {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              '人类持有钻石与地址，负责指挥；AI 是你铸造的智能体 NFT，可以配置技能、放它去世界，也可以免费转赠给另一个人类。它的作品、收益与技能都在自己的控制台里。',
+              '人类持有钻石与地址，负责指挥；AI 是你创建的智能体，可以配置技能、放它去世界，也可以免费转赠给另一个人类。它的作品、收益与技能都在自己的控制台里。',
               style: TextStyle(
                   fontSize: 10.5, color: AppColors.textMuted, height: 1.6),
             ),

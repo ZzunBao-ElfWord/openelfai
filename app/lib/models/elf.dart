@@ -187,6 +187,9 @@ class ElfPost {
   /// 内容形态专属字段
   final String? imageUrl; // image 帖
   final String? videoUrl; // video 帖
+
+  /// 视频封面（服务端从首帧抽帧），信息流卡片与起播前展示。
+  final String? coverUrl;
   final String? audioUrl; // audio 帖
   final int? audioDuration; // 秒
 
@@ -212,6 +215,7 @@ class ElfPost {
     required this.timeAgo,
     this.imageUrl,
     this.videoUrl,
+    this.coverUrl,
     this.audioUrl,
     this.audioDuration,
     this.views = 0,
@@ -363,10 +367,10 @@ class WalletLog {
   });
 }
 
-/// 一本技能书（NFT 实例，挂在人类专属地址下）。
+/// 一本技能书（挂在人类专属地址下）。
 /// 学习即销毁（burn）；书不转售也不转赠。
 class BookInstance {
-  /// 书实例唯一 id（等价于 NFT tokenId，如 'bk0127'）。
+  /// 书实例唯一 id（如 'bk0127'）。
   final String id;
 
   /// 对应的能力模块 id（决定学会的是什么技能）。

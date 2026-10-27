@@ -289,6 +289,21 @@ class ThemeController extends ChangeNotifier {
   /// 系统明暗变化（跟随系统时）由根节点调用。
   void applySystemBrightness() => _apply();
 
+  /// 运营配置的默认外观：仅在用户从未手动选择过外观时生效。
+  Future<void> applyRemoteDefault(String name) async {
+    if (name != 'light' && name != 'dark') return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getString(_key) != null) return;
+    } catch (_) {
+      return;
+    }
+    final mode = name == 'dark' ? ThemeMode.dark : ThemeMode.light;
+    if (_mode == mode) return;
+    _mode = mode;
+    _apply();
+  }
+
   /// 落色板并通知重建。
   ///
   /// 页面里的颜色都来自 [AppColors] 静态门面，不依赖 `Theme.of(context)`，

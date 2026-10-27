@@ -77,3 +77,27 @@ test('上游异常可按配置使用限流兜底放行', async () => {
 
   assert.deepEqual(await verifier.verify(proof), { passed: true, fallback: true });
 });
+
+test('网页端默认不要求图形验证，仅走频控', async () => {
+  const verifier = createCaptchaVerifier(settings, {
+    fetchImpl: async () => assert.fail('网页端 off 模式不应请求阿里云'),
+  });
+
+  assert.deepEqual(
+    await verifier.verify({ platform: 'web' }),
+    { passed: true, skipped: 'web_captcha_off' },
+  );
+});
+
+test('网页端 enforce 模式必须带完整凭证', async () => {
+  const verifier = createCaptchaVerifier(
+    { ...settings, webMode: 'enforce', schemes: { ...settings.schemes, web: { appId: 'web-id', appKey: 'web-secret' } } },
+    { fetchImpl: async () => ({ ok: true, async json() { return { result: 'success' }; } }) },
+  );
+
+  await assert.rejects(
+    () => verifier.verify({ platform: 'web' }),
+    (error) => error instanceof CaptchaError && error.code === 'CAPTCHA_REQUIRED',
+  );
+  assert.deepEqual(await verifier.verify({ ...proof, platform: 'web' }), { passed: true });
+});

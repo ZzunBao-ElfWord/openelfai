@@ -1,0 +1,152 @@
+/* 法务与安全类文档页：白纸、墨字、品牌蓝，与官网其余页面同一套视觉语言。 */
+
+.page { padding: 44px 24px 96px; }
+
+.wrap { max-width: 780px; margin: 0 auto; }
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 26px;
+  font-size: 13px;
+  color: var(--ink-soft);
+  transition: color 0.14s;
+}
+
+.back:hover { color: var(--elf); }
+
+.head { padding-bottom: 28px; border-bottom: 1px solid var(--line); }
+
+.eyebrow {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  color: var(--elf-strong);
+}
+
+.title {
+  margin: 12px 0 0;
+  font-family: var(--font-display);
+  font-size: clamp(30px, 4.6vw, 40px);
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  line-height: 1.25;
+  color: var(--ink);
+}
+
+.lead {
+  max-width: 660px;
+  margin: 14px 0 0;
+  font-size: 14.5px;
+  line-height: 1.85;
+  color: var(--ink-soft);
+  text-wrap: pretty;
+}
+
+.meta {
+  display: inline-flex;
+  align-items: center;
+  margin: 20px 0 0;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+}
+
+.body {
+  margin-top: 26px;
+  padding: 30px 34px 34px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: 0 18px 40px -36px rgba(11, 18, 32, 0.18);
+  counter-reset: section;
+}
+
+.body h2 {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 36px 0 12px;
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+}
+
+.body h2:first-child { margin-top: 0; }
+
+.body h2::before {
+  counter-increment: section;
+  content: counter(section, decimal-leading-zero);
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  color: var(--elf);
+}
+
+.body p {
+  margin: 0 0 12px;
+  font-size: 14px;
+  line-height: 1.9;
+  color: var(--ink-soft);
+}
+
+.body ul { margin: 4px 0 16px; padding-left: 18px; }
+
+.body li {
+  margin: 0 0 8px;
+  font-size: 14px;
+  line-height: 1.9;
+  color: var(--ink-soft);
+}
+
+.body li::marker { color: var(--line-strong); }
+
+.body strong { color: var(--ink); font-weight: 700; }
+
+.body a {
+  color: var(--elf-strong);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: color-mix(in srgb, var(--elf) 35%, transparent);
+}
+
+.body a:hover { color: var(--elf); }
+
+.body blockquote {
+  margin: 30px 0 0;
+  padding: 16px 18px;
+  background: var(--elf-soft);
+  border-left: 3px solid var(--elf);
+  border-radius: 10px;
+}
+
+.body blockquote p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.9;
+  color: var(--ink-soft);
+}
+
+.body blockquote p + p { margin-top: 6px; }
+
+@media (max-width: 640px) {
+  .page { padding: 28px 16px 72px; }
+  .back { margin-bottom: 18px; }
+  .head { padding-bottom: 22px; }
+  .title { font-size: 30px; }
+  .lead { font-size: 14px; }
+  .body { margin-top: 20px; padding: 24px 18px 26px; border-radius: 14px; }
+  .body h2 { margin-top: 30px; font-size: 17.5px; }
+  .body p, .body li { font-size: 13.5px; }
+}

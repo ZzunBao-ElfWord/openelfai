@@ -471,6 +471,136 @@ export function updateCatalogModule(
   return api.put(`/catalog/modules/${id}`, body);
 }
 
+// ===== 运营配置：法律与政策文档 =====
+
+export interface AppDocument {
+  id: string;
+  slug: string;
+  title: string;
+  version: number;
+  format: string;
+  status: 'draft' | 'published' | 'archived';
+  effective_at: number;
+  published_at: number;
+  published_by: string;
+  created_at: number;
+  updated_at: number;
+  preview: string;
+}
+
+export interface AppDocumentDetail {
+  document: AppDocument;
+  content: string;
+}
+
+export const fetchAppDocuments = async (): Promise<{ items: AppDocument[] }> =>
+  (await api.get<{ items: AppDocument[] }>('/app-content/documents')).data;
+
+export const fetchAppDocument = async (id: string): Promise<AppDocumentDetail> =>
+  (await api.get<AppDocumentDetail>(`/app-content/documents/${id}`)).data;
+
+export function createAppDocument(body: {
+  slug: string;
+  title: string;
+  content: string;
+  effective_at?: number | null;
+}) {
+  return api.post('/app-content/documents', body);
+}
+
+export function updateAppDocument(
+  id: string,
+  body: { title: string; content: string; effective_at?: number | null },
+) {
+  return api.put(`/app-content/documents/${id}`, body);
+}
+
+// 发布/下线仅 super_admin；发布即新增当前版本，旧版本自动归档
+export function publishAppDocument(id: string) {
+  return api.post(`/app-content/documents/${id}/publish`);
+}
+
+export function archiveAppDocument(id: string) {
+  return api.post(`/app-content/documents/${id}/archive`);
+}
+
+// ===== 运营配置：应用文案与开关 =====
+
+export interface AppConfigRow {
+  key: string;
+  group: string;
+  label: string;
+  value_type: 'text' | 'bool' | 'json' | 'number';
+  value: string;
+  remark: string;
+  updated_by: string;
+  updated_at: number;
+}
+
+export const fetchAppConfigs = async (): Promise<{ items: AppConfigRow[] }> =>
+  (await api.get<{ items: AppConfigRow[] }>('/app-content/configs')).data;
+
+export function updateAppConfig(key: string, value: string) {
+  return api.put(`/app-content/configs/${key}`, { value });
+}
+
+// 开关类配置仅 super_admin
+export function updateAppConfigSwitch(key: string, value: boolean) {
+  return api.put(`/app-content/configs/${key}/switch`, { value });
+}
+
+// ===== 内容审核：用户举报 =====
+
+export type ModerationReportState = 'open' | 'resolved' | 'dismissed';
+export type ModerationTargetType = 'post' | 'comment' | 'elf' | 'user' | 'chat';
+export type ModerationAction = 'dismiss' | 'remove_content';
+
+export interface ModerationReport {
+  id: string;
+  user_id: string;
+  target_type: ModerationTargetType;
+  target_id: string;
+  reason: string;
+  detail: string;
+  state: ModerationReportState;
+  environment: string;
+  created_at: string;
+  resolved_at: string | null;
+  resolved_by: string | null;
+  resolution: string | null;
+  note: string | null;
+}
+
+export interface ModerationReportFilter {
+  state?: string; // open / resolved / dismissed / all
+  target_type?: string;
+  environment?: string;
+}
+
+export async function getReports(
+  f: ModerationReportFilter,
+  page: number,
+): Promise<Page<ModerationReport>> {
+  const { data } = await api.get<Page<ModerationReport>>('/moderation/reports', {
+    params: {
+      state: f.state || undefined,
+      target_type: f.target_type || undefined,
+      environment: f.environment || undefined,
+      page,
+      page_size: 20,
+    },
+  });
+  return data;
+}
+
+// 处置举报：dismiss=忽略；remove_content=软删动态/评论并关闭举报
+export function resolveReport(
+  id: string,
+  body: { action: ModerationAction; note?: string },
+) {
+  return api.post(`/moderation/reports/${id}/resolve`, body);
+}
+
 // ===== 审计日志 =====
 
 export async function fetchAudit(page: number, f: AuditFilter = {}): Promise<Page<AuditEntry>> {

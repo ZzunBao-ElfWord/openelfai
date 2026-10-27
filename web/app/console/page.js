@@ -31,10 +31,15 @@ const VIEW_META = {
     label: '账单',
     title: '账单',
     note: '余额变动记录，每笔充值、消费与退款都会出现在这里。'
+  },
+  developer: {
+    label: '开发者',
+    title: '开发者',
+    note: '入驻、创建技能、沙箱调试，提交后进入平台审核。'
   }
 };
 
-const VIEW_ORDER = ['usage', 'keys', 'topup', 'billing'];
+const VIEW_ORDER = ['usage', 'keys', 'topup', 'billing', 'developer'];
 
 const LEDGER_TYPES = {
   topup: '充值',
@@ -233,7 +238,8 @@ function LoginView({ notice, onNoticeClear, onLoggedIn }) {
     try {
       const data = await apiRequest('/api/v1/auth/send-code', {
         method: 'POST',
-        body: { phone: value }
+        // 网页端不带阿里云 H5 图形验证凭证，靠 platform 让服务端走浏览器渠道的频控分支。
+        body: { phone: value, platform: 'web' }
       });
       const wait = Number(data?.resendAfter);
       setCountdown(Number.isFinite(wait) && wait > 0 ? Math.ceil(wait) : 60);
@@ -896,6 +902,421 @@ function BillingPanel({ items, loading, error, hasMore, onLoadMore }) {
   );
 }
 
+/* ── 开发者面板 ─────────────────────────────────────────── */
+
+const SKILL_STATUS = {
+  draft: '草稿',
+  testing: '调试中',
+  submitted: '待审核',
+  approved: '已上架',
+  offline: '已下架'
+};
+
+const TRACK_LABELS = {
+  writing: '写作',
+  visual: '视觉',
+  video: '视频',
+  voice: '语音',
+  knowledge: '知识',
+  social: '社交'
+};
+
+const SKILL_SAMPLE_SOURCE = `// event.input 是调用方传入的 JSON；ctx.llm.chat 调用平台大模型（计入单次调用上限）
+exports.handler = async function (event, ctx) {
+  const text = String((event.input && event.input.text) || '');
+  const reply = await ctx.llm.chat([
+    { role: 'system', content: '你是一个简洁的写作助手。' },
+    { role: 'user', content: text }
+  ], { max_tokens: 400 });
+  return { text: reply.content };
+};`;
+
+function newEditor() {
+  return {
+    name: '',
+    slug: '',
+    track: 'writing',
+    summary: '',
+    bookDiamonds: '68',
+    source: SKILL_SAMPLE_SOURCE
+  };
+}
+
+function DeveloperPanel({
+  profile,
+  loading,
+  error,
+  skills,
+  skillsLoading,
+  applyForm,
+  applying,
+  applyError,
+  onApplyChange,
+  onApply,
+  editorOpen,
+  editor,
+  editorError,
+  saving,
+  onOpenEditor,
+  onCloseEditor,
+  onEditorChange,
+  onCreateSkill,
+  testSkillId,
+  testing,
+  testInput,
+  testResult,
+  testError,
+  onStartTest,
+  onCancelTest,
+  onTestInputChange,
+  onRunTest,
+  submittingId,
+  onSubmitReview
+}) {
+  if (loading && !profile) {
+    return (
+      <div className="console-view">
+        <section className="console-panel">
+          <div className="console-loading">加载中…</div>
+        </section>
+      </div>
+    );
+  }
+
+  if (error && !profile) {
+    return (
+      <div className="console-view">
+        <div className="console-alert">{error}</div>
+      </div>
+    );
+  }
+
+  const developer = profile?.developer;
+  const sandbox = profile?.sandbox || {};
+  const pricing = profile?.pricing || {};
+  const tracks = profile?.tracks || Object.keys(TRACK_LABELS);
+
+  if (!developer) {
+    return (
+      <div className="console-view">
+        <section className="console-panel dev-apply">
+          <div className="console-panel-head">
+            <div>
+              <h2>申请成为开发者</h2>
+              <p>使用 App 同一账号入驻，无需注册第二套账号</p>
+            </div>
+          </div>
+
+          {applyError ? <div className="console-alert">{applyError}</div> : null}
+
+          <label className="console-field">
+            <span>姓名</span>
+            <input
+              type="text"
+              value={applyForm.realName}
+              maxLength={32}
+              placeholder="用于后续收益结算与协议签署"
+              onChange={(event) => onApplyChange('realName', event.target.value)}
+            />
+          </label>
+
+          <label className="console-field">
+            <span>入驻用途</span>
+            <textarea
+              rows={3}
+              value={applyForm.purpose}
+              maxLength={255}
+              placeholder="说明你计划开发的技能方向，例如：写作类技能，服务站内 AI 智能体"
+              onChange={(event) => onApplyChange('purpose', event.target.value)}
+            />
+          </label>
+
+          <div className="dev-apply-actions">
+            <button
+              type="button"
+              className="console-btn console-btn--primary"
+              onClick={onApply}
+              disabled={applying}
+            >
+              {applying ? '提交中…' : '提交入驻申请'}
+            </button>
+            <Link className="console-btn console-btn--ghost" href="/developers/">
+              了解开发者规则
+            </Link>
+          </div>
+
+          <ul className="console-topup-tips">
+            <li>技能书销售分成：开发者 70%、平台 30%。</li>
+            <li>技能被调用时按 token 从 AI 持有者钱包扣费，调用费 100% 归平台。</li>
+            <li>首版入驻自动通过；正式上架前仍需平台审核技能内容。</li>
+          </ul>
+        </section>
+      </div>
+    );
+  }
+
+  return (
+    <div className="console-view">
+      <section className="console-panel">
+        <div className="console-panel-head">
+          <div>
+            <h2>入驻信息</h2>
+            <p>
+              {developer.real_name} · {developer.status === 'approved' ? '已通过' : developer.status}
+            </p>
+          </div>
+          <span className={sandbox.enabled ? 'console-badge is-on' : 'console-badge is-off'}>
+            沙箱{sandbox.enabled ? '已启用' : '未启用'}
+          </span>
+        </div>
+
+        <dl className="console-key-meta">
+          <div>
+            <dt>技能书分成</dt>
+            <dd className="mono">{Math.round(Number(pricing.developer_share_bp || 7000) / 100)}%</dd>
+          </div>
+          <div>
+            <dt>定价区间</dt>
+            <dd className="mono">
+              {pricing.min_diamonds || 18}-{pricing.max_diamonds || 999} 钻石
+            </dd>
+          </div>
+          <div>
+            <dt>运行形态</dt>
+            <dd className="mono">{sandbox.mode || 'disabled'}</dd>
+          </div>
+        </dl>
+
+        {!sandbox.enabled ? (
+          <p className="console-hint">
+            当前环境未启用技能沙箱，可以创建与编辑技能，但暂时无法调试执行。
+          </p>
+        ) : null}
+      </section>
+
+      <section className="console-panel">
+        <div className="console-panel-head">
+          <div>
+            <h2>我的技能</h2>
+            <p>单文件源码 + manifest，保存即生成新版本</p>
+          </div>
+          <div className="console-panel-actions">
+            <button type="button" className="console-btn console-btn--primary" onClick={onOpenEditor}>
+              新建技能
+            </button>
+          </div>
+        </div>
+
+        {editorOpen ? (
+          <div className="dev-editor">
+            <div className="dev-editor-grid">
+              <label className="console-field">
+                <span>技能名称</span>
+                <input
+                  type="text"
+                  value={editor.name}
+                  maxLength={32}
+                  placeholder="例如：天气播报"
+                  onChange={(event) => onEditorChange('name', event.target.value)}
+                />
+              </label>
+              <label className="console-field">
+                <span>slug</span>
+                <input
+                  type="text"
+                  value={editor.slug}
+                  maxLength={32}
+                  placeholder="小写字母/数字/中划线，例如 weather-brief"
+                  onChange={(event) => onEditorChange('slug', event.target.value)}
+                />
+              </label>
+              <label className="console-field">
+                <span>赛道</span>
+                <select
+                  value={editor.track}
+                  onChange={(event) => onEditorChange('track', event.target.value)}
+                >
+                  {tracks.map((track) => (
+                    <option value={track} key={track}>
+                      {TRACK_LABELS[track] || track}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="console-field">
+                <span>技能书价格（钻石）</span>
+                <input
+                  type="number"
+                  min={pricing.min_diamonds || 18}
+                  max={pricing.max_diamonds || 999}
+                  value={editor.bookDiamonds}
+                  onChange={(event) => onEditorChange('bookDiamonds', event.target.value)}
+                />
+              </label>
+            </div>
+
+            <label className="console-field">
+              <span>一句话介绍</span>
+              <input
+                type="text"
+                value={editor.summary}
+                maxLength={140}
+                placeholder="告诉用户这个技能能做什么"
+                onChange={(event) => onEditorChange('summary', event.target.value)}
+              />
+            </label>
+
+            <label className="console-field">
+              <span>源码（node20 单文件，必须导出 exports.handler）</span>
+              <textarea
+                className="dev-source"
+                rows={14}
+                spellCheck={false}
+                value={editor.source}
+                onChange={(event) => onEditorChange('source', event.target.value)}
+              />
+            </label>
+
+            {editorError ? <div className="console-alert">{editorError}</div> : null}
+
+            <div className="dev-editor-actions">
+              <button
+                type="button"
+                className="console-btn console-btn--primary"
+                onClick={onCreateSkill}
+                disabled={saving}
+              >
+                {saving ? '保存中…' : '保存技能'}
+              </button>
+              <button
+                type="button"
+                className="console-btn console-btn--ghost"
+                onClick={onCloseEditor}
+                disabled={saving}
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {skillsLoading ? (
+          <div className="console-loading">加载中…</div>
+        ) : !skills.length ? (
+          <div className="console-empty">还没有技能，先新建一个吧</div>
+        ) : (
+          <div className="console-table-wrap">
+            <table className="console-table">
+              <thead>
+                <tr>
+                  <th>技能</th>
+                  <th>赛道</th>
+                  <th className="is-num">版本</th>
+                  <th className="is-num">调试</th>
+                  <th>状态</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {skills.map((skill) => (
+                  <tr key={skill.id}>
+                    <td>
+                      <div className="dev-skill-name">{skill.name}</div>
+                      <code className="dev-skill-slug">{skill.slug}</code>
+                    </td>
+                    <td>{TRACK_LABELS[skill.track] || skill.track}</td>
+                    <td className="is-num mono">v{skill.latest_version || 0}</td>
+                    <td className="is-num mono">{skill.runs || 0}</td>
+                    <td>
+                      <span className={`dev-skill-status is-${skill.status}`}>
+                        {SKILL_STATUS[skill.status] || skill.status}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="dev-row-actions">
+                        <button
+                          type="button"
+                          className="console-btn console-btn--ghost"
+                          onClick={() => onStartTest(skill)}
+                          disabled={!sandbox.enabled || ['submitted', 'approved'].includes(skill.status)}
+                        >
+                          调试
+                        </button>
+                        <button
+                          type="button"
+                          className="console-btn console-btn--ghost"
+                          onClick={() => onSubmitReview(skill)}
+                          disabled={
+                            submittingId === skill.id ||
+                            ['submitted', 'approved'].includes(skill.status)
+                          }
+                        >
+                          {submittingId === skill.id ? '提交中…' : '提交审核'}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {testSkillId ? (
+          <div className="dev-test">
+            <div className="dev-test-head">
+              <h3>调试运行</h3>
+              <button type="button" className="console-btn console-btn--ghost" onClick={onCancelTest}>
+                收起
+              </button>
+            </div>
+            <p className="dev-test-note">
+              输入按 JSON 解析后作为 <code>event.input</code> 传入；大模型调用按 token 从你的余额扣费。
+            </p>
+            <textarea
+              className="dev-source dev-test-input"
+              rows={6}
+              spellCheck={false}
+              value={testInput}
+              onChange={(event) => onTestInputChange(event.target.value)}
+            />
+            {testError ? <div className="console-alert">{testError}</div> : null}
+            <div className="dev-test-actions">
+              <button
+                type="button"
+                className="console-btn console-btn--primary"
+                onClick={onRunTest}
+                disabled={testing}
+              >
+                {testing ? '执行中…' : '运行'}
+              </button>
+            </div>
+            {testResult ? (
+              <div className="dev-test-result">
+                <div className="dev-test-result-head">
+                  <span className={testResult.ok ? 'console-badge is-on' : 'console-badge is-off'}>
+                    {testResult.ok ? '成功' : '失败'}
+                  </span>
+                  <span className="mono">
+                    {testResult.duration_ms}ms · LLM {testResult.llm_calls} 次 · {testResult.sandbox}
+                  </span>
+                </div>
+                {testResult.error ? (
+                  <p className="dev-test-error">{testResult.error}</p>
+                ) : (
+                  <pre className="dev-test-output">
+                    {JSON.stringify(testResult.output, null, 2)}
+                  </pre>
+                )}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </section>
+    </div>
+  );
+}
+
 /* ── 控制台主页面 ───────────────────────────────────────── */
 
 export default function ConsolePage() {
@@ -940,6 +1361,25 @@ export default function ConsolePage() {
   const [ledgerError, setLedgerError] = useState('');
   const nextBeforeRef = useRef(null);
 
+  const [devProfile, setDevProfile] = useState(null);
+  const [devProfileLoading, setDevProfileLoading] = useState(false);
+  const [devProfileError, setDevProfileError] = useState('');
+  const [devSkills, setDevSkills] = useState([]);
+  const [devSkillsLoading, setDevSkillsLoading] = useState(false);
+  const [applyForm, setApplyForm] = useState({ realName: '', purpose: '' });
+  const [applying, setApplying] = useState(false);
+  const [applyError, setApplyError] = useState('');
+  const [devEditorOpen, setDevEditorOpen] = useState(false);
+  const [devEditor, setDevEditor] = useState(newEditor);
+  const [devEditorError, setDevEditorError] = useState('');
+  const [devSaving, setDevSaving] = useState(false);
+  const [devTestSkillId, setDevTestSkillId] = useState('');
+  const [devTestInput, setDevTestInput] = useState('{\n  "text": "写一句关于上海的短文案"\n}');
+  const [devTesting, setDevTesting] = useState(false);
+  const [devTestResult, setDevTestResult] = useState(null);
+  const [devTestError, setDevTestError] = useState('');
+  const [devSubmittingId, setDevSubmittingId] = useState('');
+
   /* 启动时读取本地登录态 */
   useEffect(() => {
     try {
@@ -951,6 +1391,8 @@ export default function ConsolePage() {
           if (saved?.user?.phone) setAccount(saved.user.phone);
         }
       }
+      const wanted = new URLSearchParams(window.location.search).get('view');
+      if (wanted && VIEW_ORDER.includes(wanted)) setView(wanted);
     } catch (_e) {
       /* 本地存储异常时保持未登录态 */
     }
@@ -974,6 +1416,13 @@ export default function ConsolePage() {
     setTopupCatalog(null);
     setTopupNotice(null);
     setPaying(false);
+    setDevProfile(null);
+    setDevSkills([]);
+    setDevEditorOpen(false);
+    setDevEditorError('');
+    setDevTestSkillId('');
+    setDevTestResult(null);
+    setDevTestError('');
     setLoginNotice(message);
   }, []);
 
@@ -1244,6 +1693,163 @@ export default function ConsolePage() {
     }
   };
 
+  /* 开发者：入驻档案与技能列表 */
+  const loadDevProfile = useCallback(async () => {
+    setDevProfileLoading(true);
+    setDevProfileError('');
+    try {
+      const data = await fetchAuthed('/api/v1/developer/profile');
+      setDevProfile(data);
+      return data;
+    } catch (err) {
+      setDevProfileError(err.message);
+      return null;
+    } finally {
+      setDevProfileLoading(false);
+    }
+  }, [fetchAuthed]);
+
+  const loadDevSkills = useCallback(async () => {
+    setDevSkillsLoading(true);
+    try {
+      const data = await fetchAuthed('/api/v1/developer/skills');
+      setDevSkills(Array.isArray(data?.items) ? data.items : []);
+    } catch (err) {
+      setDevProfileError(err.message);
+    } finally {
+      setDevSkillsLoading(false);
+    }
+  }, [fetchAuthed]);
+
+  useEffect(() => {
+    if (!token || view !== 'developer') return undefined;
+    let alive = true;
+    loadDevProfile().then((data) => {
+      if (alive && data?.developer) loadDevSkills();
+    });
+    return () => {
+      alive = false;
+    };
+  }, [token, view, loadDevProfile, loadDevSkills]);
+
+  const handleApply = async () => {
+    setApplyError('');
+    const realName = applyForm.realName.trim();
+    const purpose = applyForm.purpose.trim();
+    if ([...realName].length < 2 || [...realName].length > 32) {
+      setApplyError('请输入 2-32 个字符的姓名');
+      return;
+    }
+    if ([...purpose].length < 10) {
+      setApplyError('请用至少 10 个字说明入驻用途');
+      return;
+    }
+    setApplying(true);
+    try {
+      const data = await fetchAuthed('/api/v1/developer/apply', {
+        method: 'POST',
+        body: { realName, purpose }
+      });
+      setDevProfile(data);
+      await loadDevSkills();
+    } catch (err) {
+      setApplyError(err.message);
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  const handleCreateSkill = async () => {
+    setDevEditorError('');
+    const bookDiamonds = Number(devEditor.bookDiamonds);
+    if (!devEditor.name.trim() || !devEditor.slug.trim()) {
+      setDevEditorError('请填写技能名称与 slug');
+      return;
+    }
+    if (!Number.isInteger(bookDiamonds)) {
+      setDevEditorError('技能书价格需为整数钻石');
+      return;
+    }
+
+    const manifest = {
+      slug: devEditor.slug.trim(),
+      name: devEditor.name.trim(),
+      track: devEditor.track,
+      summary: devEditor.summary.trim(),
+      pricing: { book_diamonds: bookDiamonds }
+    };
+
+    setDevSaving(true);
+    try {
+      await fetchAuthed('/api/v1/developer/skills', {
+        method: 'POST',
+        body: { manifest, source: devEditor.source }
+      });
+      setDevEditorOpen(false);
+      setDevEditor(newEditor());
+      await loadDevSkills();
+    } catch (err) {
+      setDevEditorError(err.message);
+    } finally {
+      setDevSaving(false);
+    }
+  };
+
+  const handleStartTest = (skill) => {
+    setDevTestSkillId(skill.id);
+    setDevTestResult(null);
+    setDevTestError('');
+  };
+
+  const handleRunTest = async () => {
+    if (!devTestSkillId || devTesting) return;
+    setDevTestError('');
+    setDevTestResult(null);
+
+    let input = {};
+    const raw = devTestInput.trim();
+    if (raw) {
+      try {
+        input = JSON.parse(raw);
+      } catch (_e) {
+        setDevTestError('输入不是合法 JSON，请检查格式');
+        return;
+      }
+    }
+
+    setDevTesting(true);
+    try {
+      const data = await fetchAuthed(
+        `/api/v1/developer/skills/${encodeURIComponent(devTestSkillId)}/test`,
+        { method: 'POST', body: { input } }
+      );
+      setDevTestResult(data);
+      await loadDevSkills();
+    } catch (err) {
+      setDevTestError(err.message);
+    } finally {
+      setDevTesting(false);
+    }
+  };
+
+  const handleSubmitReview = async (skill) => {
+    if (devSubmittingId) return;
+    if (!window.confirm(`确认提交「${skill.name}」进入审核？提交后不能再编辑该技能。`)) return;
+
+    setDevSubmittingId(skill.id);
+    try {
+      await fetchAuthed(
+        `/api/v1/developer/skills/${encodeURIComponent(skill.id)}/submit`,
+        { method: 'POST' }
+      );
+      await loadDevSkills();
+    } catch (err) {
+      window.alert(err.message);
+    } finally {
+      setDevSubmittingId('');
+    }
+  };
+
   /* Escape 关闭重置弹层 */
   useEffect(() => {
     if (!resetOpen) return undefined;
@@ -1494,6 +2100,52 @@ export default function ConsolePage() {
                 error={ledgerError}
                 hasMore={hasMore}
                 onLoadMore={() => loadLedger(false)}
+              />
+            ) : null}
+
+            {view === 'developer' ? (
+              <DeveloperPanel
+                profile={devProfile}
+                loading={devProfileLoading}
+                error={devProfileError}
+                skills={devSkills}
+                skillsLoading={devSkillsLoading}
+                applyForm={applyForm}
+                applying={applying}
+                applyError={applyError}
+                onApplyChange={(field, value) =>
+                  setApplyForm((prev) => ({ ...prev, [field]: value }))
+                }
+                onApply={handleApply}
+                editorOpen={devEditorOpen}
+                editor={devEditor}
+                editorError={devEditorError}
+                saving={devSaving}
+                onOpenEditor={() => {
+                  setDevEditorError('');
+                  setDevEditor(newEditor());
+                  setDevEditorOpen(true);
+                }}
+                onCloseEditor={() => setDevEditorOpen(false)}
+                onEditorChange={(field, value) =>
+                  setDevEditor((prev) => ({ ...prev, [field]: value }))
+                }
+                onCreateSkill={handleCreateSkill}
+                testSkillId={devTestSkillId}
+                testing={devTesting}
+                testInput={devTestInput}
+                testResult={devTestResult}
+                testError={devTestError}
+                onStartTest={handleStartTest}
+                onCancelTest={() => {
+                  setDevTestSkillId('');
+                  setDevTestResult(null);
+                  setDevTestError('');
+                }}
+                onTestInputChange={setDevTestInput}
+                onRunTest={handleRunTest}
+                submittingId={devSubmittingId}
+                onSubmitReview={handleSubmitReview}
               />
             ) : null}
           </div>

@@ -11,7 +11,10 @@
     "start": "node src/index.js",
     "test": "node --test test/auth.test.js",
     "test:world": "node --test test/world_agents.test.js",
+    "test:videos": "node --test test/world_videos.test.js",
+    "test:uploads": "node --test test/world_uploads.test.js",
     "test:realname": "node --test test/realname.test.js",
+    "test:developer": "node --test test/developer.test.js",
     "test:payments": "node --test test/apple_iap.test.js test/apple_deploy.test.js test/apple_http.test.js test/alipay.test.js test/alipay_gateway.test.js test/android_deploy.test.js test/captcha.test.js test/captcha_deploy.test.js"
   },
   "dependencies": {

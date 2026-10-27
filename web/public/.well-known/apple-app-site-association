@@ -1,0 +1,20 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "REPLACE_WITH_TEAM_ID.com.ai.openelf",
+        "components": [
+          {
+            "/": "/share/*",
+            "comment": "站外分享回流"
+          },
+          {
+            "/": "/app/*",
+            "comment": "站外深链回流"
+          }
+        ]
+      }
+    ]
+  }
+}

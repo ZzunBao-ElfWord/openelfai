@@ -1,16 +1,34 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../auth/auth_factory.dart';
-import '../config/api_config.dart';
 import '../data/world_data.dart';
+import '../models/app_content.dart';
+import '../services/app_content_service.dart';
+import '../services/stage_bind_service.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'identity_verify_page.dart';
+import 'stage_bind_page.dart';
 import 'wallet_page.dart';
 
 /// 设置页：账号信息、隐私政策、退出登录、删除账号。
-class SettingsPage extends StatelessWidget {
+class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
+
+  @override
+  State<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends State<SettingsPage> {
+  final AppContentService _contentService = AppContentService.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    // 进设置页顺手刷新一次运营配置，保证文案/政策更新尽快生效
+    _contentService.refreshIfStale();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -20,93 +38,108 @@ class SettingsPage extends StatelessWidget {
       body: AppBackground(
         child: SafeArea(
           bottom: false,
-          child: AnimatedBuilder(
-            animation: state,
-            builder: (context, _) {
-              return ListView(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                children: [
-                  _header(context),
-                  const SizedBox(height: 14),
-                  _userCard(state),
-                  const SizedBox(height: 14),
-                  _section('外观'),
-                  _themeCard(),
-                  const SizedBox(height: 18),
-                  _section('账户'),
-                  _tile(
-                    icon: Icons.account_balance_wallet_outlined,
-                    label: '钻石钱包',
-                    subtitle:
-                        '💎${state.wallet.diamonds} · 累计收益 ${WorldData.formatYuan(state.myElf?.earningsYuan ?? 0)}',
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const WalletPage()),
-                    ),
-                  ),
-                  _tile(
-                    icon: Icons.verified_user_outlined,
-                    label: '实名认证',
-                    subtitle: state.isIdentityVerified
-                        ? '已认证 · ${state.identity?.maskedName ?? ''} · 可用于创建本人形象 AI'
-                        : '上传身份证完成核验，用于创建本人形象 AI',
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                          builder: (_) => const IdentityVerifyPage()),
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  _section('法律与政策'),
-                  _tile(
-                    icon: Icons.privacy_tip_outlined,
-                    label: '隐私政策',
-                    subtitle: '我们如何收集、使用、保护你的数据',
-                    onTap: () => _openPolicy(context, PolicyKind.privacy),
-                  ),
-                  _tile(
-                    icon: Icons.gavel_outlined,
-                    label: '用户协议',
-                    subtitle: '使用 OpenElf 的条款',
-                    onTap: () => _openPolicy(context, PolicyKind.terms),
-                  ),
-                  _tile(
-                    icon: Icons.description_outlined,
-                    label: '社区规范',
-                    subtitle: '发帖、评论、打赏的行为准则',
-                    onTap: () => _openPolicy(context, PolicyKind.community),
-                  ),
-                  const SizedBox(height: 18),
-                  _section('其他'),
-                  _tile(
-                    icon: Icons.info_outline,
-                    label: '关于 OpenElf',
-                    subtitle: 'v1.0.0 · 我的 AI，我做主',
-                    onTap: () => _openAbout(context),
-                  ),
-                  _tile(
-                    icon: Icons.flag_outlined,
-                    label: '举报与反馈',
-                    subtitle: '发现违规或有建议？告诉我们',
-                    onTap: () => _snack(context, '举报入口即将开放'),
-                  ),
-                  if (state.currentUser != null) ...[
-                    const SizedBox(height: 24),
-                    _divider(),
+          child: ValueListenableBuilder<AppContent>(
+            valueListenable: _contentService.content,
+            builder: (context, content, _) => AnimatedBuilder(
+              animation: Listenable.merge([state, StageBindService.instance]),
+              builder: (context, _) {
+                return ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                  children: [
+                    _header(context),
                     const SizedBox(height: 14),
-                    _dangerTile(
-                      icon: Icons.logout,
-                      label: '退出登录',
-                      onTap: () => _confirmLogout(context),
+                    _userCard(state),
+                    const SizedBox(height: 14),
+                    _section('外观'),
+                    _themeCard(),
+                    const SizedBox(height: 18),
+                    _section('账户'),
+                    _tile(
+                      icon: Icons.account_balance_wallet_outlined,
+                      label: '钻石钱包',
+                      subtitle:
+                          '💎${state.wallet.diamonds} · 累计收益 ${WorldData.formatYuan(state.myElf?.earningsYuan ?? 0)}',
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const WalletPage()),
+                      ),
                     ),
-                    const SizedBox(height: 8),
-                    _dangerTile(
-                      icon: Icons.delete_forever_outlined,
-                      label: '删除账号',
-                      onTap: () => _confirmDeleteAccount(context),
+                    _tile(
+                      icon: Icons.verified_user_outlined,
+                      label: '实名认证',
+                      subtitle: state.isIdentityVerified
+                          ? '已认证 · ${state.identity?.maskedName ?? ''} · 可用于创建本人形象 AI'
+                          : content.text('app.identity.note'),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                            builder: (_) => const IdentityVerifyPage()),
+                      ),
                     ),
+                    _tile(
+                      icon: Icons.public_rounded,
+                      label: '第三方账号（舞台）',
+                      subtitle: _stageBindSubtitle(),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                            builder: (_) => const StageBindPage()),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    _section('法律与政策'),
+                    _tile(
+                      icon: Icons.privacy_tip_outlined,
+                      label: '隐私政策',
+                      subtitle: '我们如何收集、使用、保护你的数据',
+                      onTap: () => _openPolicy(context, PolicyKind.privacy),
+                    ),
+                    _tile(
+                      icon: Icons.gavel_outlined,
+                      label: '用户协议',
+                      subtitle: '使用 OpenElf 的条款',
+                      onTap: () => _openPolicy(context, PolicyKind.terms),
+                    ),
+                    _tile(
+                      icon: Icons.description_outlined,
+                      label: '社区规范',
+                      subtitle: '发帖、评论、打赏的行为准则',
+                      onTap: () => _openPolicy(context, PolicyKind.community),
+                    ),
+                    const SizedBox(height: 18),
+                    _section('其他'),
+                    _tile(
+                      icon: Icons.info_outline,
+                      label: '关于 ${content.text('app.about.name')}',
+                      subtitle:
+                          '${content.text('app.about.version')} · ${content.text('app.about.slogan')}',
+                      onTap: () => _openAbout(context, content),
+                    ),
+                    _tile(
+                      icon: Icons.flag_outlined,
+                      label: '举报与反馈',
+                      subtitle: content.flag('app.feedback.enabled')
+                          ? content.text('app.feedback.note')
+                          : '反馈渠道暂未开放',
+                      onTap: () => _openFeedback(context, content),
+                    ),
+                    if (state.currentUser != null) ...[
+                      const SizedBox(height: 24),
+                      _divider(),
+                      const SizedBox(height: 14),
+                      _dangerTile(
+                        icon: Icons.logout,
+                        label: '退出登录',
+                        onTap: () => _confirmLogout(context),
+                      ),
+                      const SizedBox(height: 8),
+                      _dangerTile(
+                        icon: Icons.delete_forever_outlined,
+                        label: '删除账号',
+                        onTap: () => _confirmDeleteAccount(context),
+                      ),
+                    ],
                   ],
-                ],
-              );
-            },
+                );
+              },
+            ),
           ),
         ),
       ),
@@ -267,6 +300,16 @@ class SettingsPage extends StatelessWidget {
         ),
       );
 
+  /// 绑定摘要：未绑定时给引导文案，已绑定时列出平台名。
+  String _stageBindSubtitle() {
+    final binds = StageBindService.instance;
+    final bound = StagePlatform.values.where(binds.isBound).toList();
+    if (bound.isEmpty) {
+      return '绑定抖音、快手、微信、哔哩哔哩，一键分发 AI 内容';
+    }
+    return '已绑定 ${bound.length} 个 · ${bound.map((p) => p.label).join('、')}';
+  }
+
   Widget _tile({
     required IconData icon,
     required String label,
@@ -364,29 +407,89 @@ class SettingsPage extends StatelessWidget {
       PolicyKind.terms => '用户协议',
       PolicyKind.community => '社区规范',
     };
-    final url = switch (kind) {
-      PolicyKind.privacy => '${ApiConfig.baseUrl}/privacy',
-      PolicyKind.terms => '${ApiConfig.baseUrl}/terms',
-      PolicyKind.community => '${ApiConfig.baseUrl}/community',
+    final slug = switch (kind) {
+      PolicyKind.privacy => 'privacy',
+      PolicyKind.terms => 'terms',
+      PolicyKind.community => 'community',
     };
     Navigator.of(ctx).push(
       MaterialPageRoute(
-        builder: (_) => _PolicyPage(title: title, url: url),
+        builder: (_) => _PolicyPage(
+          title: title,
+          document: _contentService.content.value.document(slug),
+        ),
       ),
     );
   }
 
-  void _openAbout(BuildContext ctx) {
+  void _openAbout(BuildContext ctx, AppContent content) {
     showAboutDialog(
       context: ctx,
-      applicationName: 'OpenElf',
-      applicationVersion: '1.0.0',
-      children: const [
-        SizedBox(height: 8),
-        Text('我的 AI，我做主。'),
-        SizedBox(height: 4),
-        Text('把技能做成技能书，自己组装，放进世界替你争夺注意力。'),
+      applicationName: content.text('app.about.name'),
+      applicationVersion: content.text('app.about.version'),
+      children: [
+        const SizedBox(height: 8),
+        Text(content.text('app.about.intro')),
+        const SizedBox(height: 6),
+        Text(content.text('app.about.copyright')),
       ],
+    );
+  }
+
+  /// 反馈渠道由运营配置决定：email 展示邮箱、url 展示链接，均可一键复制。
+  void _openFeedback(BuildContext ctx, AppContent content) {
+    if (!content.flag('app.feedback.enabled')) {
+      _snack(ctx, '反馈渠道暂未开放');
+      return;
+    }
+    final channel = content.text('app.feedback.channel');
+    final target = channel == 'url'
+        ? content.text('app.feedback.url')
+        : content.text('app.feedback.email');
+    if (target.trim().isEmpty) {
+      _snack(ctx, '反馈渠道暂未开放');
+      return;
+    }
+    showDialog(
+      context: ctx,
+      builder: (dctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: Text(
+          channel == 'url' ? '反馈与举报' : '反馈邮箱',
+          style: TextStyle(color: AppColors.text, fontSize: 16),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              content.text('app.feedback.note'),
+              style: TextStyle(fontSize: 12.5, color: AppColors.textMuted, height: 1.6),
+            ),
+            const SizedBox(height: 12),
+            SelectableText(
+              target,
+              style: TextStyle(fontSize: 13, color: AppColors.text, height: 1.5),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: target));
+              if (!dctx.mounted) return;
+              Navigator.of(dctx).pop();
+              _snack(ctx, '已复制，可在外部应用中发送给我们');
+            },
+            child: Text('复制', style: TextStyle(color: AppColors.cyan)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dctx).pop(),
+            child: Text('关闭', style: TextStyle(color: AppColors.textMuted)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -484,8 +587,56 @@ enum PolicyKind { privacy, terms, community }
 
 class _PolicyPage extends StatelessWidget {
   final String title;
-  final String url;
-  const _PolicyPage({required this.title, required this.url});
+  final AppContentDocument? document;
+  const _PolicyPage({required this.title, required this.document});
+
+  /// 纯文本按段落渲染（空行分段），不使用 HTML，避免注入与排版失控。
+  List<Widget> _paragraphs() {
+    final body = document?.content.trim() ?? '';
+    if (body.isEmpty) {
+      return [
+        Icon(Icons.description_outlined, size: 40, color: AppColors.textMuted),
+        const SizedBox(height: 12),
+        Text(
+          '$title 正在编写中',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textSub),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          '正文由平台在后台发布后自动同步到这里',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+              fontSize: 11, color: AppColors.textMuted, height: 1.5),
+        ),
+      ];
+    }
+    final effective = document?.effectiveDate;
+    return [
+      if (effective != null)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Text(
+            '生效日期 ${effective.year}-${effective.month.toString().padLeft(2, '0')}-${effective.day.toString().padLeft(2, '0')}'
+            ' · v${document!.version}',
+            style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+          ),
+        ),
+      ...body.split(RegExp(r'\n\s*\n')).map(
+            (paragraph) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(
+                paragraph.trim(),
+                style: TextStyle(
+                    fontSize: 13, color: AppColors.textSub, height: 1.8),
+              ),
+            ),
+          ),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -527,28 +678,7 @@ class _PolicyPage extends StatelessWidget {
                     color: AppColors.surface,
                   ),
                   child: ListView(
-                    children: [
-                      Icon(Icons.description_outlined,
-                          size: 40, color: AppColors.textMuted),
-                      const SizedBox(height: 12),
-                      Text(
-                        '$title 正在编写中',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textSub),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        '完整内容将发布在 $url',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                            fontSize: 11,
-                            color: AppColors.textMuted,
-                            height: 1.5),
-                      ),
-                    ],
+                    children: _paragraphs(),
                   ),
                 ),
               ),

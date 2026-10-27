@@ -4,16 +4,19 @@ import 'package:flutter/material.dart';
 
 import '../data/world_data.dart';
 import '../models/elf.dart';
+import '../services/app_content_service.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/audio_player_card.dart';
 import '../widgets/common.dart';
-import '../widgets/share_card.dart';
+import '../widgets/stage_share_sheet.dart';
 import 'elf_chat_page.dart';
 import 'login_page.dart';
 import 'attention_board_page.dart';
 import 'media_viewer_page.dart';
 import 'post_detail_page.dart';
+import 'upload_video_sheet.dart';
+import 'video_feed_page.dart';
 import 'wallet_page.dart';
 
 /// 世界广场（X For You 布局）：顶栏 tabs + 沉浸式多形态信息流 + 算法排序。
@@ -70,44 +73,91 @@ class _WorldPageState extends State<WorldPage>
     final state = AppState.instance;
     return Scaffold(
       backgroundColor: AppColors.bg,
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              AppColors.bg.withOpacity(1),
-              AppColors.surfaceAlt,
-            ],
-          ),
-        ),
-        child: SafeArea(
-          bottom: false,
-          child: AnimatedBuilder(
-            animation: state,
-            builder: (context, _) {
-              // 桌面宽屏：头部/标签/信息流整体收窄居中（类似微博网页版）。
-              return WideContent(
-                maxWidth: 760,
-                child: Column(
-                  children: [
-                    _header(state),
-                    _tabs(),
-                    Expanded(
-                      child: TabBarView(
-                        controller: _tc,
-                        children: [
-                          _feed(state, state.feedForYou(), 'recommend'),
-                          _feed(state, state.feedHot(), 'hot'),
-                          _feed(state, state.feedMine(), 'mine'),
-                        ],
-                      ),
-                    ),
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    AppColors.bg.withOpacity(1),
+                    AppColors.surfaceAlt,
                   ],
                 ),
-              );
-            },
+              ),
+              child: SafeArea(
+                bottom: false,
+                child: AnimatedBuilder(
+                  animation: state,
+                  builder: (context, _) {
+                    // 桌面宽屏：头部/标签/信息流整体收窄居中（类似微博网页版）。
+                    return WideContent(
+                      maxWidth: 760,
+                      child: Column(
+                        children: [
+                          _header(state),
+                          _tabs(),
+                          Expanded(
+                            child: TabBarView(
+                              controller: _tc,
+                              children: [
+                                _feed(state, state.feedForYou(), 'recommend'),
+                                _feed(state, state.feedHot(), 'hot'),
+                                _feed(state, state.feedMine(), 'mine'),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
           ),
+          // 右下角悬浮加号：上传 AI 生成的视频内容。
+          Positioned(
+            right: 16,
+            bottom: 20,
+            child: _uploadVideoButton(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _uploadVideoButton() {
+    return Semantics(
+      label: '上传 AI 生成的视频',
+      button: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          if (!checkLoginOrPrompt(context)) return;
+          showModalBottomSheet(
+            context: context,
+            isScrollControlled: true,
+            backgroundColor: Colors.transparent,
+            builder: (_) => const UploadVideoSheet(),
+          );
+        },
+        child: Container(
+          width: 50,
+          height: 50,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: AppColors.brandGradient,
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.violet.withOpacity(0.45),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: const Icon(Icons.add, size: 26, color: Colors.white),
         ),
       ),
     );
@@ -256,8 +306,15 @@ class _WorldPageState extends State<WorldPage>
     state.watch(p.id);
     switch (p.kind) {
       case 'video':
+        // 从世界流点视频直接进入竖屏刷视频模式，从这条开始上下滑。
         Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => VideoPlayerPage(post: p, elf: elf)),
+          MaterialPageRoute(
+            builder: (_) => VideoFeedPage(
+              seedPosts: state.posts.where((item) => item.kind == 'video').toList(),
+              startPostId: p.id,
+              showBack: true,
+            ),
+          ),
         );
         break;
       case 'image':
@@ -448,29 +505,40 @@ class _WorldPageState extends State<WorldPage>
                   fontSize: 14, color: AppColors.text, height: 1.6),
             ),
             const SizedBox(height: 8),
-            Container(
-              height: 200,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: AppColors.surfaceAlt,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              alignment: Alignment.center,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      shape: BoxShape.circle,
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: SizedBox(
+                height: 200,
+                width: double.infinity,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Container(color: AppColors.surfaceAlt),
+                    // 封面由服务端从首帧抽帧；老帖没有封面时保留纯色底。
+                    if (p.coverUrl != null && p.coverUrl!.isNotEmpty)
+                      Image.network(
+                        p.coverUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          color: AppColors.surfaceAlt,
+                        ),
+                      ),
+                    Center(
+                      child: Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.35),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white70, width: 1),
+                        ),
+                        alignment: Alignment.center,
+                        child: const Icon(Icons.play_arrow,
+                            color: Colors.white, size: 26),
+                      ),
                     ),
-                    alignment: Alignment.center,
-                    child: const Icon(Icons.play_arrow,
-                        color: Colors.white, size: 24),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ],
@@ -661,9 +729,9 @@ class _WorldPageState extends State<WorldPage>
         // 分享（v1.3：分享卡片 + 落地页引流，分享行为本身不计分）
         GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTap: () => ShareHelper.shareElf(
+          onTap: () => showStageShare(
             context,
-            elf,
+            elf: elf,
             excerpt: p.body.length > 40 ? '${p.body.substring(0, 40)}…' : p.body,
           ),
           child: Padding(
@@ -1088,13 +1156,14 @@ class _WorldPageState extends State<WorldPage>
     required String targetId,
     required String targetLabel,
   }) {
-    final reasons = [
-      '色情或低俗',
-      '侮辱或攻击',
-      '违法违规',
-      '垃圾广告',
-      '其他',
-    ];
+    final content = AppContentService.instance.content.value;
+    if (!content.flag('app.report.enabled')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('举报入口暂未开放')),
+      );
+      return;
+    }
+    final reasons = content.list('app.report.reasons');
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.surface,

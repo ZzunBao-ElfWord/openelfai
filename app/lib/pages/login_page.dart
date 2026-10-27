@@ -9,6 +9,7 @@ import 'package:openelf_ali_captcha/openelf_ali_captcha.dart';
 import '../auth/auth_factory.dart';
 import '../auth/auth_repository.dart';
 import '../config/captcha_config.dart';
+import '../services/app_content_service.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -274,7 +275,8 @@ class _LoginPageState extends State<LoginPage> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  '我的 AI，我做主',
+                  AppContentService.instance.content.value
+                      .text('app.brand.slogan'),
                   style: TextStyle(fontSize: 12, color: AppColors.textSub),
                 ),
                 const SizedBox(height: 40),

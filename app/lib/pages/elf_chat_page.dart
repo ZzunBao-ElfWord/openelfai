@@ -6,7 +6,7 @@ import '../models/elf.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
-import '../widgets/share_card.dart';
+import '../widgets/stage_share_sheet.dart';
 import 'api_key_page.dart';
 import 'elf_console_page.dart';
 import 'login_page.dart';
@@ -553,7 +553,7 @@ class _ElfChatPageState extends State<ElfChatPage> {
   }
 
   void _share(Elf elf) {
-    ShareHelper.shareElf(context, elf, excerpt: elf.persona);
+    showStageShare(context, elf: elf, excerpt: elf.persona);
   }
 
   String _fmt(int n) {

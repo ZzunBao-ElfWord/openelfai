@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'auth/auth_factory.dart';
 import 'pages/home_shell.dart';
 import 'pages/login_page.dart';
+import 'services/app_content_service.dart';
 import 'state/app_state.dart';
 import 'theme.dart';
 import 'widgets/common.dart';
@@ -11,6 +14,9 @@ import 'widgets/common.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await ThemeController.instance.load();
+  // 运营配置：先带缓存启动，再后台拉最新快照（失败静默）
+  await AppContentService.instance.loadCached();
+  unawaited(AppContentService.instance.refresh());
   runApp(const OpenelfApp());
 }
 
@@ -179,7 +185,8 @@ class _SplashScreenState extends State<SplashScreen> {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  '我的 AI，我做主',
+                  AppContentService.instance.content.value
+                      .text('app.brand.slogan'),
                   style: TextStyle(
                     fontSize: 13,
                     color: AppColors.textSub,

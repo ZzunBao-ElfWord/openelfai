@@ -33,6 +33,37 @@ CREATE TABLE IF NOT EXISTS admin_audit_logs (
   INDEX idx_admin_audit_actor (actor_name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 运营配置：应用文案 / 开关（只允许公开展示类配置，密钥仍走环境变量）
+CREATE TABLE IF NOT EXISTS app_configs (
+  cfg_key VARCHAR(64) PRIMARY KEY,
+  cfg_group VARCHAR(32) NOT NULL,
+  label VARCHAR(64) NOT NULL,
+  value_type VARCHAR(16) NOT NULL,
+  value_text MEDIUMTEXT NOT NULL,
+  remark VARCHAR(255) NOT NULL DEFAULT '',
+  updated_by VARCHAR(64) NOT NULL DEFAULT '',
+  updated_at BIGINT NOT NULL DEFAULT 0,
+  INDEX idx_app_configs_group (cfg_group)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 运营配置：法律与政策文档（发布即新增版本，绝不覆盖已发布内容）
+CREATE TABLE IF NOT EXISTS app_documents (
+  id CHAR(32) PRIMARY KEY,
+  slug VARCHAR(32) NOT NULL,
+  title VARCHAR(64) NOT NULL,
+  version INT NOT NULL,
+  format VARCHAR(16) NOT NULL DEFAULT 'text',
+  content MEDIUMTEXT NOT NULL,
+  status VARCHAR(16) NOT NULL DEFAULT 'draft',
+  effective_at BIGINT NULL,
+  published_at BIGINT NULL,
+  published_by VARCHAR(64) NOT NULL DEFAULT '',
+  created_at BIGINT NOT NULL DEFAULT 0,
+  updated_at BIGINT NOT NULL DEFAULT 0,
+  UNIQUE KEY uk_app_documents_slug_version (slug, version),
+  INDEX idx_app_documents_slug_status (slug, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ============================================================================
 -- 最小权限账号（仅本机回源）
 -- !!! 执行前务必把 '<CHANGE_ME>' 替换为强密码 !!!
@@ -59,6 +90,9 @@ GRANT SELECT, INSERT ON openelf.payment_ledger TO 'openelf_admin'@'127.0.0.1';
 -- 后台自有表：全权限
 GRANT ALL PRIVILEGES ON openelf.admin_users TO 'openelf_admin'@'127.0.0.1';
 GRANT ALL PRIVILEGES ON openelf.admin_audit_logs TO 'openelf_admin'@'127.0.0.1';
+-- 运营配置：文案读写、文档读写（无 DELETE，下线用 status='archived'）
+GRANT SELECT, INSERT, UPDATE ON openelf.app_configs TO 'openelf_admin'@'127.0.0.1';
+GRANT SELECT, INSERT, UPDATE ON openelf.app_documents TO 'openelf_admin'@'127.0.0.1';
 -- 开放平台：目录/价格/Key/钱包/账本/请求/开发者（最小权限）
 GRANT SELECT, INSERT, UPDATE ON openelf.platform_model_catalog TO 'openelf_admin'@'127.0.0.1';
 GRANT SELECT, INSERT ON openelf.platform_model_price TO 'openelf_admin'@'127.0.0.1';

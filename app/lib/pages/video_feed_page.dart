@@ -7,7 +7,7 @@ import '../models/elf.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
-import '../widgets/share_card.dart';
+import '../widgets/stage_share_sheet.dart';
 import 'elf_chat_page.dart';
 import 'login_page.dart';
 
@@ -18,17 +18,35 @@ class VideoFeedPage extends StatefulWidget {
   /// 是否处于前台 tab：切走时暂停播放，避免在其它 tab 后台出声。
   final bool active;
 
-  const VideoFeedPage({super.key, this.active = true});
+  /// 从世界流点开某条视频时传入：用当前已缓存的视频帖作为初始列表，
+  /// 从这条开始向上/下滑动，形成刷视频的连续体验。
+  final List<ElfPost>? seedPosts;
+
+  /// 进入时的起始视频 id（配合 seedPosts 使用）。
+  final String? startPostId;
+
+  /// 作为独立页面被 push 时显示返回按钮并自带 Scaffold。
+  final bool showBack;
+
+  const VideoFeedPage({
+    super.key,
+    this.active = true,
+    this.seedPosts,
+    this.startPostId,
+    this.showBack = false,
+  });
 
   @override
   State<VideoFeedPage> createState() => _VideoFeedPageState();
 }
 
 class _VideoFeedPageState extends State<VideoFeedPage> {
-  final PageController _pc = PageController();
+  late final PageController _pc;
 
   List<ElfPost> _posts = [];
   int _index = 0;
+  bool _seeded = false;
+  int _serverCount = 0;
   VideoPlayerController? _vc;
   String? _activeId;
   bool _loading = false;
@@ -40,11 +58,27 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
   @override
   void initState() {
     super.initState();
+    final seed = (widget.seedPosts ?? const <ElfPost>[])
+        .where((p) => p.kind == 'video')
+        .toList();
+    if (seed.isNotEmpty) {
+      _seeded = true;
+      _posts = seed;
+      final at = seed.indexWhere((p) => p.id == widget.startPostId);
+      _index = at < 0 ? 0 : at;
+    }
+    _pc = PageController(initialPage: _index);
     // 互动计数变化时只刷新 UI，不重排当前列表（避免播放中被换走）
     _state.addListener(_onStateChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_state.loadFeed(channel: 'video', sort: 'hot'));
-      _loadFeed();
+      if (_posts.isEmpty) {
+        _loadFeed();
+      } else if (widget.active) {
+        // 自带初始列表时不必等接口：直接播放入口这条。
+        _watchCurrent();
+        _playCurrent();
+      }
     });
   }
 
@@ -79,13 +113,28 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
     if (!mounted) return;
     setState(() {});
     // 服务端追加了新的一页时把列表接上，保持当前这条不变。
+    // 按服务端条数判断，避免「种子列表 + 追加」造成重复刷新。
     final latest = _state.feedVideo();
-    if (latest.length != _posts.length) _loadFeed(keepIndex: true);
+    if (latest.isNotEmpty && latest.length != _serverCount) {
+      _serverCount = latest.length;
+      _loadFeed(keepIndex: true);
+    }
   }
 
   void _loadFeed({bool keepIndex = false}) {
-    final list = _state.feedVideo();
+    final server = _state.feedVideo();
     if (!mounted) return;
+    // 从世界流进来时以种子列表为主，服务端视频流只往后追加去重，
+    // 这样当前播放的这条不会被服务端排序换走。
+    final List<ElfPost> list;
+    if (server.isEmpty) {
+      list = _posts;
+    } else if (_seeded) {
+      final seen = _posts.map((p) => p.id).toSet();
+      list = [..._posts, ...server.where((p) => seen.add(p.id))];
+    } else {
+      list = server;
+    }
     final prevId = (_posts.isEmpty || _index >= _posts.length) ? null : _posts[_index].id;
     setState(() {
       _posts = list;
@@ -128,6 +177,8 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
   }
 
   void _play(ElfPost post) {
+    // 列表刷新但当前这条没变时不要重建播放器，避免播放中被打断。
+    if (_activeId == post.id && _vc != null) return;
     final url = post.videoUrl;
     if (url == null || url.isEmpty) {
       setState(() {
@@ -202,18 +253,22 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_posts.isEmpty) return _empty();
-    // 桌面宽屏：竖屏视频收窄居中，两侧留给黑底，类似抖音网页版。
-    return WideContent(
-      maxWidth: 520,
-      child: PageView.builder(
-        controller: _pc,
-        scrollDirection: Axis.vertical,
-        itemCount: _posts.length,
-        onPageChanged: _onPageChanged,
-        itemBuilder: (context, i) => _item(_posts[i], i),
-      ),
-    );
+    final body = _posts.isEmpty
+        ? _empty()
+        // 桌面宽屏：竖屏视频收窄居中，两侧留给黑底，类似抖音网页版。
+        : WideContent(
+            maxWidth: 520,
+            child: PageView.builder(
+              controller: _pc,
+              scrollDirection: Axis.vertical,
+              itemCount: _posts.length,
+              onPageChanged: _onPageChanged,
+              itemBuilder: (context, i) => _item(_posts[i], i),
+            ),
+          );
+    // 从世界流点开时作为独立页面出现，自带背景与返回入口。
+    if (!widget.showBack) return body;
+    return Scaffold(backgroundColor: Colors.black, body: body);
   }
 
   // —— 单条视频 ——
@@ -226,6 +281,13 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
         fit: StackFit.expand,
         children: [
           Container(color: Colors.black),
+          // 封面垫底：起播前先看到画面，滑动时也不会出现纯黑块。
+          if (p.coverUrl != null && p.coverUrl!.isNotEmpty)
+            Image.network(
+              p.coverUrl!,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+            ),
           // 画面
           GestureDetector(
             behavior: HitTestBehavior.opaque,
@@ -255,6 +317,22 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                 padding: const EdgeInsets.fromLTRB(16, 10, 12, 0),
                 child: Row(
                   children: [
+                    if (widget.showBack) ...[
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => Navigator.of(context).pop(),
+                        child: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.35),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.arrow_back_ios_new,
+                              size: 15, color: Colors.white, semanticLabel: '返回'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
                       decoration: BoxDecoration(
@@ -363,9 +441,9 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                     icon: Icons.ios_share,
                     label: '分享',
                     semantic: '分享',
-                    onTap: () => ShareHelper.shareElf(
+                    onTap: () => showStageShare(
                       context,
-                      elf,
+                      elf: elf,
                       excerpt: p.body.length > 40 ? '${p.body.substring(0, 40)}…' : p.body,
                     ),
                   ),

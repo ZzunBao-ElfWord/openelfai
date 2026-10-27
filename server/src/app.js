@@ -12,6 +12,7 @@ const { createPool } = require('./db');
 const { createAppleIapService, createAppleVerifier } = require('./apple_iap');
 const { createPaymentStore } = require('./payment_store');
 const { createCommerceService } = require('./commerce');
+const { createComplianceService, moderateText } = require('./compliance');
 const { createRealnameVerifier } = require('./realname');
 const { createAlipayGateway } = require('./alipay_gateway');
 const { createAlipayService } = require('./alipay');
@@ -37,6 +38,8 @@ const { createConsoleHandlers } = require('./platform/console');
 const { createTopupService } = require('./platform/topup');
 const { createUpstream } = require('./platform/upstream');
 const { ensureVendorAgents, createWorldAgentService } = require('./world_agents');
+const { createArkVideoClient, createWorldVideoService } = require('./world_videos');
+const { createWorldUploadService } = require('./world_uploads');
 const { createKnowledgeService, buildContextBlock } = require('./knowledge');
 
 const PHONE_RE = /^1[3-9]\d{9}$/;
@@ -182,6 +185,8 @@ async function buildApp(options = {}) {
   const appleVerifier = options.appleVerifier || (config.appleIap.enabled
     ? await createAppleVerifier(config.appleIap) : null);
   const paymentStore = options.paymentStore || createPaymentStore(db);
+  // 举报、拉黑与账号注销：独立于交易环境，跨 iOS / 安卓共享。
+  const compliance = options.compliance || createComplianceService({ db, store: paymentStore });
   // 实名核验：服务端对接阿里云实人认证，客户端只上传原始要素与证件照。
   const realname = options.realname || createRealnameVerifier(config.realname);
   const identityPolicy = {
@@ -195,7 +200,7 @@ async function buildApp(options = {}) {
     remark: `OpenElf 创作者收益 ${row.id}`,
   }) : null;
   const commerce = createCommerceService({ store: paymentStore, settings: config.appleIap, payout,
-    realname, identityPolicy });
+    realname, identityPolicy, compliance });
   const appleIap = createAppleIapService({
     db,
     settings: config.appleIap,
@@ -204,7 +209,7 @@ async function buildApp(options = {}) {
     verifyNotification: options.appleNotificationVerifier,
   });
   const androidCommerce = createCommerceService({ store: paymentStore, settings: config.androidCommerce, payout,
-    realname, identityPolicy });
+    realname, identityPolicy, compliance });
   const alipay = createAlipayService({ store: paymentStore, settings: config.alipay,
     commerceSettings: config.androidCommerce,
     gateway: alipayGateway });
@@ -231,13 +236,14 @@ async function buildApp(options = {}) {
 
   app.decorate('db', db);
 
+  const worldUpstream = options.worldUpstream || createUpstream({
+    baseUrl: platformConfig.litellm.baseUrl,
+    masterKey: platformConfig.litellm.masterKey,
+    timeoutMs: platformConfig.litellm.timeoutMs,
+  });
   const worldAgents = createWorldAgentService({
     store: paymentStore,
-    upstream: options.worldUpstream || createUpstream({
-      baseUrl: platformConfig.litellm.baseUrl,
-      masterKey: platformConfig.litellm.masterKey,
-      timeoutMs: platformConfig.litellm.timeoutMs,
-    }),
+    upstream: worldUpstream,
     settings: config.worldAgents,
     logger: app.log,
     // 后台配置过密钥（platform_vendor_credentials 有 active 记录）或环境变量已登记的厂商
@@ -250,6 +256,33 @@ async function buildApp(options = {}) {
       for (const vendor of config.worldAgents.vendors) vendors.add(vendor);
       return vendors;
     },
+  });
+
+  // 官方账号头像与短视频的静态目录，路由与视频引擎共用同一份路径。
+  const worldAssetDir = path.join(__dirname, '..', 'assets', 'world');
+  const worldVideoDir = options.worldVideoDir || path.join(worldAssetDir, 'videos');
+
+  const worldVideos = createWorldVideoService({
+    store: paymentStore,
+    // 视频生成走火山方舟原生异步接口，不经 LiteLLM，因此直接用厂商 Key。
+    ark: options.worldVideoClient || createArkVideoClient({
+      apiKey: config.worldVideos.apiKey,
+      baseUrl: config.worldVideos.arkBaseUrl,
+      timeoutMs: 60000,
+    }),
+    upstream: worldUpstream,
+    mediaDir: worldVideoDir,
+    settings: config.worldVideos,
+    logger: app.log,
+    assetBaseUrl: config.worldVideos.assetBaseUrl,
+  });
+
+  // 人类上传的 AI 生成视频：与官方短视频共用同一媒体目录与播放路由。
+  const worldUploads = createWorldUploadService({
+    store: paymentStore,
+    mediaDir: worldVideoDir,
+    assetBaseUrl: config.worldVideos.assetBaseUrl,
+    logger: app.log,
   });
 
   const consoleHandlers = createConsoleHandlers({ db });
@@ -281,6 +314,15 @@ async function buildApp(options = {}) {
       error: { code: 'RATE_LIMITED', message: '操作过于频繁，请稍后再试' },
     }),
   });
+
+  // 视频上传走原始字节流，避免把大文件包成 JSON/Base64。
+  for (const type of ['video/mp4', 'application/octet-stream']) {
+    app.addContentTypeParser(
+      type,
+      { parseAs: 'buffer', bodyLimit: 20 * 1024 * 1024 },
+      (request, body, done) => done(null, body),
+    );
+  }
 
   app.setErrorHandler((error, request, reply) => {
     const status = Number(error.statusCode);
@@ -316,6 +358,7 @@ async function buildApp(options = {}) {
   // unref 让进程在测试或短生命周期场景下不被定时器挂住。
   let autoTimer = null;
   let worldTimer = null;
+  let videoTimer = null;
   if (options.autoRunner !== false) {
     const interval = Math.max(Number(options.autoIntervalMs) || 60000, 5000);
     autoTimer = setInterval(() => {
@@ -341,9 +384,24 @@ async function buildApp(options = {}) {
         .catch((error) => app.log.error({ err: error }, 'world agent seed failed'));
     }
 
+    // 豆包官方账号：每天 3 条 12 秒短视频，按北京时间档位放开。
+    // 生成是异步任务，轮询间隔取 60 秒，未到档位时 cycle 自身是空操作。
+    if (config.worldVideos.enabled && config.nodeEnv !== 'test') {
+      const videoInterval = Math.max(Number(options.worldVideoIntervalMs) || 60000, 15000);
+      const runVideo = () => worldVideos.cycle()
+        .then((result) => {
+          if (result?.published) app.log.info({ result }, 'world video published');
+        })
+        .catch((error) => app.log.error({ err: error }, 'world video cycle failed'));
+      runVideo();
+      videoTimer = setInterval(runVideo, videoInterval);
+      videoTimer.unref?.();
+    }
+
     app.addHook('onClose', async () => {
       if (autoTimer) clearInterval(autoTimer);
       if (worldTimer) clearInterval(worldTimer);
+      if (videoTimer) clearInterval(videoTimer);
     });
   }
 
@@ -470,8 +528,136 @@ async function buildApp(options = {}) {
     time: new Date().toISOString(),
   }));
 
+  // —— 合规：举报、拉黑、账号注销 ——
+
+  app.post('/api/v1/reports', {
+    bodyLimit: 8 * 1024,
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+  }, async (request) => {
+    const { user } = await authenticate(request);
+    return compliance.submitReport(user, request.body);
+  });
+
+  app.get('/api/v1/reports/mine', async (request) => {
+    const { user } = await authenticate(request);
+    return compliance.listMine(user);
+  });
+
+  app.get('/api/v1/blocks', async (request) => {
+    const { user } = await authenticate(request);
+    return compliance.listBlocks(user);
+  });
+
+  app.post('/api/v1/blocks', { bodyLimit: 8 * 1024 }, async (request) => {
+    const { user } = await authenticate(request);
+    return compliance.block(user, request.body);
+  });
+
+  app.post('/api/v1/blocks/unblock', { bodyLimit: 8 * 1024 }, async (request) => {
+    const { user } = await authenticate(request);
+    return compliance.unblock(user, request.body);
+  });
+
+  // 注销账号：二次确认后才执行，注销后所有会话立即失效。
+  app.delete('/api/v1/account', { bodyLimit: 8 * 1024 }, async (request) => {
+    const { user } = await authenticate(request);
+    if (request.body?.confirm !== true && request.body?.confirm !== 'DELETE') {
+      throw fail(400, 'CONFIRM_REQUIRED', '请确认注销账号');
+    }
+    return compliance.deleteAccount(user);
+  });
+
+  // 内部审核队列：仅允许带运维令牌访问，nginx 已对 /internal/ 直接返回 404。
+  const reviewToken = process.env.COMPLIANCE_REVIEW_TOKEN || '';
+  function requireReviewToken(request) {
+    if (!reviewToken) throw fail(404, 'NOT_FOUND', '接口不存在');
+    const given = String(request.headers['x-review-token'] || '');
+    const expected = Buffer.from(reviewToken);
+    const actual = Buffer.from(given);
+    if (expected.length !== actual.length || !crypto.timingSafeEqual(expected, actual)) {
+      throw fail(401, 'UNAUTHORIZED', '无权访问');
+    }
+  }
+
+  app.get('/internal/reports', async (request) => {
+    requireReviewToken(request);
+    return compliance.listReports({
+      state: request.query?.state,
+      targetType: request.query?.targetType || request.query?.target_type,
+      environment: request.query?.environment,
+      page: request.query?.page,
+      size: request.query?.size,
+    });
+  });
+
+  app.post('/internal/reports/:id/resolve', { bodyLimit: 8 * 1024 }, async (request) => {
+    requireReviewToken(request);
+    return compliance.resolveReport(request.params.id, {
+      action: request.body?.action,
+      note: request.body?.note,
+      reviewer: String(request.headers['x-reviewer'] || 'ops').slice(0, 64),
+    });
+  });
+
   // 官方账号头像：静态资源体积小，直接按文件名白名单读取，避免额外挂静态目录。
-  const worldAssetDir = path.join(__dirname, '..', 'assets', 'world');
+  // 官方账号生成的短视频与封面：文件名由服务端生成，只允许访问这一层目录。
+  app.get('/api/v1/world-assets/videos/:file', async (request, reply) => {
+    const file = String(request.params?.file || '');
+    if (!/^[a-z0-9_-]+\.(mp4|jpg|jpeg|webp)$/i.test(file)) {
+      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: '资源不存在' } });
+    }
+    const isVideo = file.toLowerCase().endsWith('.mp4');
+    try {
+      const target = path.join(worldVideoDir, file);
+      const stat = await fs.stat(target);
+      const buf = await fs.readFile(target);
+      reply.header('cache-control', 'public, max-age=86400');
+      if (!isVideo) {
+        reply.type('image/jpeg');
+        reply.header('content-length', String(stat.size));
+        return reply.send(buf);
+      }
+      reply.header('accept-ranges', 'bytes');
+      reply.type('video/mp4');
+      // 播放器（ExoPlayer / AVPlayer）会用 Range 请求做拖动与首帧加载，必须支持 206。
+      const range = String(request.headers.range || '');
+      const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+      if (match && (match[1] || match[2])) {
+        const size = buf.length;
+        let start = match[1] ? Number(match[1]) : size - Number(match[2]);
+        let end = match[1] && match[2] ? Number(match[2]) : size - 1;
+        start = Math.max(0, Math.min(start, size - 1));
+        end = Math.max(start, Math.min(end, size - 1));
+        const slice = buf.subarray(start, end + 1);
+        reply.code(206);
+        reply.header('content-range', `bytes ${start}-${end}/${size}`);
+        reply.header('content-length', String(slice.length));
+        return reply.send(slice);
+      }
+      reply.header('content-length', String(stat.size));
+      return reply.send(buf);
+    } catch {
+      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: '资源不存在' } });
+    }
+  });
+
+  // 人类上传 AI 生成视频：body 为 MP4 原始字节，元信息走 query。
+  // 只接收视频且必须显式声明由 AI 生成，落地后直接进入世界/视频信息流。
+  app.post('/api/v1/world/video-uploads', {
+    bodyLimit: 20 * 1024 * 1024,
+    config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
+  }, async (request) => {
+    const { user } = await authenticate(request);
+    return worldUploads.publishUserVideo({
+      user,
+      environment: request.query?.environment,
+      elfId: request.query?.elfId,
+      caption: request.query?.caption,
+      aiGenerated: request.query?.aiGenerated,
+      buffer: request.body,
+    });
+  });
+
   app.get('/api/v1/world-assets/:file', async (request, reply) => {
     const file = String(request.params?.file || '');
     if (!/^[a-z0-9_-]+\.(png|jpg|jpeg|webp)$/i.test(file)) {
@@ -1092,7 +1278,13 @@ async function buildApp(options = {}) {
     };
   });
 
+  // 运营配置：App 文案 / 开关 / 法律政策文档公开快照（无鉴权，只读）
+  require('./app_content').registerAppContentRoutes(app, { db });
+
   // —— 开发者控制台 ——
+
+  // 开发者生态：入驻、技能草稿、沙箱调试（/api/v1/developer/*）。
+  require('./developer/routes').registerDeveloperRoutes(app, { db, authenticate });
 
   app.get('/api/v1/platform/console/overview', async (request) => {
     const { user } = await authenticate(request);

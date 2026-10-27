@@ -1,0 +1,11 @@
+[Unit]
+Description=Poll OpenElf LiteLLM key sync requests
+
+[Timer]
+OnBootSec=15s
+OnUnitActiveSec=3s
+AccuracySec=1s
+Unit=openelf-litellm-sync.service
+
+[Install]
+WantedBy=timers.target

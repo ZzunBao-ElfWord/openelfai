@@ -2,6 +2,7 @@
 
 const crypto = require('node:crypto');
 const { changeBalance, fingerprint, fail } = require('./payment_store');
+const { moderateText } = require('./compliance');
 
 const CATALOG = [
   { id: 'pm_001', name: '尘', elfId: 'pm_dust', title: '尘 · 第 1 代', price: 1280, capacity: 2, generation: 1, edition: '初版', learned: [] },
@@ -77,7 +78,6 @@ const AUTO_TEMPLATES = {
   mingle: ['接了一句别人的话题。', '今天的社交额度用完了。'],
   think: ['推演了一遍，结论还没定。', '换个角度想，事情没那么复杂。'],
 };
-const BLOCKED_TERMS = ['色情', '裸体', '走光', '淫秽', '换脸', '血腥', '肢解', '恐怖袭击', '自制炸弹', '毒品', '制枪'];
 /// 人格关键词 → 能力亲和（与客户端口径一致，只影响自动运营的选题偏好）。
 const PERSONA_AFFINITY = [
   ['锐', ['sharp']], ['观点', ['sharp']], ['长文', ['writing', 'deep']], ['文字', ['writing']],
@@ -288,7 +288,7 @@ function newElf(user, template, id) {
 }
 
 function createCommerceService({ store, settings, payout = null, realname = null,
-  identityPolicy = {} }) {
+  identityPolicy = {}, compliance = null }) {
   // 同一用户同一证件连续失败达到上限后锁定一段时间，避免拿证件号反复试探。
   const identityMaxFailures = Math.max(1, Number(identityPolicy.maxFailures) || 5);
   const identityLockMs = Math.max(1, Number(identityPolicy.lockHours) || 24) * 3600000;
@@ -469,13 +469,16 @@ function createCommerceService({ store, settings, payout = null, realname = null
 
   async function snapshot(user, hint) {
     const env = environment(hint);
+    // 被拉黑的 AI 与用户不出现在信息流和相关评论里。
+    const blocked = compliance ? await compliance.blockedSets(user) : null;
     return store.transaction(env, async (tx) => {
       const wallet = await tx.lockWallet(user.id);
       await settleEarnings(tx, user.id, wallet, Date.now());
       const profile = await ensureProfile(tx, user, wallet);
       const assets = new Map((await tx.list('elf')).map((elf) => [elf.id, normalizeElf(elf)]));
       for (const elf of await tx.list('elf', { owner: user.id })) assets.set(elf.id, normalizeElf(elf));
-      const posts = (await tx.list('post', { limit: 100 })).map(normalizePost);
+      const posts = (await tx.list('post', { limit: 100, state: '' })).map(normalizePost)
+        .filter((post) => !blocked?.elves.has(post.elfId));
       for (const id of new Set([...posts.map((p) => p.elfId), profile.activeElfId].filter(Boolean))) {
         if (!assets.has(id)) { const elf = await tx.get('elf', id); if (elf) assets.set(id, normalizeElf(elf)); }
       }
@@ -487,7 +490,8 @@ function createCommerceService({ store, settings, payout = null, realname = null
       const likes = await tx.list('like', { owner: user.id, state: 'active' });
       const collects = await tx.list('collect', { owner: user.id, state: 'active' });
       const watches = await tx.list('watch', { owner: user.id, state: 'active' });
-      const comments = await tx.list('comment', { limit: 500 });
+      const comments = (await tx.list('comment', { limit: 500, state: 'active' }))
+        .filter((row) => !blocked?.users.has(row.userId));
       const notices = await tx.list('notice', { owner: user.id, state: 'unread', limit: 20 });
       return { mode: env.toLowerCase(), wallet, commerce: {
         activeElfId: profile.activeElfId, revision: profile.revision || 0, earningsFen: wallet.earningsFen,
@@ -653,12 +657,16 @@ function createCommerceService({ store, settings, payout = null, realname = null
       : (body?.sort === 'hot' || body?.sort === 'mine' ? body.sort : 'recommend');
     const size = Math.min(Math.max(Number(body?.size) || 20, 1), FEED_MAX_SIZE);
     const page = Math.min(Math.max(Number(body?.page) || 0, 0), 200);
+    const blocked = compliance ? await compliance.blockedSets(user) : null;
     return store.transaction(env, async (tx) => {
       const mine = sort === 'mine'
         ? new Set((await tx.list('elf', { owner: user.id })).map((elf) => elf.id)) : null;
-      const pool = (await tx.list('post', { limit: FEED_SCAN })).map(normalizePost)
+      const owners = blocked?.users.size ? await tx.owners('elf') : null;
+      const pool = (await tx.list('post', { limit: FEED_SCAN, state: '' })).map(normalizePost)
         .filter((post) => (channel === 'video' ? post.kind === 'video' : true))
-        .filter((post) => (mine ? mine.has(post.elfId) : true));
+        .filter((post) => (mine ? mine.has(post.elfId) : true))
+        .filter((post) => !blocked?.elves.has(post.elfId))
+        .filter((post) => !(owners && blocked?.users.has(owners.get(post.elfId))));
       const ranked = pool.map((post) => ({ post, score: scoreOf(post, sort) }));
       ranked.sort((a, b) => b.score - a.score
         || String(b.post.id).localeCompare(String(a.post.id)));
@@ -844,7 +852,7 @@ function createCommerceService({ store, settings, payout = null, realname = null
         } else {
           const text = typeof body.text === 'string' ? body.text.trim() : '';
           if (!text || [...text].length > 200) throw fail(400, 'INVALID_COMMENT', '评论需为 1–200 字');
-          const hit = BLOCKED_TERMS.find((term) => text.toLowerCase().includes(term));
+          const hit = moderateText(text);
           if (hit) throw fail(400, 'CONTENT_BLOCKED', '包含违规词「' + hit + '」');
           const id = 'cm_' + crypto.randomUUID().replaceAll('-', '');
           await tx.put('comment', id, { id, postId: post.id, userId: user.id, authorLabel: user.nickname,
@@ -872,7 +880,7 @@ function createCommerceService({ store, settings, payout = null, realname = null
         } else if (!prompt) throw fail(400, 'INVALID_PROMPT', '先描述你想要的形象');
         for (const text of [name, prompt, body.persona, body.fear, body.habit]) {
           if (typeof text !== 'string') continue;
-          const hit = BLOCKED_TERMS.find((term) => text.toLowerCase().includes(term));
+          const hit = moderateText(text);
           if (hit) throw fail(400, 'CONTENT_BLOCKED', '包含违规词「' + hit + '」');
         }
         const id = 'ugc_' + crypto.randomUUID().replaceAll('-', '');
@@ -932,6 +940,8 @@ function createCommerceService({ store, settings, payout = null, realname = null
             elf.energy += body.amount;
           } else if (body.operation === 'publish' || body.operation === 'auto_publish') {
             if (typeof body.body !== 'string' || !body.body.trim() || body.body.length > 4000) throw fail(400, 'INVALID_POST', '内容无效');
+            const postHit = moderateText(body.body);
+            if (postHit) throw fail(400, 'CONTENT_BLOCKED', '包含违规词「' + postHit + '」');
             const module = body.moduleId && Object.hasOwn(MODULES, body.moduleId) ? MODULES[body.moduleId] : null;
             if (body.moduleId === 'auto') throw fail(400, 'INVALID_MODULE', '自动中枢不能直接创作');
             if (body.moduleId && (!module || !elf.learnedSkills.includes(body.moduleId))) throw fail(409, 'MODULE_NOT_LEARNED', '技能尚未学会');

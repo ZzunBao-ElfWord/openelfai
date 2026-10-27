@@ -61,4 +61,10 @@ class ApiConfig {
 
   /// AI 真实对话（POST）。
   static const String elfChatPath = '/api/v1/elf-chat';
+
+  /// 上传 AI 生成视频（POST，body 为 MP4 原始字节，元信息走 query）。
+  static const String videoUploadPath = '/api/v1/world/video-uploads';
+
+  /// 运营配置公开快照（GET）：法律政策文档 + 应用文案/开关。
+  static const String appContentPath = '/api/v1/app-content';
 }

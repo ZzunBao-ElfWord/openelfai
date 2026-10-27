@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../compliance/ai_creation_policy.dart';
+import '../services/app_content_service.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -42,7 +43,7 @@ class _CreateElfPageState extends State<CreateElfPage> {
   bool _generated = false;
   bool _generating = false;
   bool _submitting = false;
-  final List<bool> _accepted = [false, false, false];
+  final List<bool> _accepted = <bool>[];
   int _sampleIndex = 0;
 
   @override
@@ -133,7 +134,7 @@ class _CreateElfPageState extends State<CreateElfPage> {
       barrierDismissible: false,
       builder: (dctx) => AlertDialog(
         backgroundColor: AppColors.surface,
-        title: Text('AI 已铸造为 NFT', style: TextStyle(color: AppColors.text)),
+        title: Text('AI 智能体已创建', style: TextStyle(color: AppColors.text)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -184,7 +185,25 @@ class _CreateElfPageState extends State<CreateElfPage> {
     );
   }
 
-  bool get _canSubmit => _accepted.every((v) => v) && !_submitting;
+  bool get _canSubmit {
+    final declarations = _declarations;
+    return declarations.isNotEmpty &&
+        List.generate(declarations.length, _acceptedAt).every((v) => v) &&
+        !_submitting;
+  }
+
+  /// 合规声明由运营配置下发，条数可变，勾选状态按序号保存。
+  List<String> get _declarations =>
+      AppContentService.instance.content.value.list('app.create.declarations');
+
+  bool _acceptedAt(int i) => i < _accepted.length && _accepted[i];
+
+  void _accept(int i, bool value) {
+    while (_accepted.length <= i) {
+      _accepted.add(false);
+    }
+    setState(() => _accepted[i] = value);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -937,15 +956,15 @@ class _CreateElfPageState extends State<CreateElfPage> {
         ),
         _checkRow('生成内容标识', '创建后自动加注「AI 生成」'),
         const SizedBox(height: 14),
-        for (var i = 0; i < AiCreationPolicy.declarations.length; i++)
+        for (var i = 0; i < _declarations.length; i++)
           Padding(
             padding: const EdgeInsets.only(bottom: 4),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Checkbox(
-                  value: _accepted[i],
-                  onChanged: (v) => setState(() => _accepted[i] = v ?? false),
+                  value: _acceptedAt(i),
+                  onChanged: (v) => _accept(i, v ?? false),
                   activeColor: AppColors.cyan,
                   checkColor: AppColors.onBrand,
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -954,7 +973,7 @@ class _CreateElfPageState extends State<CreateElfPage> {
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.only(top: 8, right: 4),
-                    child: Text(AiCreationPolicy.declarations[i],
+                    child: Text(_declarations[i],
                         style: TextStyle(
                             fontSize: 10.5,
                             height: 1.5,

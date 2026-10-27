@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
+import '../services/app_content_service.dart';
 import '../state/app_state.dart';
 import '../payments/ios_iap_service.dart';
 import '../payments/alipay_service.dart';
@@ -237,7 +238,7 @@ class _SideRail extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(10, 0, 0, 0),
             child: Text(
-              '我的 AI，我做主',
+              AppContentService.instance.content.value.text('app.brand.slogan'),
               style: TextStyle(fontSize: 11, color: AppColors.textMuted),
             ),
           ),
@@ -299,8 +300,17 @@ class _BottomBar extends StatelessWidget {
                               ),
                             ],
                           ),
-                          child: const Icon(Icons.add,
-                              size: 22, color: Colors.white),
+                          child: const Center(
+                            child: Text(
+                              'AI',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.5,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                       Transform.translate(

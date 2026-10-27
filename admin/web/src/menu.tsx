@@ -9,10 +9,13 @@ import OfficialElf from './pages/OfficialElf';
 import Orders from './pages/Orders';
 import Ledger from './pages/Ledger';
 import Catalog from './pages/Catalog';
+import AppLegalDocs from './pages/AppLegalDocs';
+import AppCopyConfig from './pages/AppCopyConfig';
 import PlatformModels from './pages/PlatformModels';
 import PlatformVendors from './pages/PlatformVendors';
 import PlatformDevelopers from './pages/PlatformDevelopers';
 import PlatformRequests from './pages/PlatformRequests';
+import ModerationReports from './pages/ModerationReports';
 import WalletAdjust from './pages/WalletAdjust';
 import Audit from './pages/Audit';
 import System from './pages/System';
@@ -111,6 +114,30 @@ export const menuItems: MenuItem[] = [
     glyph: '📦',
     roles: mods,
     element: <Catalog />,
+  },
+  {
+    path: '/moderation/reports',
+    group: '内容审核',
+    label: '举报审核',
+    glyph: '🚨',
+    roles: ['super_admin', 'moderator'],
+    element: <ModerationReports />,
+  },
+  {
+    path: '/content/legal',
+    group: '运营配置',
+    label: '法律与政策',
+    glyph: '📜',
+    roles: mods,
+    element: <AppLegalDocs />,
+  },
+  {
+    path: '/content/app',
+    group: '运营配置',
+    label: '应用文案与开关',
+    glyph: '✍️',
+    roles: mods,
+    element: <AppCopyConfig />,
   },
   {
     path: '/platform/vendors',
