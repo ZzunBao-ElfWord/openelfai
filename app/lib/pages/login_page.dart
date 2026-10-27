@@ -8,6 +8,8 @@ import 'package:openelf_ali_captcha/openelf_ali_captcha.dart';
 
 import '../auth/auth_factory.dart';
 import '../auth/auth_repository.dart';
+import '../auth/web_captcha_stub.dart'
+    if (dart.library.js_interop) '../auth/web_captcha_web.dart';
 import '../config/captcha_config.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
@@ -84,7 +86,7 @@ class _LoginPageState extends State<LoginPage> {
     return p.length == 11 && RegExp(r'^1\d{10}$').hasMatch(p);
   }
 
-  bool get _codeOk => _codeCtrl.text.trim().length == 6;
+  bool get _codeOk => RegExp(r'^\d{6}$').hasMatch(_codeCtrl.text.trim());
 
   Future<void> _sendCode() async {
     if (!_phoneOk) {
@@ -123,15 +125,8 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<CaptchaProof?> _verifyCaptcha() async {
-    // Web 端没有阿里云原生图形验证 SDK，发送依赖服务端 IP/手机号频率限制兜底。
     if (kIsWeb) {
-      return const CaptchaProof(
-        platform: 'web',
-        lotNumber: 'web',
-        passToken: 'web',
-        genTime: 'web',
-        captchaOutput: 'web',
-      );
+      return verifyWebCaptcha();
     }
     final String platform;
     final String captchaId;

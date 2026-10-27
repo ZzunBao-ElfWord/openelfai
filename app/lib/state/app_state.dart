@@ -259,7 +259,7 @@ class AppState extends ChangeNotifier {
     // 登录后异步刷新真实钱包余额，不阻塞登录流程。
     unawaited(refreshPlatformBalance());
     // 单一真源：登录后即拉取服务端权益快照（AI/技能书/挂单/钱包）。
-    if (CommerceConfig.android) unawaited(_ensureCommerceReady());
+    if (CommerceConfig.android || CommerceConfig.initialMode == 'production') unawaited(_ensureCommerceReady());
   }
 
   /// 从服务端刷新真实钱包余额。失败静默，保留已有值。
@@ -281,7 +281,7 @@ class AppState extends ChangeNotifier {
     final user = currentUser;
     if (user == null) return '请先登录';
     final mode =
-        _paymentMode ?? (CommerceConfig.android ? CommerceConfig.androidMode : null);
+        _paymentMode ?? (CommerceConfig.initialMode);
     if (mode == null) return '请先打开钱包，刷新服务端权益';
     try {
       final response =
@@ -626,7 +626,7 @@ class AppState extends ChangeNotifier {
     if (_feedLoading.contains(key)) return null;
     if (!reset && !(_feedHasMore[key] ?? true)) return null;
     final mode =
-        _paymentMode ?? (CommerceConfig.android ? CommerceConfig.androidMode : null);
+        _paymentMode ?? (CommerceConfig.initialMode);
     if (mode == null) return '请先打开钱包，刷新服务端权益';
     _feedLoading.add(key);
     notifyListeners();
@@ -1235,7 +1235,7 @@ class AppState extends ChangeNotifier {
     if (CommerceConfig.enabled) {
       final user = currentUser;
       final mode = _paymentMode ??
-          (CommerceConfig.android ? CommerceConfig.androidMode : null);
+          (CommerceConfig.initialMode);
       if (user == null || mode == null) return null;
       try {
         final response = await CommerceRepository.instance.action(
@@ -1365,7 +1365,7 @@ class AppState extends ChangeNotifier {
     if (!CommerceConfig.enabled) return;
     final user = currentUser;
     final mode =
-        _paymentMode ?? (CommerceConfig.android ? CommerceConfig.androidMode : null);
+        _paymentMode ?? (CommerceConfig.initialMode);
     if (user == null || mode == null) return;
     try {
       final response =
@@ -1785,7 +1785,7 @@ class AppState extends ChangeNotifier {
     final user = currentUser;
     if (user == null) return '请先登录';
     final mode = _paymentMode ??
-        (CommerceConfig.android ? CommerceConfig.androidMode : null);
+        (CommerceConfig.initialMode);
     if (mode == null) return '请先打开钱包，刷新服务端权益';
     try {
       final response =
@@ -1834,7 +1834,7 @@ class AppState extends ChangeNotifier {
     final user = currentUser;
     if (user == null) return null;
     final mode =
-        _paymentMode ?? (CommerceConfig.android ? CommerceConfig.androidMode : null);
+        _paymentMode ?? (CommerceConfig.initialMode);
     if (mode == null) {
       rollback?.call();
       notifyListeners();

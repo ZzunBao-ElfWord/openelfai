@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 /// API 配置。
 ///
 /// 服务端：https://openelfai.com（Nginx 反向代理到鉴权服务）
@@ -5,7 +7,7 @@
 class ApiConfig {
   static const String baseUrl = String.fromEnvironment(
     'OPENELF_API_BASE',
-    defaultValue: 'https://openelfai.com',
+    defaultValue: kIsWeb ? '' : 'https://openelfai.com',
   );
 
   /// 全局请求超时（秒）。
@@ -41,17 +43,21 @@ class ApiConfig {
   /// 显示完整 API Key（POST）。
   static const String revealKeyPath = '/api/v1/platform/my-key/reveal';
 
-  /// 重置 API Key（POST）。
+  /// 重置个人平台 API Key（不是支付宝密钥）。
   static const String resetKeyPath = '/api/v1/platform/my-key/reset';
 
   /// 平台真实钱包余额（GET）header: Authorization: Bearer xxx
   static const String walletPath = '/api/v1/platform/wallet';
 
   /// 余额充值档位（GET）header: Authorization: Bearer xxx
-  static const String topupProductsPath = '/api/v1/platform/topup/products';
+  static const String topupProductsPath = kIsWeb
+      ? '/api/v1/platform/web-topup/products'
+      : '/api/v1/platform/topup/products';
 
   /// 余额充值下单（POST）header: Authorization: Bearer xxx
-  static const String topupOrdersPath = '/api/v1/platform/topup/orders';
+  static const String topupOrdersPath = kIsWeb
+      ? '/api/v1/platform/web-topup/orders'
+      : '/api/v1/platform/topup/orders';
 
   /// 余额充值订单详情（GET）。
   static String topupOrderPath(String id) => '$topupOrdersPath/$id';

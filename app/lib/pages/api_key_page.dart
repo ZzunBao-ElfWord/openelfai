@@ -2,13 +2,18 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../payments/alipay_service.dart';
+import '../payments/web_checkout.dart';
+import '../payments/web_qr_dialog.dart';
+import 'home_shell.dart';
 import '../services/platform_api.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/legacy_web_orders.dart';
 
 /// 「我的 API Key」：当前账号唯一的平台凭据 + AI 对话余额。
 class ApiKeyPage extends StatefulWidget {
@@ -32,6 +37,23 @@ class _ApiKeyPageState extends State<ApiKeyPage> {
   void initState() {
     super.initState();
     _load(showLoading: false);
+    if (kIsWeb) {
+      _recoverWebTopup();
+    }
+  }
+
+  Future<void> _recoverWebTopup() async {
+    final owner = AppState.instance.currentUser?.id;
+    if (owner == null) return;
+    final pending = await WebTopupStore.read(owner);
+    final id = pending?['orderId'];
+    if (!mounted ||
+        AppState.instance.currentUser?.id != owner ||
+        id is! String ||
+        !WebCheckout.validOrderId(id)) {
+      return;
+    }
+    await _openTopup(initialOrderId: id);
   }
 
   Future<void> _load({bool showLoading = true}) async {
@@ -124,12 +146,18 @@ class _ApiKeyPageState extends State<ApiKeyPage> {
         title: Text(
           '重置密钥',
           style: TextStyle(
-              fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.danger),
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: AppColors.danger,
+          ),
         ),
         content: Text(
           '重置后旧 Key 会立即失效，已经配置到外部工具里的 Key 也需要更换。\n\n确认继续？',
           style: TextStyle(
-              fontSize: 12.5, color: AppColors.textMuted, height: 1.6),
+            fontSize: 12.5,
+            color: AppColors.textMuted,
+            height: 1.6,
+          ),
         ),
         actions: [
           TextButton(
@@ -138,14 +166,12 @@ class _ApiKeyPageState extends State<ApiKeyPage> {
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child:
-                Text('确认重置', style: TextStyle(color: AppColors.danger)),
+            child: Text('确认重置', style: TextStyle(color: AppColors.danger)),
           ),
         ],
       ),
     );
     if (confirmed != true || !mounted) return;
-
     setState(() => _resetting = true);
     try {
       final key = await PlatformApi.instance.resetKey();
@@ -207,6 +233,7 @@ class _ApiKeyPageState extends State<ApiKeyPage> {
                   _keyCard(info),
                   const SizedBox(height: 12),
                   _balanceCard(info),
+                  if (kIsWeb) const LegacyWebOrders(diamonds: false),
                   const SizedBox(height: 16),
                   _resetButton(),
                 ],
@@ -222,7 +249,15 @@ class _ApiKeyPageState extends State<ApiKeyPage> {
     return Row(
       children: [
         InkWell(
-          onTap: () => Navigator.of(context).maybePop(),
+          onTap: () {
+            if (Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            } else {
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (_) => const HomeShell()),
+              );
+            }
+          },
           borderRadius: BorderRadius.circular(8),
           child: Padding(
             padding: const EdgeInsets.only(right: 8, top: 6, bottom: 6),
@@ -237,9 +272,10 @@ class _ApiKeyPageState extends State<ApiKeyPage> {
         Text(
           '我的 API Key',
           style: TextStyle(
-              fontSize: 21,
-              fontWeight: FontWeight.w700,
-              color: AppColors.text),
+            fontSize: 21,
+            fontWeight: FontWeight.w700,
+            color: AppColors.text,
+          ),
         ),
       ],
     );
@@ -262,7 +298,10 @@ class _ApiKeyPageState extends State<ApiKeyPage> {
             child: Text(
               '这把 Key 已自动分配给当前账号，App 内 AI 对话使用它；也可以复制到自己的工具里调用 openelf 的 API。\n\n该余额同时用于 App 内 AI 对话与开放平台 API 调用。',
               style: TextStyle(
-                  fontSize: 11.5, color: AppColors.textSub, height: 1.6),
+                fontSize: 11.5,
+                color: AppColors.textSub,
+                height: 1.6,
+              ),
             ),
           ),
         ],
@@ -287,15 +326,18 @@ class _ApiKeyPageState extends State<ApiKeyPage> {
               Text(
                 '平台 API Key',
                 style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.brand),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.brand,
+                ),
               ),
               const Spacer(),
               if (revoked)
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(6),
                     color: AppColors.danger.withValues(alpha: 0.12),
@@ -303,9 +345,10 @@ class _ApiKeyPageState extends State<ApiKeyPage> {
                   child: Text(
                     '已禁用',
                     style: TextStyle(
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.danger),
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.danger,
+                    ),
                   ),
                 ),
             ],
@@ -335,12 +378,11 @@ class _ApiKeyPageState extends State<ApiKeyPage> {
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     TextButton(
-                      onPressed:
-                          revoked || _revealing ? null : _toggleReveal,
+                      onPressed: revoked || _revealing ? null : _toggleReveal,
                       style: _textButtonStyle,
-                      child: Text(_revealing
-                          ? '读取中…'
-                          : (_revealed == null ? '显示' : '隐藏')),
+                      child: Text(
+                        _revealing ? '读取中…' : (_revealed == null ? '显示' : '隐藏'),
+                      ),
                     ),
                     TextButton(
                       onPressed: revoked ? null : _copy,
@@ -371,15 +413,19 @@ class _ApiKeyPageState extends State<ApiKeyPage> {
         children: [
           Row(
             children: [
-              Icon(Icons.account_balance_wallet_outlined,
-                  size: 14, color: AppColors.cyan),
+              Icon(
+                Icons.account_balance_wallet_outlined,
+                size: 14,
+                color: AppColors.cyan,
+              ),
               const SizedBox(width: 6),
               Text(
                 '账户余额',
                 style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.cyan),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.cyan,
+                ),
               ),
               const Spacer(),
               Text(
@@ -398,14 +444,12 @@ class _ApiKeyPageState extends State<ApiKeyPage> {
             children: [
               Text(
                 '冻结 ¥${_yuan(info.frozenMicro)}',
-                style:
-                    TextStyle(fontSize: 10.5, color: AppColors.textMuted),
+                style: TextStyle(fontSize: 10.5, color: AppColors.textMuted),
               ),
               const Spacer(),
               Text(
                 '累计充值 ¥${_yuan(info.totalTopupMicro)}',
-                style:
-                    TextStyle(fontSize: 10.5, color: AppColors.textMuted),
+                style: TextStyle(fontSize: 10.5, color: AppColors.textMuted),
               ),
             ],
           ),
@@ -466,12 +510,12 @@ class _ApiKeyPageState extends State<ApiKeyPage> {
     );
   }
 
-  Future<void> _openTopup() async {
+  Future<void> _openTopup({String? initialOrderId}) async {
     final paid = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => const _TopupSheet(),
+      builder: (_) => _TopupSheet(initialOrderId: initialOrderId),
     );
     if (!mounted) return;
     if (paid == true) _snack('充值成功，余额已更新');
@@ -491,8 +535,9 @@ class _ApiKeyPageState extends State<ApiKeyPage> {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(13),
             border: Border.all(
-              color: AppColors.danger
-                  .withValues(alpha: _resetting ? 0.25 : 0.55),
+              color: AppColors.danger.withValues(
+                alpha: _resetting ? 0.25 : 0.55,
+              ),
             ),
           ),
           child: Center(
@@ -527,13 +572,13 @@ class _ApiKeyPageState extends State<ApiKeyPage> {
             message,
             textAlign: TextAlign.center,
             style: TextStyle(
-                fontSize: 12.5, color: AppColors.textMuted, height: 1.6),
+              fontSize: 12.5,
+              color: AppColors.textMuted,
+              height: 1.6,
+            ),
           ),
           const SizedBox(height: 8),
-          TextButton(
-            onPressed: _retry,
-            child: const Text('重试'),
-          ),
+          TextButton(onPressed: _retry, child: const Text('重试')),
         ],
       ),
     );
@@ -552,12 +597,11 @@ class _ApiKeyPageState extends State<ApiKeyPage> {
   }
 
   ButtonStyle get _textButtonStyle => TextButton.styleFrom(
-        foregroundColor: AppColors.brand,
-        minimumSize: const Size(0, 30),
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        textStyle:
-            const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600),
-      );
+    foregroundColor: AppColors.brand,
+    minimumSize: const Size(0, 30),
+    padding: const EdgeInsets.symmetric(horizontal: 8),
+    textStyle: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600),
+  );
 
   /// 微元换算成元：正常余额显示两位小数，不足一分钱用「<0.01」表示。
   static String _yuan(int micro) {
@@ -577,7 +621,8 @@ class _ApiKeyPageState extends State<ApiKeyPage> {
 
 /// 余额充值底部弹层：选档 → 下单 → 拉起支付宝 → 查询/轮询 → 关闭刷新。
 class _TopupSheet extends StatefulWidget {
-  const _TopupSheet();
+  const _TopupSheet({this.initialOrderId});
+  final String? initialOrderId;
 
   @override
   State<_TopupSheet> createState() => _TopupSheetState();
@@ -590,11 +635,45 @@ class _TopupSheetState extends State<_TopupSheet> {
   String? _error;
   bool _busy = false;
   String? _status;
+  String? _owner;
+  String? _confirmingOrder;
+
+  void _checkOwner() {
+    if (!mounted ||
+        _owner == null ||
+        AppState.instance.currentUser?.id != _owner) {
+      throw const PlatformApiException('ACCOUNT_CHANGED', '账号已切换，请重新打开充值页');
+    }
+  }
 
   @override
   void initState() {
     super.initState();
-    _loadCatalog();
+    _owner = AppState.instance.currentUser?.id;
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    await _loadCatalog();
+    if (kIsWeb &&
+        mounted &&
+        _owner == AppState.instance.currentUser?.id &&
+        widget.initialOrderId != null) {
+      setState(() {
+        _busy = true;
+        _status = '正在确认上次支付结果…';
+      });
+      try {
+        await _confirm(widget.initialOrderId!);
+      } catch (_) {
+        if (mounted) {
+          setState(() {
+            _busy = false;
+            _status = '结果未确认，请稍后查询，勿重复付款';
+          });
+        }
+      }
+    }
   }
 
   Future<void> _loadCatalog() async {
@@ -605,9 +684,17 @@ class _TopupSheetState extends State<_TopupSheet> {
     try {
       final catalog = await PlatformApi.instance.topupProducts();
       if (!mounted) return;
+      _checkOwner();
+      final stored = kIsWeb ? await WebTopupStore.read(_owner!) : null;
+      final storedTier = stored?['tier'];
+      if (!mounted) return;
+      _checkOwner();
       setState(() {
         _catalog = catalog;
         _loading = false;
+        if (_selectedId == null && storedTier is String) {
+          _selectedId = storedTier;
+        }
         if (_selectedId != null &&
             !catalog.products.any((product) => product.id == _selectedId)) {
           _selectedId = null;
@@ -664,32 +751,89 @@ class _TopupSheetState extends State<_TopupSheet> {
     });
 
     try {
+      _checkOwner();
       TopupOrder order;
       try {
-        order = await PlatformApi.instance.createTopupOrder(
-          tierId: product.id,
-          requestId: _newRequestId(),
-        );
+        final pending = kIsWeb ? await WebTopupStore.read(_owner!) : null;
+        _checkOwner();
+        final previousId = pending?['orderId'];
+        if (previousId is String) {
+          final current = await _refreshOrder(previousId);
+          if (current.status == 'paid') {
+            _confirmingOrder = previousId;
+            await _finishPaid();
+            return;
+          }
+          if (current.status != 'pending') {
+            throw PlatformApiException(
+              'ORDER_NOT_PAYABLE',
+              _statusMessage(current.status),
+            );
+          }
+          order = await PlatformApi.instance.payTopupOrder(previousId);
+        } else {
+          final requestId = kIsWeb
+              ? await WebTopupStore.requestId(_owner!, product.id)
+              : _newRequestId();
+          _checkOwner();
+          order = await PlatformApi.instance.createTopupOrder(
+            tierId: product.id,
+            requestId: requestId,
+          );
+        }
       } on PendingTopupException catch (error) {
         final orderId = error.orderId;
         if (orderId == null || orderId.isEmpty) rethrow;
-        if (!mounted) return;
+        _checkOwner();
         setState(() => _status = '你有一笔待支付订单，正在继续支付…');
         order = await PlatformApi.instance.payTopupOrder(orderId);
       }
 
-      if (!mounted) return;
+      _checkOwner();
+      if (kIsWeb) {
+        await WebTopupStore.rememberOrder(_owner!, order.id);
+        _checkOwner();
+      }
       if (order.status == 'paid') {
+        _confirmingOrder = order.id;
         await _finishPaid();
+        return;
+      }
+
+      if (kIsWeb) {
+        final url = WebCheckout.validateQrUrl(
+          order.payUrl,
+          catalog.mode,
+          order.id,
+          order.amountFen,
+        );
+        if (!mounted) return;
+        final owner = _owner!;
+        _confirmingOrder = order.id;
+        final paid = await showWebQrPayment(
+          context,
+          url: url,
+          orderId: order.id,
+          amountFen: order.amountFen,
+          isOwner: () => mounted && AppState.instance.currentUser?.id == owner,
+          query: () async => (await _refreshOrder(order.id)).status,
+        );
+        if (!mounted) return;
+        _checkOwner();
+        if (paid) {
+          await _finishPaid();
+          return;
+        }
+        setState(() {
+          _busy = false;
+          _status = '订单已保留，可稍后继续扫码支付';
+        });
         return;
       }
 
       final orderString = order.orderString;
       if (orderString == null) {
-        throw const PlatformApiException(
-          'INVALID_RESPONSE',
-          '支付订单异常，请稍后重试',
-        );
+        throw const PlatformApiException('INVALID_RESPONSE', '支付订单异常，请稍后重试');
       }
 
       setState(() => _status = '正在拉起支付宝…');
@@ -710,12 +854,26 @@ class _TopupSheetState extends State<_TopupSheet> {
       setState(() => _status = '正在确认支付结果…');
       await _confirm(order.id);
     } on PlatformApiException catch (error) {
+      if (kIsWeb &&
+          _owner != null &&
+          AppState.instance.currentUser?.id == _owner &&
+          ['TOPUP_ORDER_NOT_PAYABLE', 'UNKNOWN_ORDER'].contains(error.code)) {
+        final previous = (await WebTopupStore.read(_owner!))?['orderId'];
+        if (previous is String) await WebTopupStore.clear(_owner!, previous);
+      }
       if (!mounted) return;
       setState(() {
         _busy = false;
         _status = null;
       });
       await _showMessage('支付未完成', error.message);
+    } on FormatException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _status = null;
+      });
+      await _showMessage('支付未完成', error.message.toString());
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -728,9 +886,11 @@ class _TopupSheetState extends State<_TopupSheet> {
 
   /// 拉起收银台后确认一次；未确认则最多轮询 5 次、每次间隔 3 秒。
   Future<void> _confirm(String orderId) async {
+    _checkOwner();
+    _confirmingOrder = orderId;
     TopupOrder? order;
     try {
-      order = await PlatformApi.instance.refreshTopupOrder(orderId);
+      order = await _refreshOrder(orderId);
     } on PlatformApiException catch (error) {
       if (!_transient(error)) rethrow;
     }
@@ -756,7 +916,7 @@ class _TopupSheetState extends State<_TopupSheet> {
       await Future<void>.delayed(const Duration(seconds: 3));
       if (!mounted) return;
       try {
-        final next = await PlatformApi.instance.refreshTopupOrder(orderId);
+        final next = await _refreshOrder(orderId);
         if (!mounted) return;
         if (next.status == 'paid') {
           await _finishPaid();
@@ -797,6 +957,7 @@ class _TopupSheetState extends State<_TopupSheet> {
   static bool _transient(PlatformApiException error) {
     switch (error.code) {
       case 'UNAUTHORIZED':
+      case 'ACCOUNT_CHANGED':
       case 'INVALID_RESPONSE':
         return false;
       default:
@@ -816,9 +977,24 @@ class _TopupSheetState extends State<_TopupSheet> {
   }
 
   Future<void> _finishPaid() async {
+    _checkOwner();
+    if (kIsWeb && _confirmingOrder != null) {
+      await WebTopupStore.clear(_owner!, _confirmingOrder!);
+      _checkOwner();
+    }
     unawaited(AppState.instance.refreshPlatformBalance());
     if (!mounted) return;
     Navigator.of(context).pop(true);
+  }
+
+  Future<TopupOrder> _refreshOrder(String id) async {
+    _checkOwner();
+    final order = await PlatformApi.instance.refreshTopupOrder(id);
+    _checkOwner();
+    if (kIsWeb && order.status == 'closed') {
+      await WebTopupStore.clear(_owner!, id);
+    }
+    return order;
   }
 
   Future<void> _showMessage(String title, String message) async {
@@ -944,8 +1120,8 @@ class _TopupSheetState extends State<_TopupSheet> {
                     label: _busy
                         ? '处理中…'
                         : selected == null
-                            ? '支付宝支付'
-                            : '支付宝支付 ¥${_priceText(selected)}',
+                        ? '支付宝支付'
+                        : '支付宝支付 ¥${_priceText(selected)}',
                     icon: Icons.account_balance_wallet_outlined,
                     onTap: _canPay ? _pay : null,
                   ),

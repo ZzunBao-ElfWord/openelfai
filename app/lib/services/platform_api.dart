@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
 
 import '../auth/remote_auth_repository.dart';
 import '../config/api_config.dart';
@@ -58,7 +59,8 @@ class MyKeyInfo {
 
   factory MyKeyInfo.fromJson(Map<String, dynamic> json) {
     final wallet = json['wallet'];
-    final w = wallet is Map<String, dynamic> ? wallet : const <String, dynamic>{};
+    final w =
+        wallet is Map<String, dynamic> ? wallet : const <String, dynamic>{};
     return MyKeyInfo(
       apiKeyMasked: json['api_key_masked']?.toString() ?? '',
       keyPrefix: json['key_prefix']?.toString() ?? '',
@@ -163,6 +165,7 @@ class TopupOrder {
 
   /// 支付宝 SDK 签名字符串，仅在创建 / 重支付接口返回。
   final String? orderString;
+  final String? payUrl;
 
   /// 订单确认后的钱包余额（微元）。
   final int? balanceMicro;
@@ -174,6 +177,7 @@ class TopupOrder {
     required this.status,
     this.expiresAt,
     this.orderString,
+    this.payUrl,
     this.balanceMicro,
   });
 
@@ -187,6 +191,7 @@ class TopupOrder {
       expiresAt: _parseTime(json['expires_at']),
       orderString:
           orderString == null || orderString.isEmpty ? null : orderString,
+      payUrl: json['payUrl'] is String ? json['payUrl'] as String : null,
       balanceMicro: _asInt(json['balance_micro']),
     );
   }
@@ -262,7 +267,7 @@ class PlatformApi {
     return key;
   }
 
-  /// 重置 API Key，旧 Key 立即失效。
+  /// 重置个人平台 API Key，旧 Key 立即失效；与支付宝配置无关。
   Future<String> resetKey() async {
     final body = await _request('POST', ApiConfig.resetKeyPath);
     final key = body['api_key'];
@@ -293,12 +298,17 @@ class PlatformApi {
       final body = await _request(
         'POST',
         ApiConfig.topupOrdersPath,
-        body: {'requestId': requestId, 'tierId': tierId},
+        body: {
+          'requestId': requestId,
+          'tierId': tierId,
+          if (kIsWeb) 'channel': 'web'
+        },
       );
       return TopupOrder.fromJson(body);
     } on PlatformApiException catch (error) {
       if (error.code == 'TOPUP_PENDING_ORDER' || error.code == 'HTTP_409') {
-        final rawOrderId = error.details?['order_id'];
+        final rawOrderId =
+            error.details?['orderId'] ?? error.details?['order_id'];
         final orderId = rawOrderId?.toString();
         throw PendingTopupException(
           error.message,
@@ -311,7 +321,8 @@ class PlatformApi {
 
   /// 重新拉起已有订单的支付宝支付。
   Future<TopupOrder> payTopupOrder(String id) async {
-    final body = await _request('POST', ApiConfig.topupOrderPayPath(id));
+    final body = await _request('POST', ApiConfig.topupOrderPayPath(id),
+        body: kIsWeb ? {'channel': 'web'} : null);
     return TopupOrder.fromJson(body);
   }
 
@@ -358,15 +369,16 @@ class PlatformApi {
     }
 
     try {
-      return await _send(method, path, token: token, body: body, timeout: timeout);
+      return await _send(method, path,
+          token: token, body: body, timeout: timeout);
     } on PlatformApiException catch (error) {
       if (error.code != 'UNAUTHORIZED') rethrow;
       // access token 只有 15 分钟有效期，过期后界面仍是登录态但平台接口会 401。
       // 这里用 refresh token 续期一次再重试，避免误报「登录已失效」。
-      final refreshed = await RemoteAuthRepository.instance.refreshAccessToken();
-      final next = refreshed
-          ? await RemoteAuthRepository.instance.accessToken
-          : null;
+      final refreshed =
+          await RemoteAuthRepository.instance.refreshAccessToken();
+      final next =
+          refreshed ? await RemoteAuthRepository.instance.accessToken : null;
       if (next == null || next.isEmpty) {
         throw const PlatformApiException('UNAUTHORIZED', '登录已过期，请重新登录');
       }

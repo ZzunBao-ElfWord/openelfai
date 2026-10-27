@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'home_shell.dart';
+import '../widgets/web_diamond_recharge_panel.dart';
 import '../config/iap_config.dart';
 import '../config/commerce_config.dart';
 import '../data/world_data.dart';
@@ -36,7 +39,9 @@ class WalletPage extends StatelessWidget {
                             fontWeight: FontWeight.w700,
                             color: AppColors.text)),
                     const SizedBox(height: 10),
-                    if (IapConfig.enabled)
+                    if (kIsWeb)
+                      const WebDiamondRechargePanel()
+                    else if (IapConfig.enabled)
                       const IosRechargePanel()
                     else if (CommerceConfig.android)
                       const AlipayRechargePanel()
@@ -88,7 +93,14 @@ class WalletPage extends StatelessWidget {
                 IconButton(
                   padding: EdgeInsets.zero,
                   alignment: Alignment.centerLeft,
-                  onPressed: () => Navigator.of(context).pop(),
+                  onPressed: () {
+                    if (Navigator.of(context).canPop()) {
+                      Navigator.of(context).pop();
+                    } else {
+                      Navigator.of(context).pushReplacement(
+                          MaterialPageRoute(builder: (_) => const HomeShell()));
+                    }
+                  },
                   icon: Icon(Icons.arrow_back_ios_new,
                       size: 17, color: AppColors.textSub),
                 ),
@@ -146,8 +158,7 @@ class WalletPage extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
-            style: TextStyle(fontSize: 10, color: AppColors.textFaint)),
+        Text(label, style: TextStyle(fontSize: 10, color: AppColors.textFaint)),
         const SizedBox(height: 2),
         Text(value,
             style: TextStyle(
@@ -226,14 +237,12 @@ class WalletPage extends StatelessWidget {
                   l.note,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style:
-                      TextStyle(fontSize: 12, color: AppColors.textSub),
+                  style: TextStyle(fontSize: 12, color: AppColors.textSub),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   l.time,
-                  style:
-                      TextStyle(fontSize: 10, color: AppColors.textFaint),
+                  style: TextStyle(fontSize: 10, color: AppColors.textFaint),
                 ),
               ],
             ),
