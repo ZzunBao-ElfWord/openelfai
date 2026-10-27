@@ -26,6 +26,15 @@
 
 ## 另外三个渠道
 
+### B站代码预接入
+
+- `lib/sharing/bilibili_share_adapter.dart` 已注册到普通分享入口，预留 `BilibiliShareGateway` 接口；它是内部适配契约，不是已获批的官方 API。
+- 无 Client ID 时“未配置”；仅填 Client ID、没有正式网关时仍“待接入”。默认没有网络、OAuth、原生 SDK 或后台发布调用。
+- 准备只读的独立 PNG 字节副本、标题、所选摘要及本站 HTTPS 链接；校验完整 PNG 文件头、本站无凭证/默认端口链接、非空标题和本地 8MiB 内存预算。该预算不是平台官方限制，文件头检查也不等于完整图片解码。
+- 不携带抖音场景或登录密钥，不伪造平台协议、投稿地址或 URL scheme；取消/失败不当成功。
+- 用户创建应用后需提供公开 Client ID 和获批能力/正式文档，确认支持普通分享后才能实现网关。官方当前公开客户端 SDK 介绍为账号授权，不能据此擅自转成账号绑定或稿件发布；如果只有稿件能力，需要另行确认产品流程。
+- 参考：[B站官方文档中心](https://open.bilibili.com/doc)。填入 ID 不是完成接入，仍须实际实现并验收。
+
 微信、小红书、哔哩哔哩尚无生产 SDK 适配器及完整获批配置，不能直接定向发送。当前仅保留入口和显式确认后的系统分享/复制；系统能否显示目标 App 取决于已安装 App 和素材支持。
 
 公开 ID 预留：`OPENELF_SHARE_WECHAT_APP_ID`、`OPENELF_SHARE_XIAOHONGSHU_APP_ID`、`OPENELF_SHARE_BILIBILI_APP_ID`。仅填 ID 仍是待接入，不代表开通。

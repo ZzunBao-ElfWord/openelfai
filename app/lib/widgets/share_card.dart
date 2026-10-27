@@ -9,6 +9,7 @@ import '../models/elf.dart';
 import '../theme.dart';
 import '../sharing/social_share.dart';
 import '../sharing/douyin_share_adapter.dart';
+import '../sharing/bilibili_share_adapter.dart';
 import 'social_share_sheet.dart';
 
 /// 分享卡片（v1.3）：离屏渲染成 PNG，调系统分享面板。
@@ -232,6 +233,9 @@ String sharePathFor(Elf elf) => 'openelfai.com/e/?id=${elf.id}';
 class ShareHelper {
   static final _service = SocialShareService(adapters: {
     SocialChannel.douyin: DouyinShareAdapter(),
+    SocialChannel.bilibili: BilibiliShareAdapter(
+        clientId:
+            SocialShareConfig.build.publicAppIds[SocialChannel.bilibili] ?? ''),
   });
   static bool _busy = false;
 
