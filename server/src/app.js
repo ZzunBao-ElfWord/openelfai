@@ -405,6 +405,8 @@ async function buildApp(options = {}) {
     return { user, session };
   }
 
+  require('./account_deletion').registerAccountDeletion(app, { db, authenticate });
+
   async function ensureUser(phone) {
     const nowIso = new Date().toISOString();
     const [rows] = await db.execute('SELECT * FROM users WHERE phone = ?', [phone]);

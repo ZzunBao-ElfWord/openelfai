@@ -443,7 +443,7 @@ class SettingsPage extends StatelessWidget {
         title:
             Text('删除账号', style: TextStyle(color: AppColors.warn, fontSize: 16)),
         content: Text(
-          '账号删除后，你的 AI、钻石、收益、打赏记录等所有数据将被永久清除，无法恢复。\n\n确认继续？',
+          '注销后将清除个人资料和内容，所有设备登录及 API Key 立即失效；剩余钻石不再可用。交易与账务记录保留用于对账。\n\n有余额、待确认订单或未结算收益时，须先结算。再次注册是新账号，不会恢复原数据。确认注销？',
           style: TextStyle(
               fontSize: 12.5, color: AppColors.textMuted, height: 1.6),
         ),
@@ -455,16 +455,16 @@ class SettingsPage extends StatelessWidget {
           TextButton(
             onPressed: () async {
               Navigator.of(dctx).pop();
-              // 服务端 DELETE /auth/account 接口待实现，先本地退出
               try {
-                await createAuth().logout();
-              } catch (_) {
-                // 撤销失败也要清本地登录态
+                await createAuth().deleteAccount();
+              } catch (error) {
+                if (ctx.mounted) _snack(ctx, '注销失败：$error');
+                return;
               }
               await AppState.instance.onLogout();
               if (!ctx.mounted) return;
               ScaffoldMessenger.of(ctx).showSnackBar(
-                const SnackBar(content: Text('本地已清除，服务端账号删除即将上线')),
+                const SnackBar(content: Text('账号已注销')),
               );
             },
             child: Text('确认删除', style: TextStyle(color: AppColors.warn)),

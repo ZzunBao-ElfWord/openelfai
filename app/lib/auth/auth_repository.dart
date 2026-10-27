@@ -72,6 +72,9 @@ abstract class AuthRepository {
   /// 退出登录：撤销服务端会话并清除本地令牌。
   Future<void> logout();
 
+  /// 服务端确认注销成功后才清除本地会话；失败必须保留登录态并提示。
+  Future<void> deleteAccount();
+
   /// 当前 access token，未登录时返回 null。
   Future<String?> get accessToken;
 }
