@@ -2,10 +2,13 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../models/elf.dart';
 import '../theme.dart';
+import '../sharing/social_share.dart';
+import 'social_share_sheet.dart';
 
 /// 分享卡片（v1.3）：离屏渲染成 PNG，调系统分享面板。
 /// 固定 360×520 逻辑尺寸，内容：AI 信息 + 人格 + 数据 + 落地页链接 + 水印。
@@ -39,11 +42,19 @@ class ShareCard extends StatelessWidget {
                 shaderCallback: (r) => AppColors.brandGradient.createShader(r),
                 child: const Text(
                   'OpenElf',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: 1.2),
+                  style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      letterSpacing: 1.2),
                 ),
               ),
               const Spacer(),
-              Text('我的 AI，我做主', style: TextStyle(fontSize: 10, color: AppColors.textMuted, letterSpacing: 1.5)),
+              Text('我的 AI，我做主',
+                  style: TextStyle(
+                      fontSize: 10,
+                      color: AppColors.textMuted,
+                      letterSpacing: 1.5)),
             ],
           ),
           const SizedBox(height: 26),
@@ -61,7 +72,10 @@ class ShareCard extends StatelessWidget {
                 alignment: Alignment.center,
                 child: Text(
                   elf.initial,
-                  style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w700, color: Colors.white),
+                  style: const TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white),
                 ),
               ),
               const SizedBox(width: 14),
@@ -75,23 +89,32 @@ class ShareCard extends StatelessWidget {
                           child: Text(
                             elf.name,
                             overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.text),
+                            style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.text),
                           ),
                         ),
                         const SizedBox(width: 6),
-                        Text(elf.serial, style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                        Text(elf.serial,
+                            style: TextStyle(
+                                fontSize: 11, color: AppColors.textMuted)),
                       ],
                     ),
                     const SizedBox(height: 6),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(6),
                         color: AppColors.surfaceHigh,
                       ),
                       child: Text(
                         'Lv${elf.level} · ${elf.levelName}',
-                        style: TextStyle(fontSize: 10, color: AppColors.violetSoft, fontWeight: FontWeight.w600),
+                        style: TextStyle(
+                            fontSize: 10,
+                            color: AppColors.violetSoft,
+                            fontWeight: FontWeight.w600),
                       ),
                     ),
                   ],
@@ -106,7 +129,8 @@ class ShareCard extends StatelessWidget {
             '「${elf.persona}」',
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 13, color: AppColors.textSub, height: 1.6),
+            style:
+                TextStyle(fontSize: 13, color: AppColors.textSub, height: 1.6),
           ),
           const SizedBox(height: 18),
 
@@ -123,7 +147,8 @@ class ShareCard extends StatelessWidget {
                 excerpt!,
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 11.5, color: AppColors.textSub, height: 1.6),
+                style: TextStyle(
+                    fontSize: 11.5, color: AppColors.textSub, height: 1.6),
               ),
             ),
             const SizedBox(height: 18),
@@ -142,7 +167,8 @@ class ShareCard extends StatelessWidget {
           // 链接 + 标识
           Text(
             sharePathFor(elf),
-            style: TextStyle(fontSize: 11, color: AppColors.cyan, letterSpacing: 0.3),
+            style: TextStyle(
+                fontSize: 11, color: AppColors.cyan, letterSpacing: 0.3),
           ),
           const SizedBox(height: 6),
           Text(
@@ -159,9 +185,14 @@ class ShareCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.text)),
+          Text(value,
+              style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.text)),
           const SizedBox(height: 3),
-          Text(label, style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
+          Text(label,
+              style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
         ],
       ),
     );
@@ -195,7 +226,58 @@ String sharePathFor(Elf elf) => 'openelfai.com/e/?id=${elf.id}';
 
 /// 分享工具：把 ShareCard 插到 Overlay 离屏渲染 → 截图 → 系统分享面板。
 class ShareHelper {
-  static Future<void> shareElf(BuildContext context, Elf elf, {String? excerpt}) async {
+  static final _service = SocialShareService();
+  static bool _busy = false;
+
+  static Future<void> shareElf(BuildContext context, Elf elf,
+      {String? excerpt}) async {
+    if (_busy) return;
+    _busy = true;
+    try {
+      var action = await showModalBottomSheet<ShareAction>(
+        context: context,
+        isScrollControlled: true,
+        builder: (_) => SocialShareSheet(service: _service),
+      );
+      if (!context.mounted || action == null) return;
+      final channel = action.channel;
+      if (channel != null &&
+          await _service.availability(channel) != ShareAvailability.ready) {
+        if (!context.mounted) return;
+        action = await confirmShareFallback(context, channel);
+      }
+      if (!context.mounted || action == null) return;
+      if (action == ShareAction.copyLink) {
+        await Clipboard.setData(ClipboardData(text: shareLinkFor(elf)));
+        if (context.mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(const SnackBar(content: Text('链接已复制，请自行选择应用发送')));
+        }
+        return;
+      }
+      await _shareCard(context, elf, excerpt: excerpt, channel: action.channel);
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('分享未完成，请稍后重试')));
+      }
+    } finally {
+      _busy = false;
+    }
+  }
+
+  static Future<void> _shareCard(BuildContext context, Elf elf,
+      {String? excerpt, SocialChannel? channel}) async {
+    final renderBox = context.findRenderObject();
+    final origin = renderBox is RenderBox &&
+            renderBox.hasSize &&
+            renderBox.size.width > 0 &&
+            renderBox.size.height > 0
+        ? renderBox.localToGlobal(Offset.zero) & renderBox.size
+        : Rect.fromCenter(
+            center: MediaQuery.sizeOf(context).center(Offset.zero),
+            width: 1,
+            height: 1);
     final key = GlobalKey();
     final overlay = Overlay.of(context);
     final entry = OverlayEntry(
@@ -216,15 +298,45 @@ class ShareHelper {
       // 等两帧，确保离屏内容完成布局与绘制
       await Future.delayed(const Duration(milliseconds: 80));
       final renderObject = key.currentContext?.findRenderObject();
-      if (renderObject is! RenderRepaintBoundary) return;
+      if (renderObject is! RenderRepaintBoundary) throw StateError('分享卡片未就绪');
       final image = await renderObject.toImage(pixelRatio: 3);
-      final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-      if (bytes == null) return;
+      final ByteData? bytes;
+      try {
+        bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+      } finally {
+        image.dispose();
+      }
+      if (bytes == null) throw StateError('分享图片生成失败');
       final png = bytes.buffer.asUint8List();
       final link = shareLinkFor(elf);
+      if (!context.mounted) return;
+      final text = '${elf.name} 正在 OpenElf 世界里生长，来注视它 → $link';
+      if (channel != null) {
+        final result = await _service.share(
+            channel,
+            SocialShareContent(
+              title: elf.name,
+              text: text,
+              link: Uri.parse(link),
+              png: png,
+            ));
+        if (context.mounted && result != SocialShareOutcome.cancelled) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(
+            result == SocialShareOutcome.handedOff
+                ? '已交给${channel.label}，请在该应用内确认发送或发布'
+                : '${channel.label}分享未完成，请重试',
+          )));
+        }
+        return;
+      }
       await Share.shareXFiles(
-        [XFile.fromData(png, name: 'openelf_${elf.id}.png', mimeType: 'image/png')],
-        text: '${elf.name} 正在 OpenElf 世界里生长，来注视它 → $link',
+        [
+          XFile.fromData(png,
+              name: 'openelf_${elf.id}.png', mimeType: 'image/png')
+        ],
+        text: text,
+        sharePositionOrigin: origin,
       );
     } finally {
       entry.remove();
