@@ -12,6 +12,7 @@ const { createPool } = require('./db');
 const { createAppleIapService, createAppleVerifier } = require('./apple_iap');
 const { createPaymentStore } = require('./payment_store');
 const { createCommerceService } = require('./commerce');
+const { createRealnameVerifier } = require('./realname');
 const { createAlipayGateway } = require('./alipay_gateway');
 const { createAlipayService } = require('./alipay');
 const { createCaptchaVerifier } = require('./captcha');
@@ -36,6 +37,7 @@ const { createConsoleHandlers } = require('./platform/console');
 const { createTopupService } = require('./platform/topup');
 const { createUpstream } = require('./platform/upstream');
 const { ensureVendorAgents, createWorldAgentService } = require('./world_agents');
+const { createKnowledgeService, buildContextBlock } = require('./knowledge');
 
 const PHONE_RE = /^1[3-9]\d{9}$/;
 const DEVICE_RE = /^[A-Za-z0-9_-]{8,80}$/;
@@ -180,13 +182,20 @@ async function buildApp(options = {}) {
   const appleVerifier = options.appleVerifier || (config.appleIap.enabled
     ? await createAppleVerifier(config.appleIap) : null);
   const paymentStore = options.paymentStore || createPaymentStore(db);
+  // 实名核验：服务端对接阿里云实人认证，客户端只上传原始要素与证件照。
+  const realname = options.realname || createRealnameVerifier(config.realname);
+  const identityPolicy = {
+    maxFailures: config.realname.maxFailures,
+    lockHours: config.realname.lockHours,
+  };
   const alipayGateway = options.alipayGateway || createAlipayGateway(config.alipay);
   // 提现出款：走支付宝单笔转账；通道未配置时直接报错，绝不当作成功。
   const payout = alipayGateway ? async (row) => alipayGateway.transfer({
     outTradeNo: row.outTradeNo, account: row.account, amountCents: row.netCents,
     remark: `OpenElf 创作者收益 ${row.id}`,
   }) : null;
-  const commerce = createCommerceService({ store: paymentStore, settings: config.appleIap, payout });
+  const commerce = createCommerceService({ store: paymentStore, settings: config.appleIap, payout,
+    realname, identityPolicy });
   const appleIap = createAppleIapService({
     db,
     settings: config.appleIap,
@@ -194,7 +203,8 @@ async function buildApp(options = {}) {
     paymentStore,
     verifyNotification: options.appleNotificationVerifier,
   });
-  const androidCommerce = createCommerceService({ store: paymentStore, settings: config.androidCommerce, payout });
+  const androidCommerce = createCommerceService({ store: paymentStore, settings: config.androidCommerce, payout,
+    realname, identityPolicy });
   const alipay = createAlipayService({ store: paymentStore, settings: config.alipay,
     commerceSettings: config.androidCommerce,
     gateway: alipayGateway });
@@ -230,9 +240,21 @@ async function buildApp(options = {}) {
     }),
     settings: config.worldAgents,
     logger: app.log,
+    // 后台配置过密钥（platform_vendor_credentials 有 active 记录）或环境变量已登记的厂商
+    // 才参与产出，其余官方账号先休眠，避免拿占位密钥反复调用上游。
+    configuredVendors: async () => {
+      const [rows] = await db.query(
+        "SELECT vendor FROM platform_vendor_credentials WHERE status = 'active'",
+      );
+      const vendors = new Set(rows.map((row) => row.vendor));
+      for (const vendor of config.worldAgents.vendors) vendors.add(vendor);
+      return vendors;
+    },
   });
 
   const consoleHandlers = createConsoleHandlers({ db });
+  // 知识库默认关闭，只有 elf_knowledge_config 里显式开启的 AI 才会注入检索片段。
+  const knowledge = createKnowledgeService({ db });
 
   // 跨域：只允许白名单来源携带 CORS 头；预检请求统一 204。
   app.addHook('onRequest', async (request, reply) => {
@@ -643,9 +665,10 @@ async function buildApp(options = {}) {
     catch (_) { return reply.code(400).type('text/plain').send('failure'); }
   });
 
-  // 实名二要素复核：服务端为准，客户端不再自行声明认证结果。
+  // 实名核验：服务端为准，客户端上传姓名/证件号与正反面证件照（base64）。
+  // 图片 base64 会超过默认 16KB，单独放宽到 8MB，其余接口保持原限制。
   app.post('/api/v1/identity/verify',
-    { bodyLimit: 16 * 1024, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    { bodyLimit: 8 * 1024 * 1024, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
     async (request) => {
       const { user } = await authenticate(request);
       if (request.body?.platform === 'android') requireAndroidCommerce();
@@ -664,6 +687,11 @@ async function buildApp(options = {}) {
       const phone = readPhone(request.body);
       const now = Date.now();
       const ip = (request.ip || 'unknown').slice(0, 64);
+
+      // 审核账号不发真实短信、也不要求图形验证码，直接放行到输码页。
+      if (config.reviewAccounts.has(phone)) {
+        return reply.send({ ok: true, expiresIn: 300, resendAfter: 60 });
+      }
 
       await db.execute('DELETE FROM sms_codes WHERE expires_at < ?', [now - 86_400_000]);
 
@@ -739,6 +767,14 @@ async function buildApp(options = {}) {
       const code = readCode(request.body);
       const deviceId = readDeviceId(request.body);
       const now = Date.now();
+
+      // 应用商店与支付渠道审核专用账号：手机号在 REVIEW_LOGIN_ACCOUNTS 白名单内，
+      // 输入约定好的固定验证码即可登录，不依赖短信下发。未配置则此分支不生效。
+      const reviewCode = config.reviewAccounts.get(phone);
+      if (reviewCode && code === reviewCode) {
+        const user = await ensureUser(phone);
+        return reply.send(await issueSession(user, deviceId, request));
+      }
 
       const [rows] = await db.execute(
         `SELECT * FROM sms_codes
@@ -1099,11 +1135,23 @@ async function buildApp(options = {}) {
       return done(fixedReply('insufficient_balance'));
     }
 
-    const messages = [
-      { role: 'system', content: buildElfSystemPrompt(request.body) },
-      ...history.slice(-CHAT_HISTORY_WINDOW),
-      { role: 'user', content: text },
-    ];
+    const messages = [{ role: 'system', content: buildElfSystemPrompt(request.body) }];
+    // 只有该 AI 在 elf_knowledge_config 中显式开启知识库时才做检索注入；
+    // 其余 AI 走原有链路，消息结构完全不变。
+    let knowledgeSources = [];
+    if (elfId) {
+      try {
+        if (await knowledge.isEnabled(elfId)) {
+          const hits = await knowledge.retrieve(text);
+          const contextBlock = buildContextBlock(hits);
+          if (contextBlock) messages.push({ role: 'system', content: contextBlock });
+          knowledgeSources = hits.map((hit) => ({ title: hit.title, url: hit.sourceUrl || '' }));
+        }
+      } catch (error) {
+        app.log?.warn?.({ err: error, elfId }, 'elf knowledge retrieval failed');
+      }
+    }
+    messages.push(...history.slice(-CHAT_HISTORY_WINDOW), { role: 'user', content: text });
     const baseUrl = process.env.PLATFORM_SELF_URL || `http://127.0.0.1:${config.port}`;
 
     const controller = new AbortController();
@@ -1140,12 +1188,14 @@ async function buildApp(options = {}) {
       }
 
       const after = await readPlatformWallet(db, user.id);
-      return done({
+      const result = {
         mode: 'ai',
         reply: content,
-        usage: payload.usage || null,
+        usage: payload?.usage || null,
         balance_micro: after.balance_micro,
-      });
+      };
+      if (knowledgeSources.length) result.knowledge_sources = knowledgeSources;
+      return done(result);
     } finally {
       clearTimeout(timer);
     }

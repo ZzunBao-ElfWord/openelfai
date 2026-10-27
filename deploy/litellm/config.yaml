@@ -6,14 +6,80 @@ model_list:
       api_base: https://api.deepseek.com
   - model_name: doubao/llama-3-70b
     litellm_params:
-      model: volcengine/doubao-pro-32k
+      model: openai/doubao-seed-2-1-pro-260915
       api_key: os.environ/VOLCENGINE_API_KEY
       api_base: https://ark.cn-beijing.volces.com/api/v3
   - model_name: qwen/qwen-turbo
     litellm_params:
-      model: qwen/qwen-turbo
+      model: openai/qwen-turbo
       api_key: os.environ/ALIYUN_API_KEY
       api_base: https://dashscope.aliyuncs.com/compatible-mode/v1
+  - model_name: moonshot/kimi-k2
+    litellm_params:
+      model: openai/kimi-k2-0711-preview
+      api_key: os.environ/MOONSHOT_API_KEY
+      api_base: https://api.moonshot.cn/v1
+  - model_name: zhipu/glm-4-flash
+    litellm_params:
+      model: openai/glm-4-flash
+      api_key: os.environ/ZHIPU_API_KEY
+      api_base: https://open.bigmodel.cn/api/paas/v4
+  - model_name: baidu/ernie-4.0-8k
+    litellm_params:
+      model: openai/ernie-4.0-8k
+      api_key: os.environ/BAIDU_API_KEY
+      api_base: https://qianfan.baidubce.com/v2
+  - model_name: hunyuan/hunyuan-turbos-latest
+    litellm_params:
+      model: openai/hy3
+      api_key: os.environ/HUNYUAN_API_KEY
+      api_base: https://tokenhub.tencentmaas.com/v1
+  - model_name: stepfun/step-2-mini
+    litellm_params:
+      model: openai/step-2-mini
+      api_key: os.environ/STEPFUN_API_KEY
+      api_base: https://api.stepfun.com/v1
+  - model_name: yi/yi-lightning
+    litellm_params:
+      model: openai/yi-lightning
+      api_key: os.environ/YI_API_KEY
+      api_base: https://api.lingyiwanwu.com/v1
+  - model_name: spark/generalv3.5
+    litellm_params:
+      model: openai/generalv3.5
+      api_key: os.environ/SPARK_API_KEY
+      api_base: https://spark-api-open.xf-yun.com/v1
+  - model_name: baichuan/Baichuan4
+    litellm_params:
+      model: openai/Baichuan4
+      api_key: os.environ/BAICHUAN_API_KEY
+      api_base: https://api.baichuan-ai.com/v1
+  # —— 海外厂商：后台逐个配置 API Key 后即可调用 ——
+  - model_name: openai/gpt-4o-mini
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+  - model_name: anthropic/claude-3-5-haiku
+    litellm_params:
+      model: anthropic/claude-3-5-haiku-latest
+      api_key: os.environ/ANTHROPIC_API_KEY
+  - model_name: google/gemini-2.0-flash
+    litellm_params:
+      model: openai/gemini-2.0-flash
+      api_key: os.environ/GOOGLE_API_KEY
+      api_base: https://generativelanguage.googleapis.com/v1beta/openai
+  - model_name: xai/grok-2
+    litellm_params:
+      model: xai/grok-2-latest
+      api_key: os.environ/XAI_API_KEY
+  - model_name: mistral/mistral-small
+    litellm_params:
+      model: mistral/mistral-small-latest
+      api_key: os.environ/MISTRAL_API_KEY
+  - model_name: cohere/command-r
+    litellm_params:
+      model: cohere/command-r-08-2024
+      api_key: os.environ/COHERE_API_KEY
 
 litellm_settings:
   drop_params: true

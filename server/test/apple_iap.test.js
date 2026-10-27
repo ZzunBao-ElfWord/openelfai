@@ -9,6 +9,10 @@ const { memoryStore } = require('./helpers/payment_memory');
 const A = { id: 'u_1234567890abcdef1234567890abcdef', nickname: 'A', phone: '13800000001' };
 const B = { id: 'u_abcdef1234567890abcdef1234567890', nickname: 'B', phone: '13800000002' };
 const sku = 'com.ai.openelf.gems2086';
+// 实名核验测试替身：只校验流程，真实厂商调用由 realname.test.js 覆盖。
+const ID_IMAGE = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(64, 0)]).toString('base64');
+const fakeRealname = { id: 'aliyun_id2meta_ocr', verify: async () => ({ status: 'match', reason: 'ocr' }) };
+const identityPolicy = { maxFailures: 5, lockHours: 24 };
 function fixture(overrides = {}) {
   const store = memoryStore(); store.addUser(A); store.addUser(B);
   const settings = { enabled: true, sandboxOnly: false, allowSandbox: true,
@@ -19,7 +23,7 @@ function fixture(overrides = {}) {
   let notification;
   const iap = createAppleIapService({ paymentStore: store, settings,
     verifyTransaction: async () => ({ ...transaction }), verifyNotification: async () => notification });
-  const commerce = createCommerceService({ store, settings });
+  const commerce = createCommerceService({ store, settings, realname: fakeRealname, identityPolicy });
   let seq = 0;
   return { store, settings, iap, commerce,
     transaction: (changes) => transaction = { ...transaction, ...changes },
@@ -215,7 +219,8 @@ test('实名以服务端记录为准，本人形象创建不再采信客户端�
     { statusCode: 400 });
   await assert.rejects(() => f.commerce.verifyIdentity(A, { environment: 'Production', realName: '张三', idNumber: '110105194912310021' }),
     { code: 'INVALID_ID_NUMBER' });
-  const result = await f.commerce.verifyIdentity(A, { environment: 'Production', realName: '张三', idNumber: '11010519491231002x' });
+  const result = await f.commerce.verifyIdentity(A, { environment: 'Production', realName: '张三',
+    idNumber: '11010519491231002x', frontImage: ID_IMAGE, backImage: ID_IMAGE });
   assert.equal(result.identity.maskedName, '张*');
   assert.equal(result.identity.maskedIdNumber, '1101**********002X');
   s = await f.commerce.snapshot(A, 'Production');
@@ -436,6 +441,7 @@ test('创作者服务费：打赏入待结算、签协议+实名后可提现，�
   const settings = { ...f.settings };
   let payouts = 0;
   const svc = createCommerceService({ store: f.store, settings,
+    realname: fakeRealname, identityPolicy,
     payout: async () => { payouts++; return payouts === 1 ? { status: 'paid', orderId: 'ali_1' } : { status: 'failed', message: '转账失败' }; } });
   let s = await svc.snapshot(A, 'Production');
   const elf = s.commerce.elves.find((e) => e.isMine);
@@ -450,7 +456,8 @@ test('创作者服务费：打赏入待结算、签协议+实名后可提现，�
   // 未实名不能提现。
   await assert.rejects(() => svc.requestWithdrawal(A, { requestId: 'wd_req_0000000001', environment: 'Production',
     amountCents: 1000, account: '13800000001' }), { code: 'REALNAME_REQUIRED' });
-  await svc.verifyIdentity(A, { realName: '张三', idNumber: '11010519491231002x', environment: 'Production' });
+  await svc.verifyIdentity(A, { realName: '张三', idNumber: '11010519491231002x', environment: 'Production',
+    frontImage: ID_IMAGE, backImage: ID_IMAGE });
   // 实名后还需要签署创作者服务协议。
   await assert.rejects(() => svc.requestWithdrawal(A, { requestId: 'wd_req_0000000002', environment: 'Production',
     amountCents: 1000, account: '13800000001' }), { code: 'AGREEMENT_REQUIRED' });

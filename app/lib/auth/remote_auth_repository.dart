@@ -212,9 +212,11 @@ class RemoteAuthRepository implements AuthRepository {
   // —— HTTP ——
 
   /// Authenticated API access with one refresh/retry, including payment APIs.
+  /// [timeout] 用于上传证件照这类大请求体，默认仍走 15 秒。
   Future<Map<String, dynamic>> authenticatedRequest(
     String path, {
     Map<String, dynamic>? body,
+    Duration? timeout,
   }) async {
     Future<Map<String, dynamic>> send() async {
       final token = await _secure.read(key: _kAccessToken);
@@ -223,7 +225,7 @@ class RemoteAuthRepository implements AuthRepository {
       }
       return body == null
           ? _get(path, accessToken: token)
-          : _post(path, body, accessToken: token);
+          : _post(path, body, accessToken: token, timeout: timeout);
     }
 
     try {
@@ -257,6 +259,7 @@ class RemoteAuthRepository implements AuthRepository {
     String path,
     Map<String, dynamic> body, {
     String? accessToken,
+    Duration? timeout,
   }) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}$path');
     http.Response response;
@@ -268,7 +271,7 @@ class RemoteAuthRepository implements AuthRepository {
             headers: _headers(accessToken: accessToken),
             body: jsonEncode(body),
           )
-          .timeout(ApiConfig.timeout);
+          .timeout(timeout ?? ApiConfig.timeout);
     } on TimeoutException {
       throw const AuthException('NETWORK_ERROR', '网络超时，请稍后重试');
     } on http.ClientException {

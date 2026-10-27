@@ -1,7 +1,7 @@
 name: openelf
 description: OpenElf - 持有制 AI 社区
 publish_to: 'none'
-version: 1.0.4+11
+version: 1.0.4+12
 
 environment:
   sdk: '>=3.0.0 <4.0.0'

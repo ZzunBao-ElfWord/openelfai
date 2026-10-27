@@ -31,12 +31,29 @@ type vendorSpec struct {
 	DisplayName string
 	EnvVar      string
 	BaseURL     string
+	// TestModel 非空时用一次最小 chat/completions 请求验证密钥；
+	// 为空则退回 GET /models（适用于暴露模型列表的上游）。
+	TestModel string
 }
 
 var platformVendorRegistry = []vendorSpec{
 	{Vendor: "deepseek", DisplayName: "DeepSeek", EnvVar: "DEEPSEEK_API_KEY", BaseURL: "https://api.deepseek.com"},
-	{Vendor: "volcengine", DisplayName: "火山引擎（豆包）", EnvVar: "VOLCENGINE_API_KEY", BaseURL: "https://ark.cn-beijing.volces.com/api/v3"},
-	{Vendor: "aliyun", DisplayName: "阿里云百炼", EnvVar: "ALIYUN_API_KEY", BaseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1"},
+	{Vendor: "volcengine", DisplayName: "火山引擎（豆包）", EnvVar: "VOLCENGINE_API_KEY", BaseURL: "https://ark.cn-beijing.volces.com/api/v3", TestModel: "doubao-seed-2-1-pro-260915"},
+	{Vendor: "aliyun", DisplayName: "阿里云百炼（通义千问）", EnvVar: "ALIYUN_API_KEY", BaseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1"},
+	{Vendor: "moonshot", DisplayName: "月之暗面 Kimi", EnvVar: "MOONSHOT_API_KEY", BaseURL: "https://api.moonshot.cn/v1", TestModel: "kimi-k2-0711-preview"},
+	{Vendor: "zhipu", DisplayName: "智谱 AI", EnvVar: "ZHIPU_API_KEY", BaseURL: "https://open.bigmodel.cn/api/paas/v4", TestModel: "glm-4-flash"},
+	{Vendor: "baidu", DisplayName: "百度文心", EnvVar: "BAIDU_API_KEY", BaseURL: "https://qianfan.baidubce.com/v2", TestModel: "ernie-4.0-8k"},
+	{Vendor: "hunyuan", DisplayName: "腾讯混元", EnvVar: "HUNYUAN_API_KEY", BaseURL: "https://tokenhub.tencentmaas.com/v1", TestModel: "hy3"},
+	{Vendor: "stepfun", DisplayName: "阶跃星辰", EnvVar: "STEPFUN_API_KEY", BaseURL: "https://api.stepfun.com/v1", TestModel: "step-2-mini"},
+	{Vendor: "yi", DisplayName: "零一万物", EnvVar: "YI_API_KEY", BaseURL: "https://api.lingyiwanwu.com/v1", TestModel: "yi-lightning"},
+	{Vendor: "spark", DisplayName: "讯飞星火", EnvVar: "SPARK_API_KEY", BaseURL: "https://spark-api-open.xf-yun.com/v1", TestModel: "generalv3.5"},
+	{Vendor: "baichuan", DisplayName: "百川智能", EnvVar: "BAICHUAN_API_KEY", BaseURL: "https://api.baichuan-ai.com/v1", TestModel: "Baichuan4"},
+	{Vendor: "openai", DisplayName: "OpenAI", EnvVar: "OPENAI_API_KEY", BaseURL: "https://api.openai.com/v1", TestModel: "gpt-4o-mini"},
+	{Vendor: "anthropic", DisplayName: "Anthropic（Claude）", EnvVar: "ANTHROPIC_API_KEY", BaseURL: "https://api.anthropic.com/v1", TestModel: "claude-3-5-haiku-latest"},
+	{Vendor: "google", DisplayName: "Google（Gemini）", EnvVar: "GOOGLE_API_KEY", BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai", TestModel: "gemini-2.0-flash"},
+	{Vendor: "xai", DisplayName: "xAI（Grok）", EnvVar: "XAI_API_KEY", BaseURL: "https://api.x.ai/v1", TestModel: "grok-2-latest"},
+	{Vendor: "mistral", DisplayName: "Mistral AI", EnvVar: "MISTRAL_API_KEY", BaseURL: "https://api.mistral.ai/v1", TestModel: "mistral-small-latest"},
+	{Vendor: "cohere", DisplayName: "Cohere", EnvVar: "COHERE_API_KEY", BaseURL: "https://api.cohere.ai/compatibility/v1", TestModel: "command-r-08-2024"},
 }
 
 const (
@@ -178,7 +195,7 @@ func truncateVendorMessage(s string) string {
 }
 
 // ListPlatformVendors GET /api/v1/platform/vendors
-// 按注册表顺序固定输出三家；未配置厂商 configured=false，其余字段 null/0。
+// 按注册表顺序输出全部厂商；未配置厂商 configured=false，其余字段 null/0。
 // 严禁返回 key_cipher 或任何明文。
 func (d Deps) ListPlatformVendors(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
@@ -452,10 +469,15 @@ func testVendorEndpoint(spec vendorSpec, apiKey string) (result, message string,
 	url := spec.BaseURL + "/models"
 	var body io.Reader
 	contentType := ""
-	if spec.Vendor == "volcengine" {
+	if spec.TestModel != "" {
 		method = http.MethodPost
 		url = spec.BaseURL + "/chat/completions"
-		body = strings.NewReader(`{"model":"doubao-pro-32k","messages":[{"role":"user","content":"ping"}],"max_tokens":1}`)
+		payload, _ := json.Marshal(map[string]any{
+			"model":      spec.TestModel,
+			"messages":   []map[string]string{{"role": "user", "content": "ping"}},
+			"max_tokens": 1,
+		})
+		body = strings.NewReader(string(payload))
 		contentType = "application/json"
 	}
 

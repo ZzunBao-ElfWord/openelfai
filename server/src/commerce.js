@@ -135,6 +135,9 @@ function validateIdNumber(raw) {
   return null;
 }
 
+/// 证件照上限：与阿里云实人认证的图片限制保持一致（单张 2MB）。
+const ID_IMAGE_LIMIT = 2 * 1024 * 1024;
+
 function maskName(name) {
   if (!name) return '';
   if (name.length === 1) return name;
@@ -144,6 +147,29 @@ function maskName(name) {
 function maskIdNumber(id) {
   if (id.length <= 8) return id;
   return id.slice(0, 4) + '*'.repeat(Math.max(id.length - 8, 4)) + id.slice(-4);
+}
+
+function sha256(buffer) {
+  return crypto.createHash('sha256').update(buffer).digest('hex');
+}
+
+/// 证件照解码：客户端传 base64（允许 data: 前缀），服务端只接受 JPEG/PNG 且不超过 2MB。
+function decodeIdImage(raw, label) {
+  const text = typeof raw === 'string' ? raw.trim() : '';
+  if (!text) throw fail(400, 'INVALID_ID_IMAGE', `请上传身份证${label}`);
+  const base64 = text.startsWith('data:') ? text.slice(text.indexOf(',') + 1) : text;
+  if (!base64 || !/^[A-Za-z0-9+/=\s]+$/.test(base64)) {
+    throw fail(400, 'INVALID_ID_IMAGE', `身份证${label}格式不正确`);
+  }
+  const image = Buffer.from(base64, 'base64');
+  if (image.length === 0) throw fail(400, 'INVALID_ID_IMAGE', `身份证${label}格式不正确`);
+  if (image.length > ID_IMAGE_LIMIT) {
+    throw fail(400, 'ID_IMAGE_TOO_LARGE', `身份证${label}超过 2MB，请重新拍摄上传`);
+  }
+  const jpeg = image[0] === 0xff && image[1] === 0xd8;
+  const png = image[0] === 0x89 && image[1] === 0x50 && image[2] === 0x4e && image[3] === 0x47;
+  if (!jpeg && !png) throw fail(400, 'INVALID_ID_IMAGE', `身份证${label}需为 JPG 或 PNG 图片`);
+  return image;
 }
 
 /// 确定性派生地址：同一个 seed 永远得到同一个地址。
@@ -186,11 +212,16 @@ function bump(elf, delta) {
   elf.attention = Math.max(0, (Number(elf.attention) || 0) + delta);
 }
 
-/// 兼容旧数据：缺时间戳的帖子按「最早」处理，互动计数缺省补 0。
+/// 兼容旧数据：缺时间戳的帖子保留原有文案，互动计数缺省补 0。
 function normalizePost(post) {
-  post.createdAt = post.createdAt || post.time || '1970-01-01T00:00:00.000Z';
-  // 相对时间由服务端统一换算，内容发布后不会一直停在「刚刚」。
-  post.timeAgo = timeAgoLabel(post.createdAt);
+  const stamp = post.createdAt || post.time;
+  if (stamp) {
+    post.createdAt = stamp;
+    // 相对时间由服务端统一换算，内容发布后不会一直停在「刚刚」。
+    post.timeAgo = timeAgoLabel(stamp);
+  } else {
+    post.timeAgo = post.timeAgo || '刚刚';
+  }
   for (const key of ['views', 'dwell', 'replies', 'likes', 'collects']) {
     if (!Number.isFinite(post[key])) post[key] = 0;
   }
@@ -256,7 +287,11 @@ function newElf(user, template, id) {
   return elf;
 }
 
-function createCommerceService({ store, settings, payout = null }) {
+function createCommerceService({ store, settings, payout = null, realname = null,
+  identityPolicy = {} }) {
+  // 同一用户同一证件连续失败达到上限后锁定一段时间，避免拿证件号反复试探。
+  const identityMaxFailures = Math.max(1, Number(identityPolicy.maxFailures) || 5);
+  const identityLockMs = Math.max(1, Number(identityPolicy.lockHours) || 24) * 3600000;
   function environment(hint) {
     if (hint != null && !['Sandbox', 'sandbox', 'Production', 'production'].includes(hint)) throw fail(400, 'INVALID_ENVIRONMENT', '交易环境无效');
     const value = hint === 'Sandbox' || hint === 'sandbox' ? 'Sandbox' :
@@ -483,7 +518,7 @@ function createCommerceService({ store, settings, payout = null }) {
         collectedPosts: collects.map((row) => row.postId),
         watchedPosts: watches.map((row) => row.postId),
         comments: comments.map((row) => ({ id: row.id, postId: row.postId, authorLabel: row.authorLabel,
-          text: row.text, time: row.time, isMine: row.userId === user.id })),
+          text: row.text, time: timeAgoLabel(row.time), isMine: row.userId === user.id })),
         books: books.map((book) => ({ id: book.id, moduleId: book.moduleId,
           ownerAddress: book.ownerAddress, mintedAt: book.mintedAt })),
         elves: [...assets.values()].map((elf) => ({ ...decayAttention(elf),
@@ -940,21 +975,76 @@ function createCommerceService({ store, settings, payout = null }) {
     // 回流是否真的计分只有服务端知道，把结果带回给客户端做提示。
     return referralDelta == null ? result : { ...result, referral: { delta: referralDelta } };
   }
-  /// 实名二要素复核：服务端校验格式与校验位后落库，只保留脱敏结果。
-  /// 完整姓名与证件号只在本次请求内使用，不写入对象存储、不进入日志。
+  /// 实名核验：服务端对接阿里云实人认证（证件照 OCR + 权威源二要素核验），
+  /// 只有「权威源一致」且「照片内容与填写一致」才落库，只保留脱敏结果，证照不保存。
   async function verifyIdentity(user, body) {
     if (!settings.enabled) throw fail(503, 'PAYMENTS_DISABLED', '消费服务尚未开放');
     const env = environment(body?.environment);
-    const nameError = validateRealName(body?.realName);
+    const realName = typeof body?.realName === 'string' ? body.realName.trim() : '';
+    const idNumber = typeof body?.idNumber === 'string' ? body.idNumber.trim().toUpperCase() : '';
+    const nameError = validateRealName(realName);
     if (nameError) throw fail(400, 'INVALID_REAL_NAME', nameError);
-    const idError = validateIdNumber(body?.idNumber);
+    const idError = validateIdNumber(idNumber);
     if (idError) throw fail(400, 'INVALID_ID_NUMBER', idError);
+    const frontImage = decodeIdImage(body?.frontImage, '人像面');
+    const backImage = decodeIdImage(body?.backImage, '国徽面');
+    if (!realname) throw fail(503, 'REALNAME_UNAVAILABLE', '实名核验服务暂不可用，请稍后再试');
+
+    const now = Date.now();
+    const idFingerprint = sha256(idNumber);
+    const lock = await store.transaction(env, (tx) => tx.get('identityLock', user.id));
+    const lockedUntilMs = lock && lock.fingerprint === idFingerprint
+      ? Date.parse(lock.lockedUntil || '') : NaN;
+    if (Number.isFinite(lockedUntilMs) && lockedUntilMs > now) {
+      const hours = Math.max(1, Math.ceil((lockedUntilMs - now) / 3600000));
+      throw fail(429, 'REALNAME_LOCKED', `实名核验失败次数过多，请 ${hours} 小时后再试`);
+    }
+
+    let result;
+    try {
+      result = await realname.verify({ realName, idNumber, frontImage, backImage });
+    } catch (error) {
+      if (error?.code === 'REALNAME_DOCUMENT_UNREADABLE') {
+        throw fail(400, 'REALNAME_DOCUMENT_UNREADABLE', error.message);
+      }
+      // 上游超时/5xx/网络异常：返回可重试错误，绝不判成「认证失败」。
+      throw fail(503, 'REALNAME_UNAVAILABLE', '实名核验服务暂不可用，请稍后再试');
+    }
+
+    if (result.status !== 'match') {
+      // 锁定期已过的旧记录不再累计，重新从 0 开始计失败次数。
+      const counted = lock && lock.fingerprint === idFingerprint && !lock.lockedUntil;
+      const failures = (counted ? Number(lock.failures) || 0 : 0) + 1;
+      const lockedUntil = failures >= identityMaxFailures
+        ? new Date(now + identityLockMs).toISOString() : null;
+      await store.transaction(env, async (tx) => {
+        await tx.put('identityLock', user.id, { fingerprint: idFingerprint, failures, lockedUntil,
+          updatedAt: new Date(now).toISOString() },
+        { owner: user.id, state: lockedUntil ? 'locked' : 'counting' });
+      });
+      if (lockedUntil) {
+        throw fail(429, 'REALNAME_LOCKED',
+          `实名核验失败次数过多，请 ${Math.round(identityLockMs / 3600000)} 小时后再试`);
+      }
+      if (result.status === 'notfound') {
+        throw fail(422, 'REALNAME_NOT_FOUND', '未查询到该身份信息，请核对姓名与身份证号');
+      }
+      throw fail(422, 'REALNAME_MISMATCH', result.reason === 'document'
+        ? '填写信息与身份证照片不一致，请核对后重新上传'
+        : '姓名与身份证号不匹配，请核对后重试');
+    }
+
     const record = { userId: user.id, status: 'verified',
-      maskedName: maskName(String(body.realName).trim()),
-      maskedIdNumber: maskIdNumber(String(body.idNumber).trim().toUpperCase()),
-      provider: 'server_checksum', verifiedAt: new Date().toISOString() };
+      maskedName: maskName(realName),
+      maskedIdNumber: maskIdNumber(idNumber),
+      provider: realname.id || 'server_checksum',
+      verifiedAt: new Date(now).toISOString(),
+      // 证照不落库：只留摘要，证明本次认证用的就是这两张图。
+      documents: { frontSha256: sha256(frontImage), backSha256: sha256(backImage), stored: false } };
     await store.transaction(env, async (tx) => {
       await tx.put('identity', user.id, record, { owner: user.id, state: 'verified' });
+      await tx.put('identityLock', user.id, { fingerprint: idFingerprint, failures: 0, lockedUntil: null,
+        updatedAt: new Date(now).toISOString() }, { owner: user.id, state: 'clear' });
     });
     return { identity: { status: record.status, maskedName: record.maskedName,
       maskedIdNumber: record.maskedIdNumber, provider: record.provider, verifiedAt: record.verifiedAt } };
