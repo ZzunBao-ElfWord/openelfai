@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import '../models/elf.dart';
 import '../theme.dart';
 import '../sharing/social_share.dart';
+import '../sharing/douyin_share_adapter.dart';
 import 'social_share_sheet.dart';
 
 /// 分享卡片（v1.3）：离屏渲染成 PNG，调系统分享面板。
@@ -17,8 +18,10 @@ class ShareCard extends StatelessWidget {
 
   /// 可选：分享某条帖子时附上的内容摘要。
   final String? excerpt;
+  final bool promotional;
 
-  const ShareCard({super.key, required this.elf, this.excerpt});
+  const ShareCard(
+      {super.key, required this.elf, this.excerpt, this.promotional = true});
 
   @override
   Widget build(BuildContext context) {
@@ -40,9 +43,9 @@ class ShareCard extends StatelessWidget {
               ShaderMask(
                 blendMode: BlendMode.srcIn,
                 shaderCallback: (r) => AppColors.brandGradient.createShader(r),
-                child: const Text(
-                  'OpenElf',
-                  style: TextStyle(
+                child: Text(
+                  promotional ? 'OpenElf' : 'AI 创作',
+                  style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w800,
                       color: Colors.white,
@@ -50,7 +53,7 @@ class ShareCard extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              Text('我的 AI，我做主',
+              Text(promotional ? '我的 AI，我做主' : '内容分享',
                   style: TextStyle(
                       fontSize: 10,
                       color: AppColors.textMuted,
@@ -165,14 +168,15 @@ class ShareCard extends StatelessWidget {
           const Spacer(),
 
           // 链接 + 标识
-          Text(
-            sharePathFor(elf),
-            style: TextStyle(
-                fontSize: 11, color: AppColors.cyan, letterSpacing: 0.3),
-          ),
+          if (promotional)
+            Text(
+              sharePathFor(elf),
+              style: TextStyle(
+                  fontSize: 11, color: AppColors.cyan, letterSpacing: 0.3),
+            ),
           const SizedBox(height: 6),
           Text(
-            '内容由 AI 生成 · 来 OpenElf 世界注视它',
+            promotional ? '内容由 AI 生成 · 来 OpenElf 世界注视它' : '内容由 AI 生成',
             style: TextStyle(fontSize: 9.5, color: AppColors.textFaint),
           ),
         ],
@@ -226,7 +230,9 @@ String sharePathFor(Elf elf) => 'openelfai.com/e/?id=${elf.id}';
 
 /// 分享工具：把 ShareCard 插到 Overlay 离屏渲染 → 截图 → 系统分享面板。
 class ShareHelper {
-  static final _service = SocialShareService();
+  static final _service = SocialShareService(adapters: {
+    SocialChannel.douyin: DouyinShareAdapter(),
+  });
   static bool _busy = false;
 
   static Future<void> shareElf(BuildContext context, Elf elf,
@@ -247,6 +253,12 @@ class ShareHelper {
         action = await confirmShareFallback(context, channel);
       }
       if (!context.mounted || action == null) return;
+      var douyinScene = DouyinShareScene.contacts;
+      if (action.channel == SocialChannel.douyin) {
+        final selected = await confirmDouyinShare(context);
+        if (selected == null || !context.mounted) return;
+        douyinScene = selected;
+      }
       if (action == ShareAction.copyLink) {
         await Clipboard.setData(ClipboardData(text: shareLinkFor(elf)));
         if (context.mounted) {
@@ -255,7 +267,11 @@ class ShareHelper {
         }
         return;
       }
-      await _shareCard(context, elf, excerpt: excerpt, channel: action.channel);
+      await _shareCard(context, elf,
+          excerpt: excerpt,
+          channel: action.channel,
+          douyinScene: douyinScene,
+          preview: action == ShareAction.image);
     } catch (_) {
       if (context.mounted) {
         ScaffoldMessenger.of(context)
@@ -267,7 +283,10 @@ class ShareHelper {
   }
 
   static Future<void> _shareCard(BuildContext context, Elf elf,
-      {String? excerpt, SocialChannel? channel}) async {
+      {String? excerpt,
+      SocialChannel? channel,
+      bool preview = false,
+      DouyinShareScene douyinScene = DouyinShareScene.contacts}) async {
     final renderBox = context.findRenderObject();
     final origin = renderBox is RenderBox &&
             renderBox.hasSize &&
@@ -288,15 +307,19 @@ class ShareHelper {
           color: Colors.transparent,
           child: RepaintBoundary(
             key: key,
-            child: ShareCard(elf: elf, excerpt: excerpt),
+            child: ShareCard(
+                elf: elf,
+                excerpt: excerpt,
+                promotional: channel != SocialChannel.douyin),
           ),
         ),
       ),
     );
     overlay.insert(entry);
     try {
-      // 等两帧，确保离屏内容完成布局与绘制
-      await Future.delayed(const Duration(milliseconds: 80));
+      // Wait for the inserted overlay to actually paint, rather than guessing
+      // device speed with a fixed delay (which can leave the key unmounted).
+      await WidgetsBinding.instance.endOfFrame;
       final renderObject = key.currentContext?.findRenderObject();
       if (renderObject is! RenderRepaintBoundary) throw StateError('分享卡片未就绪');
       final image = await renderObject.toImage(pixelRatio: 3);
@@ -311,6 +334,26 @@ class ShareHelper {
       final link = shareLinkFor(elf);
       if (!context.mounted) return;
       final text = '${elf.name} 正在 OpenElf 世界里生长，来注视它 → $link';
+      if (preview) {
+        final share = await showDialog<bool>(
+            context: context,
+            builder: (context) => Dialog(
+                  child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(mainAxisSize: MainAxisSize.min, children: [
+                        const Text('分享图预览'),
+                        const SizedBox(height: 12),
+                        Flexible(child: Image.memory(png, fit: BoxFit.contain)),
+                        TextButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            child: const Text('通过系统分享或保存')),
+                        TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: const Text('关闭')),
+                      ])),
+                ));
+        if (share != true || !context.mounted) return;
+      }
       if (channel != null) {
         final result = await _service.share(
             channel,
@@ -319,6 +362,7 @@ class ShareHelper {
               text: text,
               link: Uri.parse(link),
               png: png,
+              douyinScene: douyinScene,
             ));
         if (context.mounted && result != SocialShareOutcome.cancelled) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(

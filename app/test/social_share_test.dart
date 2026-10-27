@@ -107,13 +107,17 @@ void main() {
 
   testWidgets('渠道面板展示四平台和系统/复制选项，未配置有明确提示', (tester) async {
     await tester.pumpWidget(MaterialApp(
-        home: Scaffold(body: SocialShareSheet(service: SocialShareService()))));
+        home: Scaffold(
+            body: SocialShareSheet(
+                service:
+                    SocialShareService(config: const SocialShareConfig())))));
     await tester.pumpAndSettle();
     for (final channel in SocialChannel.values) {
       expect(find.text(channel.label), findsOneWidget);
     }
-    expect(find.text('未配置 · 可选择系统分享'), findsNWidgets(4));
-    expect(find.text('系统分享'), findsOneWidget);
+    expect(find.text('未配置'), findsNWidgets(4));
+    expect(find.text('更多分享'), findsOneWidget);
+    expect(find.text('生成分享图'), findsOneWidget);
     expect(find.text('复制链接'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -161,7 +165,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('share-wechat')));
     await tester.pumpAndSettle();
-    expect(find.text('微信暂未接通'), findsOneWidget);
+    expect(find.text('微信暂不可用'), findsOneWidget);
     expect(copies, isEmpty);
     await tester.tap(find.text('取消'));
     await tester.pumpAndSettle();
@@ -175,5 +179,24 @@ void main() {
     expect(copies, [shareLinkFor(elf)]);
     expect(find.text('链接已复制，请自行选择应用发送'), findsOneWidget);
     expect(tester.takeException(), isNull);
+
+    await tester.tap(find.text('分享'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('生成分享图'));
+    await tester.pumpAndSettle();
+    await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await tester.pumpAndSettle();
+    expect(find.text('分享图预览'), findsOneWidget);
+    expect(find.byType(Image), findsOneWidget);
+    await tester.tap(find.text('关闭'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(body: ShareCard(elf: elf, promotional: false))));
+    expect(find.text('内容由 AI 生成'), findsOneWidget);
+    expect(find.text('OpenElf'), findsNothing);
+    expect(find.text(sharePathFor(elf)), findsNothing);
   });
 }

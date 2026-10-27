@@ -1,0 +1,27 @@
+group 'cn.openelfai.sharing'
+version '1.0.0'
+apply plugin: 'com.android.library'
+rootProject.allprojects {
+    repositories {
+        maven { url 'https://artifact.bytedance.com/repository/AwemeOpenSDK' }
+    }
+}
+android {
+    namespace 'cn.openelfai.sharing'
+    compileSdk flutter.compileSdkVersion
+    defaultConfig { minSdk 23 }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+dependencies {
+    implementation 'androidx.core:core:1.16.0'
+    // 0.2.0.11's published POM references an unavailable Polaris artifact.
+    // Pin the preceding official stable SDK, without excluding security modules.
+    // This plugin only shares images; it does not use H5 authorization.
+    implementation 'com.bytedance.ies.ugc.aweme:opensdk-common:0.2.0.10'
+    implementation 'com.bytedance.ies.ugc.aweme:opensdk-china-external:0.2.0.10'
+    implementation 'com.bytedance.ies.ugc.aweme:openokhttp-china-external:0.2.0.10'
+    implementation 'com.bytedance.ies.ugc.aweme:openpicasso-china-external:0.2.0.10'
+}

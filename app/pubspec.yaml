@@ -21,6 +21,8 @@ dependencies:
   image_picker: ^1.2.3
   openelf_ali_captcha:
     path: third_party/openelf_ali_captcha
+  openelf_douyin_share:
+    path: third_party/openelf_douyin_share
 
 dev_dependencies:
   flutter_test:
