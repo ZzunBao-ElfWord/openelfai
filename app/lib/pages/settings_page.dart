@@ -7,6 +7,7 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import 'identity_verify_page.dart';
 import 'wallet_page.dart';
+import 'account_deletion_page.dart';
 
 /// 设置页：账号信息、隐私政策、退出登录、删除账号。
 class SettingsPage extends StatelessWidget {
@@ -100,7 +101,7 @@ class SettingsPage extends StatelessWidget {
                     const SizedBox(height: 8),
                     _dangerTile(
                       icon: Icons.delete_forever_outlined,
-                      label: '删除账号',
+                      label: '注销账号',
                       onTap: () => _confirmDeleteAccount(context),
                     ),
                   ],
@@ -434,44 +435,15 @@ class SettingsPage extends StatelessWidget {
     );
   }
 
-  void _confirmDeleteAccount(BuildContext ctx) {
-    showDialog(
-      context: ctx,
-      builder: (dctx) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title:
-            Text('删除账号', style: TextStyle(color: AppColors.warn, fontSize: 16)),
-        content: Text(
-          '注销后将清除个人资料和内容，所有设备登录及 API Key 立即失效；剩余钻石不再可用。交易与账务记录保留用于对账。\n\n有余额、待确认订单或未结算收益时，须先结算。再次注册是新账号，不会恢复原数据。确认注销？',
-          style: TextStyle(
-              fontSize: 12.5, color: AppColors.textMuted, height: 1.6),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dctx).pop(),
-            child: Text('取消', style: TextStyle(color: AppColors.textMuted)),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.of(dctx).pop();
-              try {
-                await createAuth().deleteAccount();
-              } catch (error) {
-                if (ctx.mounted) _snack(ctx, '注销失败：$error');
-                return;
-              }
-              await AppState.instance.onLogout();
-              if (!ctx.mounted) return;
-              ScaffoldMessenger.of(ctx).showSnackBar(
-                const SnackBar(content: Text('账号已注销')),
-              );
-            },
-            child: Text('确认删除', style: TextStyle(color: AppColors.warn)),
-          ),
-        ],
-      ),
-    );
+  Future<void> _confirmDeleteAccount(BuildContext ctx) async {
+    final deleted = await Navigator.of(ctx).push<bool>(MaterialPageRoute(
+      builder: (_) => AccountDeletionPage(
+        auth: createAuth(), onDeleted: AppState.instance.onLogout),
+    ));
+    if (deleted != true || !ctx.mounted) return;
+    final messenger = ScaffoldMessenger.of(ctx);
+    Navigator.of(ctx).popUntil((route) => route.isFirst);
+    messenger.showSnackBar(const SnackBar(content: Text('账号已注销')));
   }
 
   static String _maskPhone(String phone) {
