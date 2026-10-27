@@ -13,7 +13,17 @@ function maskPhone(phone) {
   const io = readline.createInterface({ input: process.stdin, output: process.stdout });
   const db = await createPool(config);
   try {
-    const selector = (await io.question('请输入要注销的完整手机号；若V1已注销但实名残留，请输入准确用户ID：')).trim();
+    const selector = (await io.question('请输入完整手机号或准确用户ID；输入 LIST 查看V1已注销但实名残留的账号：')).trim();
+    if (selector === 'LIST') {
+      const [incomplete] = await db.execute(
+        `SELECT u.id AS userId, u.created_at AS createdAt,
+          i.masked_name AS maskedName, i.masked_id_number AS maskedIdNumber,
+          i.verified_at AS verifiedAt
+         FROM users u JOIN identity_verifications i ON i.user_id=u.id
+         WHERE u.status='deleted' ORDER BY i.updated_at DESC LIMIT 20`);
+      console.log(incomplete.length ? incomplete : '没有发现V1注销后残留实名资料的账号');
+      return;
+    }
     if (!/^1[3-9]\d{9}$/.test(selector) && !/^u_[a-f0-9]{32}$/.test(selector)) {
       throw new Error('手机号或用户ID格式不正确，未执行');
     }
