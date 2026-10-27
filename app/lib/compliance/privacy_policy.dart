@@ -1,0 +1,63 @@
+/// Verbatim text snapshot of the operator's published policy (whitespace/layout only).
+/// Source checked on 2026-10-27. Update alongside the website; not a legal approval.
+class PrivacyPolicy {
+  static const sourceUrl = 'https://openelfai.com/privacy/';
+  static const updatedAt = '2026 年 10 月 27 日';
+  static const introduction = '本政策说明开放精灵（OpenElf）在官网、App 与开放平台中如何处理你的个人信息。'
+      '我们遵循最小必要原则，只收集提供服务所必需的信息。';
+
+  static const sections = <PrivacyPolicySection>[
+    PrivacyPolicySection('我们收集的信息', [
+      '在你使用服务的过程中，我们可能收集以下信息：',
+      '• 账号信息：手机号（唯一账号）、短信验证码、登录时间与设备标识。',
+      '• 实名信息：当你进行实名认证或开通创作者收益时提交的姓名、身份证号与身份证正反面照片。相关信息由服务端调用阿里云完成 OCR 与二要素核验，平台仅保存核验结果与脱敏信息，不保存完整证件号，也不写入日志。',
+      '• 内容信息：创建 AI 时提交的文字描述、形象与人格设定，AI 对话内容，发布的内容，以及关注、点赞、收藏、评论等互动记录。',
+      '• 交易信息：充值金额、钻石余额与流水、打赏记录、创作者收益与提现记录。我们不收集你的银行卡号或支付密码，支付由支付宝等渠道完成。',
+      '• 设备与日志：IP 地址、浏览器类型、操作系统、访问时间、错误日志与安全审计记录。',
+    ]),
+    PrivacyPolicySection('信息如何被使用', [
+      '• 完成注册登录、实名核验与账号安全校验。',
+      '• 生成并展示 AI 内容，调用大模型完成对话与创作。',
+      '• 进行计费、结算、提现与对账。',
+      '• 开展内容安全与风控，识别违法和不良信息、防刷量、防欺诈。',
+      '• 改进产品与统计分析；此类分析尽量使用聚合、去标识化数据。',
+    ]),
+    PrivacyPolicySection('第三方服务', [
+      '为实现上述功能，我们可能委托以下类型的服务商处理必要信息：',
+      '• 云服务与短信验证服务商。',
+      '• 实名认证服务商（阿里云）。',
+      '• 支付渠道（支付宝等）。',
+      '• 大模型服务商；部分服务商可能位于境外，用于生成对话与内容。',
+      '我们只提供实现功能所需的最少信息，并要求服务商按协议与法律保护你的信息。我们不会出售你的个人信息。',
+    ]),
+    PrivacyPolicySection('存储与安全', [
+      '• 数据存储于中华人民共和国境内的服务器；如确需跨境传输，我们将依法履行相应程序。',
+      '• 传输使用 HTTPS；敏感字段加密存储；后台访问遵循最小权限并保留审计记录。',
+      '• 完整姓名与证件号不落库、不写日志，页面展示一律脱敏。',
+      '• 我们按业务需要与法律要求保留信息；超出期限后删除或匿名化。',
+    ]),
+    PrivacyPolicySection('你的权利', [
+      '你可以查询、更正、复制、删除个人信息，撤回授权，或注销账号。注销后，账号相关数据将按法律要求删除或匿名化；已完成的交易与依法需留存的记录除外。',
+      '如需行使上述权利，请发送邮件至 support@openelfai.com，我们将在 15 个工作日内答复。',
+    ]),
+    PrivacyPolicySection('未成年人', [
+      '本服务面向成年人。未满 18 周岁的用户应在监护人同意与指导下使用；我们不会主动面向不满 14 周岁的儿童提供服务。如发现相关账号，我们将依法处理。',
+    ]),
+    PrivacyPolicySection('Cookie 与本地存储', [
+      '官网仅使用必要的本地存储（例如外观偏好与浏览状态），不用于广告追踪。你可以在浏览器中随时清除这些数据。',
+    ]),
+    PrivacyPolicySection('政策更新', [
+      '政策更新后，我们会在本页与 App 内公布；重大变更会以显著方式提示。继续使用服务即表示你接受更新后的政策。',
+    ]),
+    PrivacyPolicySection('联系我们', [
+      '个人信息保护相关事宜，请联系 support@openelfai.com。',
+      '本页为官网公示版本，与 App 内「设置 - 隐私政策」展示的文本保持一致；如有差异，以更新日期较新的版本为准。',
+    ]),
+  ];
+}
+
+class PrivacyPolicySection {
+  final String title;
+  final List<String> paragraphs;
+  const PrivacyPolicySection(this.title, this.paragraphs);
+}

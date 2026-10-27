@@ -15,6 +15,7 @@ import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'home_shell.dart';
+import 'privacy_policy_page.dart';
 
 /// 登录页：手机号 + 短信验证码（服务端下发）。
 class LoginPage extends StatefulWidget {
@@ -409,6 +410,14 @@ class _LoginPageState extends State<LoginPage> {
                 Text(
                   '首次登录即视为同意《用户协议》与《隐私政策》',
                   style: TextStyle(fontSize: 10.5, color: AppColors.textFaint),
+                ),
+                TextButton(
+                  key: const ValueKey('login-open-privacy'),
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                        builder: (_) => const PrivacyPolicyPage()),
+                  ),
+                  child: const Text('阅读隐私政策'),
                 ),
               ],
             ),
