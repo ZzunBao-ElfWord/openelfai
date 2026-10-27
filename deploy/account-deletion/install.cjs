@@ -2,18 +2,23 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const cp = require('node:child_process');
+const crypto = require('node:crypto');
 const entry = '/opt/openelf-api/src/app.js';
 const modulePath = '/opt/openelf-api/src/account_deletion.js';
 const source = fs.readFileSync(path.join(__dirname, 'account_deletion.js'));
 const marker = "  require('./account_deletion').registerAccountDeletion(app, { db, authenticate });";
 const anchor = '  async function ensureUser(phone) {';
 const original = fs.readFileSync(entry, 'utf8');
+const previousModuleSha256 = '0643c9992edf58580fefea3bcfd613910483d5ef963a09626a6dd813342423ad';
 if (!original.includes('async function authenticate(request)') || original.split(anchor).length !== 2) throw new Error('未知鉴权入口，停止，未覆盖');
-if (fs.existsSync(modulePath) && !fs.readFileSync(modulePath).equals(source)) throw new Error('已有未知注销模块，停止，未覆盖');
+if (fs.existsSync(modulePath) && !fs.readFileSync(modulePath).equals(source)) {
+  const existingHash = crypto.createHash('sha256').update(fs.readFileSync(modulePath)).digest('hex');
+  if (existingHash !== previousModuleSha256) throw new Error('已有未知注销模块，停止，未覆盖');
+}
 if (original.includes('/api/v1/auth/delete-account') && !original.includes(marker)) throw new Error('已有注销路由，停止，未覆盖');
 const updated = original.includes(marker) ? original : original.replace(anchor, marker + '\n\n' + anchor);
 if (!process.argv.includes('--install')) {
-  console.log('注销增量安装预检通过；未修改代码、账号、配置或数据库');
+  console.log('注销V2增量安装预检通过；未修改代码、账号、配置或数据库');
   process.exit(0);
 }
 if (process.getuid() !== 0) throw new Error('请在服务器使用 root 执行');

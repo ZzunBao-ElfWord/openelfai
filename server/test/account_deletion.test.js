@@ -1,7 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { deleteAccount, registerAccountDeletion, PERSONAL_KINDS } = require('../src/account_deletion');
+const { cleanupDeletedAccount, deleteAccount, registerAccountDeletion, PERSONAL_KINDS } = require('../src/account_deletion');
 
 function fixture({ balance = 0, meta = [], orders = [], pending = [], active = true, breakAt = '' } = {}) {
   const calls = [];
@@ -31,6 +31,7 @@ test('注销事务清个人资料、所有会话和API密钥；保留交易、�
   assert.match(sql, /UPDATE refresh_sessions.*WHERE user_id/);
   assert.match(sql, /UPDATE platform_api_keys.*key_cipher = NULL/);
   assert.match(sql, /DELETE FROM sms_codes/);
+  assert.match(sql, /DELETE FROM identity_verifications WHERE user_id/);
   assert.match(sql, /DELETE FROM payment_objects/);
   assert.ok(PERSONAL_KINDS.includes('identity') && PERSONAL_KINDS.includes('chat'));
   assert.ok(!PERSONAL_KINDS.includes('withdrawal') && !PERSONAL_KINDS.includes('alipay_order'));
@@ -70,4 +71,17 @@ test('路由必须认证并明确确认，不能指定其他用户', async () =>
   await assert.rejects(handler({ body: {} }, {}), { code: 'DELETE_CONFIRMATION_REQUIRED' });
   await handler({ body: { confirmation: 'DELETE_MY_ACCOUNT', userId: 'victim' } }, { header() {} });
   assert.equal(f.calls.find(([s]) => s.startsWith('SELECT * FROM users'))[1][0], 'old');
+});
+
+test('可修复V1已经注销但残留的实名资料，不能用于活动账号', async () => {
+  const deleted = fixture({ active: false });
+  assert.deepEqual(await cleanupDeletedAccount(deleted.db, 'old'), { cleaned: true });
+  const sql = deleted.calls.map(([s]) => s).join('\n');
+  assert.match(sql, /DELETE FROM identity_verifications/);
+  assert.match(sql, /UPDATE refresh_sessions/);
+  assert.match(sql, /UPDATE platform_api_keys/);
+  assert.ok(deleted.calls.some(([s]) => s === 'commit'));
+  const active = fixture();
+  await assert.rejects(cleanupDeletedAccount(active.db, 'old'), { code: 'NOT_DELETED_ACCOUNT' });
+  assert.ok(!active.calls.some(([s]) => s === 'commit'));
 });

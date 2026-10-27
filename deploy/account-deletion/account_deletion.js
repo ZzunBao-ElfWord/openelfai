@@ -40,6 +40,11 @@ async function deleteAccount(db, userId) {
     await tx.execute('UPDATE refresh_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL', [now, userId]);
     await tx.execute('UPDATE platform_api_keys SET revoked_at = COALESCE(revoked_at, ?), key_cipher = NULL WHERE user_id = ?', [now, userId]);
     await tx.execute('DELETE FROM sms_codes WHERE phone = ?', [user.phone]);
+    // The production identity service stores only masked verification results in
+    // this dedicated table. ID images are streamed to the provider and are not
+    // persisted by OpenElf.
+    try { await tx.execute('DELETE FROM identity_verifications WHERE user_id = ?', [userId]); }
+    catch (error) { if (error.code !== 'ER_NO_SUCH_TABLE') throw error; }
     await tx.execute('DELETE FROM platform_developers WHERE user_id = ?', [userId]);
     await tx.execute(`DELETE FROM payment_objects WHERE owner_id = ? AND kind IN (${PERSONAL_KINDS.map(() => '?').join(',')})`, [userId, ...PERSONAL_KINDS]);
     // The push module is optional on older deployments. Do not ignore other errors.
@@ -50,6 +55,30 @@ async function deleteAccount(db, userId) {
       ['deleted_' + crypto.randomBytes(6).toString('hex'), userId]);
     await tx.commit();
     return { deleted: true };
+  } catch (error) {
+    await tx.rollback();
+    throw error;
+  } finally { tx.release(); }
+}
+
+async function cleanupDeletedAccount(db, userId) {
+  const tx = await db.getConnection();
+  try {
+    await tx.beginTransaction();
+    const [[user]] = await tx.execute('SELECT * FROM users WHERE id = ? FOR UPDATE', [userId]);
+    if (!user || user.status !== 'deleted') {
+      throw fail(409, 'NOT_DELETED_ACCOUNT', '该用户不是上一版已注销账号，未执行残留清理');
+    }
+    const now = Date.now();
+    await tx.execute('UPDATE refresh_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL', [now, userId]);
+    await tx.execute('UPDATE platform_api_keys SET revoked_at = COALESCE(revoked_at, ?), key_cipher = NULL WHERE user_id = ?', [now, userId]);
+    await tx.execute('DELETE FROM identity_verifications WHERE user_id = ?', [userId]);
+    await tx.execute('DELETE FROM platform_developers WHERE user_id = ?', [userId]);
+    await tx.execute(`DELETE FROM payment_objects WHERE owner_id = ? AND kind IN (${PERSONAL_KINDS.map(() => '?').join(',')})`, [userId, ...PERSONAL_KINDS]);
+    try { await tx.execute('DELETE FROM push_devices WHERE user_id = ?', [userId]); }
+    catch (error) { if (error.code !== 'ER_NO_SUCH_TABLE') throw error; }
+    await tx.commit();
+    return { cleaned: true };
   } catch (error) {
     await tx.rollback();
     throw error;
@@ -70,4 +99,4 @@ function registerAccountDeletion(app, { db, authenticate }) {
   });
 }
 
-module.exports = { deleteAccount, registerAccountDeletion, PERSONAL_KINDS };
+module.exports = { cleanupDeletedAccount, deleteAccount, registerAccountDeletion, PERSONAL_KINDS };
