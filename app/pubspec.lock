@@ -574,6 +574,13 @@ packages:
       relative: true
     source: path
     version: "1.0.0"
+  openelf_wechat_share:
+    dependency: "direct main"
+    description:
+      path: "third_party/openelf_wechat_share"
+      relative: true
+    source: path
+    version: "1.0.0"
   package_config:
     dependency: transitive
     description:

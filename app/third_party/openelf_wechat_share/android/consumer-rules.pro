@@ -1,0 +1,2 @@
+-keep class com.tencent.mm.opensdk.** { *; }
+-keep class cn.openelfai.wechat.WechatCallbackActivity { *; }

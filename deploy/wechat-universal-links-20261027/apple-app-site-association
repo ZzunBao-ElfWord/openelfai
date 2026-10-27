@@ -1,0 +1,11 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "ZJ3YQXTB93.com.ai.openelf",
+        "paths": ["/app/*", "/share/*", "/e/*"]
+      }
+    ]
+  }
+}

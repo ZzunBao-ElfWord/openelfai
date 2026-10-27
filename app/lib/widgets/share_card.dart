@@ -10,6 +10,7 @@ import '../theme.dart';
 import '../sharing/social_share.dart';
 import '../sharing/douyin_share_adapter.dart';
 import '../sharing/bilibili_share_adapter.dart';
+import '../sharing/wechat_share_adapter.dart';
 import 'social_share_sheet.dart';
 
 /// 分享卡片（v1.3）：离屏渲染成 PNG，调系统分享面板。
@@ -232,6 +233,7 @@ String sharePathFor(Elf elf) => 'openelfai.com/e/?id=${elf.id}';
 /// 分享工具：把 ShareCard 插到 Overlay 离屏渲染 → 截图 → 系统分享面板。
 class ShareHelper {
   static final _service = SocialShareService(adapters: {
+    SocialChannel.wechat: const WechatShareAdapter(),
     SocialChannel.douyin: DouyinShareAdapter(),
     SocialChannel.bilibili: BilibiliShareAdapter(
         clientId:
@@ -258,6 +260,12 @@ class ShareHelper {
       }
       if (!context.mounted || action == null) return;
       var douyinScene = DouyinShareScene.contacts;
+      var wechatScene = WechatShareScene.session;
+      if (action.channel == SocialChannel.wechat) {
+        final selected = await confirmWechatShare(context);
+        if (selected == null || !context.mounted) return;
+        wechatScene = selected;
+      }
       if (action.channel == SocialChannel.douyin) {
         final selected = await confirmDouyinShare(context);
         if (selected == null || !context.mounted) return;
@@ -275,6 +283,7 @@ class ShareHelper {
           excerpt: excerpt,
           channel: action.channel,
           douyinScene: douyinScene,
+          wechatScene: wechatScene,
           preview: action == ShareAction.image);
     } catch (_) {
       if (context.mounted) {
@@ -290,7 +299,8 @@ class ShareHelper {
       {String? excerpt,
       SocialChannel? channel,
       bool preview = false,
-      DouyinShareScene douyinScene = DouyinShareScene.contacts}) async {
+      DouyinShareScene douyinScene = DouyinShareScene.contacts,
+      WechatShareScene wechatScene = WechatShareScene.session}) async {
     final renderBox = context.findRenderObject();
     final origin = renderBox is RenderBox &&
             renderBox.hasSize &&
@@ -367,6 +377,7 @@ class ShareHelper {
               link: Uri.parse(link),
               png: png,
               douyinScene: douyinScene,
+              wechatScene: wechatScene,
             ));
         if (context.mounted && result != SocialShareOutcome.cancelled) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(

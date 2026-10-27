@@ -1,0 +1,18 @@
+name: openelf_wechat_share
+description: User-initiated image sharing through the official WeChat SDK.
+version: 1.0.0
+publish_to: none
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: '>=3.10.0'
+dependencies:
+  flutter:
+    sdk: flutter
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: cn.openelfai.wechat
+        pluginClass: OpenElfWechatSharePlugin
+      ios:
+        pluginClass: OpenElfWechatSharePlugin

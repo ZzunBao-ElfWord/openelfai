@@ -36,6 +36,10 @@
 	<string>awf8w18qtnqq1kum</string>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
+		<string>weixin</string>
+		<string>wechat</string>
+		<string>weixinULAPI</string>
+		<string>weixinURLParamsAPI</string>
 		<string>douyinopensdk</string>
 		<string>douyinliteopensdk</string>
 		<string>douyinsharesdk</string>
@@ -50,6 +54,7 @@
 			<array><string>awf8w18qtnqq1kum</string></array>
 		</dict>
 	</array>
+	<key>WechatShareAppID</key><string>$(OPENELF_WECHAT_APP_ID)</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

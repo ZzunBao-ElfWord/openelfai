@@ -1,0 +1,13 @@
+group 'cn.openelfai.wechat'
+version '1.0.0'
+apply plugin: 'com.android.library'
+android {
+    namespace 'cn.openelfai.wechat'
+    compileSdk flutter.compileSdkVersion
+    defaultConfig { minSdk 23; consumerProguardFiles 'consumer-rules.pro' }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+dependencies { implementation 'com.tencent.mm.opensdk:wechat-sdk-android:6.8.40' }

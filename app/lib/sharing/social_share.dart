@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'wechat_share_config.dart';
 
 enum SocialChannel { bilibili, xiaohongshu, douyin, wechat }
 
@@ -10,6 +11,8 @@ enum ShareAvailability {
 }
 
 enum DouyinShareScene { contacts, story }
+
+enum WechatShareScene { session, timeline }
 
 enum SocialShareOutcome { handedOff, cancelled, failed }
 
@@ -33,7 +36,7 @@ class SocialShareConfig {
         String.fromEnvironment('OPENELF_SHARE_XIAOHONGSHU_APP_ID'),
     // Must match both native SDKs and the registered iOS URL scheme.
     SocialChannel.douyin: 'awf8w18qtnqq1kum',
-    SocialChannel.wechat: String.fromEnvironment('OPENELF_SHARE_WECHAT_APP_ID'),
+    SocialChannel.wechat: WechatShareConfig.appId,
   });
   bool configured(SocialChannel channel) =>
       publicAppIds[channel]?.trim().isNotEmpty ?? false;
@@ -46,12 +49,14 @@ class SocialShareContent {
   final Uri link;
   final Uint8List png;
   final DouyinShareScene douyinScene;
+  final WechatShareScene wechatScene;
   const SocialShareContent(
       {required this.title,
       required this.text,
       required this.link,
       required this.png,
-      this.douyinScene = DouyinShareScene.contacts});
+      this.douyinScene = DouyinShareScene.contacts,
+      this.wechatScene = WechatShareScene.session});
 }
 
 /// Implement using approved SDK/API after credentials and permissions are issued.

@@ -2,6 +2,45 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../sharing/social_share.dart';
 
+Future<WechatShareScene?> confirmWechatShare(BuildContext context) {
+  var selected = WechatShareScene.session;
+  return showDialog<WechatShareScene>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setState) => AlertDialog(
+                title: const Text('分享至微信'),
+                content: Column(mainAxisSize: MainAxisSize.min, children: [
+                  SegmentedButton<WechatShareScene>(
+                      segments: const [
+                        ButtonSegment(
+                            value: WechatShareScene.session,
+                            label: Text('微信好友')),
+                        ButtonSegment(
+                            value: WechatShareScene.timeline,
+                            label: Text('朋友圈')),
+                      ],
+                      selected: {
+                        selected
+                      },
+                      onSelectionChanged: (values) =>
+                          setState(() => selected = values.single)),
+                  const SizedBox(height: 16),
+                  const Text(
+                      '同意后会初始化微信 SDK，将当前 AI 分享卡片及必要的应用信息交给微信。请在微信内确认发送或发布；不会自动群发、绑定账号或读取通讯录。'),
+                  const SizedBox(height: 8),
+                  const Text('本次直接分享图片，不申请相册权限，不代表已发送成功。'),
+                ]),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(dialogContext),
+                      child: const Text('取消')),
+                  TextButton(
+                      onPressed: () => Navigator.pop(dialogContext, selected),
+                      child: const Text('同意并继续'))
+                ],
+              )));
+}
+
 enum ShareAction {
   system,
   copyLink,

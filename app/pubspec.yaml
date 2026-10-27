@@ -23,6 +23,8 @@ dependencies:
     path: third_party/openelf_ali_captcha
   openelf_douyin_share:
     path: third_party/openelf_douyin_share
+  openelf_wechat_share:
+    path: third_party/openelf_wechat_share
 
 dev_dependencies:
   flutter_test:
