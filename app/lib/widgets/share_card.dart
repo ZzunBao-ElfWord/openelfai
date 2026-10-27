@@ -11,6 +11,7 @@ import '../sharing/social_share.dart';
 import '../sharing/douyin_share_adapter.dart';
 import '../sharing/bilibili_share_adapter.dart';
 import '../sharing/wechat_share_adapter.dart';
+import '../sharing/kwai_share_adapter.dart';
 import 'social_share_sheet.dart';
 
 /// 分享卡片（v1.3）：离屏渲染成 PNG，调系统分享面板。
@@ -233,11 +234,10 @@ String sharePathFor(Elf elf) => 'openelfai.com/e/?id=${elf.id}';
 /// 分享工具：把 ShareCard 插到 Overlay 离屏渲染 → 截图 → 系统分享面板。
 class ShareHelper {
   static final _service = SocialShareService(adapters: {
+    SocialChannel.kuaishou: const KwaiShareAdapter(),
     SocialChannel.wechat: const WechatShareAdapter(),
     SocialChannel.douyin: DouyinShareAdapter(),
-    SocialChannel.bilibili: BilibiliShareAdapter(
-        clientId:
-            SocialShareConfig.build.publicAppIds[SocialChannel.bilibili] ?? ''),
+    SocialChannel.bilibili: BilibiliShareAdapter(),
   });
   static bool _busy = false;
 
@@ -261,6 +261,9 @@ class ShareHelper {
       if (!context.mounted || action == null) return;
       var douyinScene = DouyinShareScene.contacts;
       var wechatScene = WechatShareScene.session;
+      if (action.channel == SocialChannel.kuaishou) {
+        if (!await confirmKwaiShare(context) || !context.mounted) return;
+      }
       if (action.channel == SocialChannel.wechat) {
         final selected = await confirmWechatShare(context);
         if (selected == null || !context.mounted) return;
@@ -324,7 +327,8 @@ class ShareHelper {
             child: ShareCard(
                 elf: elf,
                 excerpt: excerpt,
-                promotional: channel != SocialChannel.douyin),
+                promotional: channel != SocialChannel.douyin &&
+                    channel != SocialChannel.kuaishou),
           ),
         ),
       ),

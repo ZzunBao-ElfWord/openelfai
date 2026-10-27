@@ -29,13 +29,19 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>用于选择身份证照片完成实名认证；仅在你选择抖音分享并同意后，保存分享卡片并读取该卡片以交给抖音。</string>
+	<string>用于选择身份证照片完成实名认证；仅在你选择抖音或快手分享并同意后，保存并读取本次分享卡片。</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>仅在你选择抖音分享并同意后，将本次分享卡片保存到系统相册。</string>
+	<string>仅在你选择抖音或快手分享并同意后，将本次分享卡片保存到系统相册。</string>
 	<key>DouyinAppID</key>
 	<string>awf8w18qtnqq1kum</string>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
+		<string>kwai</string>
+		<string>kwaiAuth2</string>
+		<string>kwaiopenapi</string>
+		<string>KwaiBundleToken</string>
+		<string>kwai.clip.multi</string>
+		<string>KwaiSDKMediaV2</string>
 		<string>weixin</string>
 		<string>wechat</string>
 		<string>weixinULAPI</string>
@@ -59,6 +65,7 @@
 		</dict>
 	</array>
 	<key>WechatShareAppID</key><string>$(OPENELF_WECHAT_APP_ID)</string>
+	<key>KwaiShareAppID</key><string>$(OPENELF_KWAI_APP_ID)</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

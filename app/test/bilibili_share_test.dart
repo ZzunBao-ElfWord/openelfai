@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openelf/sharing/bilibili_share_adapter.dart';
 import 'package:openelf/sharing/social_share.dart';
+import 'package:openelf/sharing/pending_share_config.dart';
 
 class FakeBilibiliGateway implements BilibiliShareGateway {
   var probes = 0;
@@ -41,6 +42,15 @@ SocialShareContent material(
         png: png ?? Uint8List.fromList([137, 80, 78, 71, 13, 10, 26, 10]));
 
 void main() {
+  test('待审核Client ID集中留空，不用示例值或启动账号授权', () async {
+    expect(BilibiliShareConfig.clientId, isEmpty);
+    expect(
+        SocialShareConfig.build.publicAppIds[SocialChannel.bilibili], isEmpty);
+    expect(await BilibiliShareAdapter().availability(),
+        ShareAvailability.notConfigured);
+    await expectLater(
+        BilibiliShareAdapter().share(material()), throwsStateError);
+  });
   test('没有Client ID不探测或发送；只有ID仍待接入', () async {
     final gateway = FakeBilibiliGateway();
     final missing = BilibiliShareAdapter(clientId: ' ', gateway: gateway);

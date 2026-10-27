@@ -1,0 +1,13 @@
+group 'cn.openelfai.kwai'
+version '1.0.0'
+apply plugin: 'com.android.library'
+android {
+    namespace 'cn.openelfai.kwai'
+    compileSdk flutter.compileSdkVersion
+    defaultConfig { minSdk 23; consumerProguardFiles 'consumer-rules.pro' }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+}
+dependencies {
+    implementation 'androidx.core:core:1.16.0'
+    implementation 'com.github.kwaisocial:kwai-opensdk-withauth:3.7.6'
+}

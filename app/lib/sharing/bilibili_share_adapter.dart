@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'social_share.dart';
+import 'pending_share_config.dart';
 
 /// Internal prepared material, NOT a Bilibili API/SDK request format.
 /// No OAuth credentials, private chat history, or account-binding operations.
@@ -51,7 +52,8 @@ class BilibiliShareAdapter implements SocialShareAdapter {
   final String clientId;
   final BilibiliShareGateway? gateway;
 
-  BilibiliShareAdapter({required String clientId, this.gateway})
+  BilibiliShareAdapter(
+      {String clientId = BilibiliShareConfig.clientId, this.gateway})
       : clientId = clientId.trim();
 
   @override

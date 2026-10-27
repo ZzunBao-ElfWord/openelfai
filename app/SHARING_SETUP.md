@@ -3,7 +3,7 @@
 ## 入口和体验
 
 - 保留世界、聊天、视频流现有 `ShareHelper.shareElf` 入口，不移动到设置的第三方账号/舞台，不改变一键分发业务。
-- 底部“分享至”面板：微信、抖音、小红书、哔哩哔哩；复制链接、生成分享图、更多系统分享。
+- 底部“分享至”面板：微信、抖音、快手、小红书、哔哩哔哩；复制链接、生成分享图、更多系统分享。快手及B站审核字段暂空。
 - 无虚构好友列表。第三方好友选择由对应 App 提供，不读取本机通讯录。
 - 当前素材是 AI 信息卡及所选内容摘要，不是原始视频上传、账号绑定或后台自动投稿。
 - 分享图可预览、关闭或明确选择系统分享/保存。等待实际绘制帧再截图，释放图片内存；iPad 提供弹出位置，防重复点击。
@@ -44,9 +44,27 @@
 
 ## 其他待接入渠道
 
+### 快手 SDK 代码预接入（审核字段为空）
+
+- 新增 `third_party/openelf_kwai_share`，Android 固定官方 SDK `kwai-opensdk-withauth 3.7.6`，iOS 固定官方 `KwaiSDK 3.7.3`。已核对下载的 Android AAR 与官方 iOS 对应 tag 头文件，不填入官方示例的 AppID。
+- `lib/sharing/pending_share_config.dart` 集中保留空 `KwaiShareConfig.appId` 和空 `BilibiliShareConfig.clientId`。无标识时状态探测、初始化、相册请求和分享调用全部不触发；不能填入模拟值让界面显示可用。
+- 用户主动选择快手并同意后，调用 Android `SinglePictureEdit.Req` / iOS `KSShareMediaFeature_PictureEdit`，只交给图片编辑页，后续由用户在快手内确认发布。不是自动发布，也不是私信授权、好友绑定或视频上传；本次先适配快手主版，不承诺极速版。
+- 不调用 KwaiAuthAPI 或 KSAuthRequest，不申请 openID、手机号和关系链，不需要在客户端配置 AppSecret。官方 Android SDK 发包包含 auth 代码，但合并清单移除了其登录 Activity/别名，没有自创无授权二进制或移除安全校验实现。
+- Android 主工程 `android/gradle.properties` 中 `OPENELF_KWAI_APP_ID` 为空，Gradle 将其传给 SDK manifestPlaceholders，原生检查它与 Dart AppID 一致。`android/app/build.gradle.kts` 只新增公开 AppID 占位符，不改支付依赖/签名/包名。
+- 状态探测仅读取本地安装与 manifest 信息，实际用户同意后才初始化 SDK；禁止自动跳应用市场、清空任务栈、功能降级。使用独立 `KwaiShareFileProvider`，只开放 `kwai-share/` 本次随机 PNG，只读授权给快手主版，完成/超时清理。不能为解决与其他 Provider 的冲突而覆盖它们的 authority 或路径。
+- Android 匹配响应类型、随机 transaction 和 sessionId，只将 SDK 成功信号视为交接，不发放奖励、不当作可信发布证据。原生缓存上传外无日志记录图片/账号信息。
+- iOS 先说明权限和留图，再请求 Photos 读写权限并创建本次卡片资源；图片会留在相册，可自行删除，不遍历其他照片。SDK 回调匹配响应类型和 state，180秒超时。相册拒绝、回跳冷启动、快手版本差异尚需真机验收。
+- `ios/Flutter/KwaiShare.xcconfig` 的 `OPENELF_KWAI_APP_ID` 为空，目前不注册空 URL scheme。审核通过后需同步 Dart/Android/iOS 三处公开 AppID 并新增对应 URL scheme，核对注册的 Universal Link；AppID不是只填Dart就完成原生配置。
+- 暂按 `https://openelfai.com/app/` 准备回跳，复用尚未部署的 AASA `/app/*` 关联。若快手后台登记不同路径需先统一；`iosAssociationReady=false` 不能提前打开。保留原微信、抖音和 Flutter 默认回调，不改已填写微信 AppID。
+- Android 插件 Java 编译和宿主 `processDebugMainManifest` 合并检查通过；相关 Dart 静态检查、客户端回归通过。iOS 仅完成头文件 API 核对，Windows 无 Xcode，未编译也未真机发送；尚不称已实际接通。
+- 上线前须按所用 SDK 的实际信息处理范围补充快手第三方 SDK 隐私披露，核对官方版本隐私清单、使用协议及 App Store 隐私标签；确认页和本说明不能代替正式政策。
+
+官方依据：[Android 接入](https://open.kuaishou.com/platformDocs/develop/mobile-app/android.html)、[iOS 接入](https://open.kuaishou.com/platformDocs/develop/mobile-app/ios.html)、[官方 iOS 示例](https://github.com/KwaiSocial/KwaiSDK-iOS)。
+
 ### B站代码预接入
 
 - `lib/sharing/bilibili_share_adapter.dart` 已注册到普通分享入口，预留 `BilibiliShareGateway` 接口；它是内部适配契约，不是已获批的官方 API。
+- 待审核 Client ID 现集中留在 `pending_share_config.dart`，默认构造适配器使用它。不再通过未核实的构建参数自动写入标识。既没有普通分享的生产网关，也未擅自改成 SDK 授权、账号绑定、私信接口或稿件投稿。
 - 无 Client ID 时“未配置”；仅填 Client ID、没有正式网关时仍“待接入”。默认没有网络、OAuth、原生 SDK 或后台发布调用。
 - 准备只读的独立 PNG 字节副本、标题、所选摘要及本站 HTTPS 链接；校验完整 PNG 文件头、本站无凭证/默认端口链接、非空标题和本地 8MiB 内存预算。该预算不是平台官方限制，文件头检查也不等于完整图片解码。
 - 不携带抖音场景或登录密钥，不伪造平台协议、投稿地址或 URL scheme；取消/失败不当成功。
@@ -55,7 +73,7 @@
 
 小红书、哔哩哔哩尚无生产 SDK 网关及完整获批配置，不能直接定向发送。当前仅保留入口和显式确认后的系统分享/复制；系统能否显示目标 App 取决于已安装 App 和素材支持。
 
-公开 ID 预留：`OPENELF_SHARE_XIAOHONGSHU_APP_ID`、`OPENELF_SHARE_BILIBILI_APP_ID`。仅填 ID 仍是待接入，不代表开通。微信改用上述独立配置，避免构建参数与原生 URL scheme 不一致。
+小红书公开 ID 预留为 `OPENELF_SHARE_XIAOHONGSHU_APP_ID`；B站、快手使用上述空配置。仅填 ID 仍不代表权限开通或完成接入。微信使用上述独立配置，避免构建参数与原生 URL scheme 不一致。
 
 后续分别核对微信移动分享/Universal Links、小红书正式内容分享 SDK、哔哩哔哩获批开放能力。不能用随意构造 scheme 或打开系统面板冒充官方投稿。
 

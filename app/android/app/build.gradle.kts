@@ -24,6 +24,8 @@ android {
 
     defaultConfig {
         applicationId = "com.openelf.app"
+        // Public ID only; intentionally blank while the Kwai app is in review.
+        manifestPlaceholders["KWAI_APP_ID"] = providers.gradleProperty("OPENELF_KWAI_APP_ID").getOrElse("")
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

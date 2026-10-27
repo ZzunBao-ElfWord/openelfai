@@ -32,9 +32,9 @@ SocialShareContent content({String url = 'https://openelfai.com/e/?id=demo'}) =>
         png: Uint8List.fromList([1, 2, 3]));
 
 void main() {
-  test('四渠道名称与路由一一对应，不伪造平台能力', () {
-    expect(
-        SocialChannel.values.map((v) => v.label), ['哔哩哔哩', '小红书', '抖音', '微信']);
+  test('五渠道名称与路由一一对应，不伪造平台能力', () {
+    expect(SocialChannel.values.map((v) => v.label),
+        ['哔哩哔哩', '小红书', '抖音', '微信', '快手']);
     for (final action in ShareAction.values.where((a) => a.channel != null)) {
       expect(action.channel!.name, action.name);
     }
@@ -105,7 +105,7 @@ void main() {
         throwsArgumentError);
   });
 
-  testWidgets('渠道面板展示四平台和系统/复制选项，未配置有明确提示', (tester) async {
+  testWidgets('渠道面板展示五平台和系统/复制选项，未配置有明确提示', (tester) async {
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
             body: SocialShareSheet(
@@ -115,7 +115,7 @@ void main() {
     for (final channel in SocialChannel.values) {
       expect(find.text(channel.label), findsOneWidget);
     }
-    expect(find.text('未配置'), findsNWidgets(4));
+    expect(find.text('未配置'), findsNWidgets(5));
     expect(find.text('更多分享'), findsOneWidget);
     expect(find.text('生成分享图'), findsOneWidget);
     expect(find.text('复制链接'), findsOneWidget);

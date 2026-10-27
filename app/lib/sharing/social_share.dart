@@ -1,7 +1,8 @@
 import 'dart:typed_data';
 import 'wechat_share_config.dart';
+import 'pending_share_config.dart';
 
-enum SocialChannel { bilibili, xiaohongshu, douyin, wechat }
+enum SocialChannel { bilibili, xiaohongshu, douyin, wechat, kuaishou }
 
 enum ShareAvailability {
   notConfigured,
@@ -22,6 +23,7 @@ extension SocialChannelLabel on SocialChannel {
         SocialChannel.xiaohongshu => '小红书',
         SocialChannel.douyin => '抖音',
         SocialChannel.wechat => '微信',
+        SocialChannel.kuaishou => '快手',
       };
 }
 
@@ -30,13 +32,13 @@ class SocialShareConfig {
   final Map<SocialChannel, String> publicAppIds;
   const SocialShareConfig({this.publicAppIds = const {}});
   static const build = SocialShareConfig(publicAppIds: {
-    SocialChannel.bilibili:
-        String.fromEnvironment('OPENELF_SHARE_BILIBILI_APP_ID'),
+    SocialChannel.bilibili: BilibiliShareConfig.clientId,
     SocialChannel.xiaohongshu:
         String.fromEnvironment('OPENELF_SHARE_XIAOHONGSHU_APP_ID'),
     // Must match both native SDKs and the registered iOS URL scheme.
     SocialChannel.douyin: 'awf8w18qtnqq1kum',
     SocialChannel.wechat: WechatShareConfig.appId,
+    SocialChannel.kuaishou: KwaiShareConfig.appId,
   });
   bool configured(SocialChannel channel) =>
       publicAppIds[channel]?.trim().isNotEmpty ?? false;

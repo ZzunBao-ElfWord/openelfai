@@ -2,6 +2,32 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../sharing/social_share.dart';
 
+Future<bool> confirmKwaiShare(BuildContext context) async =>
+    await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+                title: const Text('交给快手编辑'),
+                content: SingleChildScrollView(
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  const Text(
+                      '同意后初始化快手 SDK，将本次 AI 卡片交给快手图片编辑页。请在快手内自行确认发布；不自动发布、不绑定账号、不读取通讯录。'),
+                  if (!kIsWeb &&
+                      defaultTargetPlatform == TargetPlatform.iOS) ...[
+                    const SizedBox(height: 12),
+                    const Text(
+                        'iOS 需申请相册权限，将本次卡片保存到系统相册后交给快手。图片会留在相册，可自行删除；不遍历或上传其他照片。'),
+                  ],
+                ])),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(dialogContext, false),
+                      child: const Text('取消')),
+                  TextButton(
+                      onPressed: () => Navigator.pop(dialogContext, true),
+                      child: const Text('同意并继续'))
+                ])) ??
+    false;
+
 Future<WechatShareScene?> confirmWechatShare(BuildContext context) {
   var selected = WechatShareScene.session;
   return showDialog<WechatShareScene>(
@@ -48,7 +74,8 @@ enum ShareAction {
   bilibili,
   xiaohongshu,
   douyin,
-  wechat
+  wechat,
+  kuaishou
 }
 
 extension ShareActionChannel on ShareAction {
@@ -57,6 +84,7 @@ extension ShareActionChannel on ShareAction {
         ShareAction.xiaohongshu => SocialChannel.xiaohongshu,
         ShareAction.douyin => SocialChannel.douyin,
         ShareAction.wechat => SocialChannel.wechat,
+        ShareAction.kuaishou => SocialChannel.kuaishou,
         _ => null,
       };
 }
@@ -112,6 +140,7 @@ class _SocialShareSheetState extends State<SocialShareSheet> {
                                 for (final action in [
                                   ShareAction.wechat,
                                   ShareAction.douyin,
+                                  ShareAction.kuaishou,
                                   ShareAction.xiaohongshu,
                                   ShareAction.bilibili
                                 ])
@@ -122,6 +151,8 @@ class _SocialShareSheetState extends State<SocialShareSheet> {
                                         ShareAction.wechat =>
                                           Icons.chat_bubble_outline,
                                         ShareAction.douyin => Icons.music_note,
+                                        ShareAction.kuaishou =>
+                                          Icons.videocam_outlined,
                                         ShareAction.xiaohongshu =>
                                           Icons.auto_stories,
                                         _ => Icons.ondemand_video
@@ -131,6 +162,8 @@ class _SocialShareSheetState extends State<SocialShareSheet> {
                                           const Color(0xff07c160),
                                         ShareAction.douyin =>
                                           const Color(0xff222222),
+                                        ShareAction.kuaishou =>
+                                          const Color(0xffff6600),
                                         ShareAction.xiaohongshu =>
                                           const Color(0xffff2442),
                                         _ => const Color(0xff00a1d6)
