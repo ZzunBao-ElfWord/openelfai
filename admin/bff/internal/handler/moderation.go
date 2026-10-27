@@ -188,13 +188,13 @@ func (d Deps) ResolveModerationReport(c *gin.Context) {
 			kind, nextState = "comment", "removed"
 		case "elf", "user", "chat":
 			c.JSON(http.StatusConflict, gin.H{
-				"error": "CONTENT_TYPE_UNSUPPORTED",
+				"error":   "CONTENT_TYPE_UNSUPPORTED",
 				"message": "该类型内容不支持在举报页下架，请前往对应页面处理",
 			})
 			return
 		default:
 			c.JSON(http.StatusConflict, gin.H{
-				"error": "CONTENT_TYPE_UNSUPPORTED",
+				"error":   "CONTENT_TYPE_UNSUPPORTED",
 				"message": "该类型内容不支持在举报页下架，请前往对应页面处理",
 			})
 			return

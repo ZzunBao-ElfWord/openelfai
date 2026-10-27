@@ -58,6 +58,8 @@ const CHAT_HISTORY_WINDOW = 12;
 const CHAT_TIMEOUT_MS = 60_000;
 const FALLBACK_REPLY =
   process.env.PLATFORM_FALLBACK_REPLY || '（这只 AI 还没接通大脑，等我配置好 API Key 再来聊吧～）';
+const FILTERED_REPLY =
+  process.env.PLATFORM_FILTERED_REPLY || '（这段内容包含不适宜的部分，已经帮我们拦下来了，换个话题再聊吧～）';
 const AI_UPSTREAM_ERROR = {
   error: 'ai_upstream_error',
   message: 'AI 服务暂时不可用，请稍后再试',
@@ -1308,6 +1310,9 @@ async function buildApp(options = {}) {
     const text = readChatText(request.body);
     const history = readChatHistory(request.body);
     const elfId = typeof request.body?.elfId === 'string' ? request.body.elfId : '';
+    // 用户输入在进入上游前先做一次强制审核，避免违规内容触达模型。
+    const inputHit = moderateText(text);
+    if (inputHit) throw fail(400, 'CONTENT_BLOCKED', '包含违规词「' + inputHit + '」');
 
     // 无论真实回复还是固定话术，都把这一轮问答落库，并把最新会话回给客户端覆盖本地。
     const done = async (payload) => {
@@ -1375,6 +1380,10 @@ async function buildApp(options = {}) {
       const content = payload?.choices?.[0]?.message?.content;
       if (typeof content !== 'string' || !content) {
         return reply.code(502).send(AI_UPSTREAM_ERROR);
+      }
+      // 模型输出同样过审：命中违规内容时不下发原文，替换为统一提示。
+      if (moderateText(content)) {
+        return done({ mode: 'fixed', reply: FILTERED_REPLY, reason: 'content_filtered' });
       }
 
       const after = await readPlatformWallet(db, user.id);
