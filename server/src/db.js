@@ -3,6 +3,7 @@
 const mysql = require('mysql2/promise');
 const { PAYMENT_TABLES } = require('./payment_store');
 const { PLATFORM_TABLES } = require('./platform/tables');
+const { KNOWLEDGE_TABLES } = require('./knowledge');
 
 const TABLES = [
   `CREATE TABLE IF NOT EXISTS users (
@@ -84,6 +85,7 @@ const TABLES = [
     CONSTRAINT fk_sandbox_iap_user FOREIGN KEY (user_id) REFERENCES users(id)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
   ...PLATFORM_TABLES,
+  ...KNOWLEDGE_TABLES,
 ];
 
 // CREATE TABLE IF NOT EXISTS 不会给已存在的生产表补列，这里做幂等迁移。

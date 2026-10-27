@@ -1513,28 +1513,37 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  // —— 实名认证（身份证二要素）——
+  // —— 实名认证（阿里云实人认证）——
 
   bool get isIdentityVerified => identity?.verified ?? false;
 
   /// 提交实名认证。返回 null 表示成功，否则是失败原因。
   ///
-  /// 本地只保留脱敏结果；完整姓名/证件号只在核验请求中使用，不落盘。
+  /// 服务端对接阿里云实人认证：证件照与要素一起上传，只有权威源核对一致、
+  /// 且照片内容与填写一致才会通过。本地只保留脱敏结果，完整信息不落盘。
   Future<String?> submitIdentityVerification({
     required String realName,
     required String idNumber,
     required String frontImagePath,
     required String backImagePath,
+    String? frontImageBase64,
+    String? backImageBase64,
   }) async {
     final user = currentUser;
     if (user == null) return '请先登录';
     try {
       if (CommerceConfig.enabled) {
-        // 单一真源：服务端复核二要素并落库，客户端只保留脱敏结果与本地影像路径。
+        // 单一真源：服务端核验并落库，客户端只保留脱敏结果与本地影像路径。
         final mode = _paymentMode ??
             (CommerceConfig.android ? CommerceConfig.androidMode : 'production');
+        final payload = <String, dynamic>{
+          'realName': realName,
+          'idNumber': idNumber,
+          if (frontImageBase64 != null) 'frontImage': frontImageBase64,
+          if (backImageBase64 != null) 'backImage': backImageBase64,
+        };
         final response = await CommerceRepository.instance.verifyIdentity(
-            user.id, mode, {'realName': realName, 'idNumber': idNumber});
+            user.id, mode, payload);
         final raw = response['identity'];
         if (raw is! Map || raw['status'] != 'verified') {
           return '实名核验未通过，请核对后重试';

@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../auth/auth_repository.dart';
 import '../auth/remote_auth_repository.dart';
+import '../config/api_config.dart';
 import '../config/commerce_config.dart';
 
 /// Retains uncertain operations across restarts, so retries use the same ID.
@@ -34,17 +35,19 @@ class CommerceRepository {
   /// 设备标识由登录模块统一生成并持久化，回流去重按（设备 + AI）在服务端计算。
   Future<String> deviceId() => _auth.deviceId();
 
-  /// 实名二要素由服务端复核，客户端只提交原始要素、回收脱敏结果。
+  /// 实名核验由服务端完成（阿里云实人认证），客户端只提交原始要素与证件照、回收脱敏结果。
   Future<Map<String, dynamic>> verifyIdentity(
       String userId, String mode, Map<String, dynamic> payload) async {
     if ((await _auth.currentUser)?.id != userId) {
       throw const AuthException('ACCOUNT_CHANGED', '账号已切换，请重新提交');
     }
-    return _auth.authenticatedRequest('/api/v1/identity/verify', body: {
-      'environment': mode,
-      'platform': CommerceConfig.android ? 'android' : 'ios',
-      ...payload,
-    });
+    return _auth.authenticatedRequest('/api/v1/identity/verify',
+        timeout: ApiConfig.chatTimeout,
+        body: {
+          'environment': mode,
+          'platform': CommerceConfig.android ? 'android' : 'ios',
+          ...payload,
+        });
   }
 
   /// 信息流分页：排序、分页、去重由服务端决定，客户端只按页追加。

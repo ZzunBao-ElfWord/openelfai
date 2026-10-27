@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -49,7 +50,8 @@ class _IdentityVerifyPageState extends State<IdentityVerifyPage> {
       final file = await _picker.pickImage(
         source: ImageSource.gallery,
         maxWidth: 1600,
-        imageQuality: 88,
+        maxHeight: 1600,
+        imageQuality: 80,
       );
       if (file == null || !mounted) return;
       // 读字节做预览，Web（blob 路径）与原生（文件路径）均可显示。
@@ -72,12 +74,22 @@ class _IdentityVerifyPageState extends State<IdentityVerifyPage> {
 
   Future<void> _submit() async {
     if (_submitting) return;
-    if (_frontPath == null) {
+    if (_frontPath == null || _frontBytes == null) {
       _toast('请上传身份证人像面');
       return;
     }
-    if (_backPath == null) {
+    if (_backPath == null || _backBytes == null) {
       _toast('请上传身份证国徽面');
+      return;
+    }
+    // 服务端与阿里云均限制单张 2MB，超限直接拦在本地，避免白跑一次核验。
+    const maxBytes = 2 * 1024 * 1024;
+    if (_frontBytes!.lengthInBytes > maxBytes) {
+      _toast('身份证人像面超过 2MB，请重新拍摄');
+      return;
+    }
+    if (_backBytes!.lengthInBytes > maxBytes) {
+      _toast('身份证国徽面超过 2MB，请重新拍摄');
       return;
     }
     if (!_authorized) {
@@ -90,6 +102,8 @@ class _IdentityVerifyPageState extends State<IdentityVerifyPage> {
       idNumber: _idCtrl.text,
       frontImagePath: _frontPath!,
       backImagePath: _backPath!,
+      frontImageBase64: base64Encode(_frontBytes!),
+      backImageBase64: base64Encode(_backBytes!),
     );
     if (!mounted) return;
     setState(() => _submitting = false);
@@ -250,7 +264,7 @@ class _IdentityVerifyPageState extends State<IdentityVerifyPage> {
                       fontFamily: 'monospace')),
               const SizedBox(height: 10),
               Text(
-                  '核验时间 ${_formatTime(identity.verifiedAt)} · ${identity.provider}',
+                  '核验时间 ${_formatTime(identity.verifiedAt)} · ${_providerLabel(identity.provider)}',
                   style:
                       TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
             ],
@@ -363,7 +377,7 @@ class _IdentityVerifyPageState extends State<IdentityVerifyPage> {
         ),
         const SizedBox(height: 10),
         Text(
-          '核验服务接入前为本地校验：格式、校验位与出生日期。正式上线后将接入公安实名核验服务。',
+          '核验由阿里云实人认证在服务端完成：先读取证件正反面信息，再与公安权威源比对，仅保存脱敏结果。',
           style: TextStyle(fontSize: 10, height: 1.5, color: AppColors.textMuted),
         ),
       ],
@@ -518,6 +532,21 @@ class _IdentityVerifyPageState extends State<IdentityVerifyPage> {
         ],
       ),
     );
+  }
+
+  static String _providerLabel(String provider) {
+    switch (provider) {
+      case 'aliyun_id2meta_ocr':
+        return '阿里云实人认证（证件识别 + 权威源核验）';
+      case 'aliyun_id2meta':
+        return '阿里云实人认证（权威源二要素核验）';
+      case 'server_checksum':
+        return '服务端格式校验';
+      case 'local_stub':
+        return '本地校验';
+      default:
+        return provider;
+    }
   }
 
   static String _formatTime(DateTime time) {

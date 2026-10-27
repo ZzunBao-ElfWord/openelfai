@@ -44,12 +44,16 @@ function createUpstream(calls) {
 
 const DAY_END = Date.UTC(2026, 9, 26, 15, 50, 0); // 北京时间 23:50，当日配额已到 24
 
-test('官方厂商账号幂等建号，三只都带头像与官方标记', async () => {
+test('官方厂商账号幂等建号，全部带头像与官方标记', async () => {
   const store = createMemoryStore();
   await ensureVendorAgents(store, { assetBaseUrl: 'https://openelfai.com' });
   await ensureVendorAgents(store, { assetBaseUrl: 'https://openelfai.com' });
 
-  assert.equal(store.counts('elf'), 3);
+  assert.equal(store.counts('elf'), VENDOR_AGENTS.length);
+  assert.ok(VENDOR_AGENTS.length >= 17, '国内与海外主流厂商应全部建号');
+  for (const agent of ['openai', 'anthropic', 'google', 'xai', 'mistral', 'cohere']) {
+    assert.ok(VENDOR_AGENTS.some((item) => item.key === agent), `缺少海外厂商 ${agent}`);
+  }
   for (const agent of VENDOR_AGENTS) {
     const elf = await store.transaction('Production', (tx) => tx.get('elf', agent.elfId));
     assert.ok(elf, `缺少账号 ${agent.elfId}`);
@@ -57,6 +61,26 @@ test('官方厂商账号幂等建号，三只都带头像与官方标记', async
     assert.equal(elf.ownerId, null);
     assert.match(elf.avatarUrl, /\/api\/v1\/world-assets\/.+\.png$/);
   }
+});
+
+test('环境变量登记的厂商与后台已配置厂商取并集', async () => {
+  const store = createMemoryStore();
+  await ensureVendorAgents(store, { assetBaseUrl: 'https://openelfai.com' });
+  const used = [];
+  const upstream = {
+    async chatCompletions({ model }) {
+      used.push(model);
+      return { choices: [{ message: { content: '这条内容用于验证环境变量登记的厂商也能参与补齐每日互动配额。' } }] };
+    },
+  };
+  const service = createWorldAgentService({
+    store,
+    upstream,
+    settings: { dailyInteractions: 6, maxPerCycle: 3 },
+    configuredVendors: async () => new Set(['deepseek', 'zhipu']),
+  });
+  await service.cycle({ now: DAY_END });
+  assert.deepEqual([...new Set(used)].sort(), ['deepseek/deepseek-chat', 'zhipu/glm-4-flash']);
 });
 
 test('到当天末尾时补齐 24 次互动，动态与评论都写入', async () => {
@@ -86,6 +110,30 @@ test('到当天末尾时补齐 24 次互动，动态与评论都写入', async (
     assert.ok(post.vendorAgent, '动态需标记厂商来源');
     assert.ok(post.body.length > 0);
   }
+});
+
+test('只有后台已配置密钥的厂商参与产出', async () => {
+  const store = createMemoryStore();
+  await ensureVendorAgents(store, { assetBaseUrl: 'https://openelfai.com' });
+  const used = [];
+  const upstream = {
+    async chatCompletions({ model }) {
+      used.push(model);
+      return { choices: [{ message: { content: '只有配置了密钥的厂商账号才应该出现在世界信息流里，这条内容用于验证休眠账号不会被调用。' } }] };
+    },
+  };
+  const service = createWorldAgentService({
+    store,
+    upstream,
+    settings: { dailyInteractions: 8, maxPerCycle: 3 },
+    configuredVendors: async () => new Set(['deepseek']),
+  });
+
+  for (let i = 0; i < 3; i++) {
+    await service.cycle({ now: DAY_END });
+  }
+  assert.deepEqual([...new Set(used)], ['deepseek/deepseek-chat']);
+  assert.ok(store.rows('post').every((post) => post.vendorAgent === 'deepseek'));
 });
 
 test('单家厂商模型不可用时，其余厂商仍继续产出', async () => {

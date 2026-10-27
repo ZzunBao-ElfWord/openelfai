@@ -18,6 +18,20 @@ function bool(name, fallback = false) {
 
 const nodeEnv = process.env.NODE_ENV || 'development';
 
+// 审核用固定验证码账号，格式：手机号:验证码，多个用逗号分隔。
+// 未配置时功能完全关闭，不影响正常短信验证码登录。
+function parseReviewAccounts(raw) {
+  const accounts = new Map();
+  if (!raw) return accounts;
+  for (const item of raw.split(',')) {
+    const [phone, code] = item.trim().split(':');
+    if (/^1[3-9]\d{9}$/.test(phone || '') && /^\d{6}$/.test(code || '')) {
+      accounts.set(phone, code);
+    }
+  }
+  return accounts;
+}
+
 module.exports = {
   nodeEnv,
   isProduction: nodeEnv === 'production',
@@ -37,6 +51,8 @@ module.exports = {
   jwtSecret: secret('JWT_SECRET'),
   smsCodePepper: secret('SMS_CODE_PEPPER'),
   refreshPepper: secret('REFRESH_TOKEN_PEPPER'),
+
+  reviewAccounts: parseReviewAccounts(process.env.REVIEW_LOGIN_ACCOUNTS),
 
   accessTtlSec: Number(process.env.ACCESS_TTL_SEC || 900),
   refreshTtlSec: Number(process.env.REFRESH_TTL_SEC || 60 * 60 * 24 * 30),
@@ -78,6 +94,19 @@ module.exports = {
     },
   },
 
+  // 实名核验：服务端权威核验（阿里云实人认证）。
+  // ocr 模式一次调用完成「证件照 OCR + 权威源二要素核验」，plain 模式只核验姓名/证件号。
+  realname: {
+    enabled: bool('REALNAME_VERIFY_ENABLED', true),
+    provider: process.env.REALNAME_PROVIDER || 'aliyun',
+    mode: process.env.REALNAME_MODE || 'ocr',
+    endpoint: process.env.REALNAME_ENDPOINT || 'cloudauth.aliyuncs.com',
+    timeoutMs: Number(process.env.REALNAME_TIMEOUT_MS || 20000),
+    accessKeyId: process.env.ALIYUN_ACCESS_KEY_ID || '',
+    accessKeySecret: process.env.ALIYUN_ACCESS_KEY_SECRET || '',
+    maxFailures: Number(process.env.REALNAME_MAX_FAILURES || 5),
+    lockHours: Number(process.env.REALNAME_LOCK_HOURS || 24),
+  },
   androidCommerce: {
     enabled: bool('ANDROID_COMMERCE_ENABLED', false),
     sandboxOnly: bool('ALIPAY_SANDBOX', false),
@@ -88,6 +117,11 @@ module.exports = {
     enabled: bool('WORLD_AGENTS_ENABLED', true),
     dailyInteractions: Number(process.env.WORLD_AGENTS_DAILY || 24),
     maxPerCycle: Number(process.env.WORLD_AGENTS_MAX_PER_CYCLE || 3),
+    failureCooldownMs: Number(process.env.WORLD_AGENTS_FAILURE_COOLDOWN_MS || 30 * 60000),
+    // 已确认可用的厂商（逗号分隔），与后台已配置密钥的厂商取并集。
+    // 用于密钥直接写在 /opt/litellm/.env、未走后台配置的厂商。
+    vendors: String(process.env.WORLD_AGENTS_VENDORS || '')
+      .split(',').map((item) => item.trim()).filter(Boolean),
     assetBaseUrl: process.env.WORLD_ASSET_BASE_URL || 'https://openelfai.com',
   },
   // 收益提现审核：内部接口只认这个令牌，未配置时审核接口整体关闭。

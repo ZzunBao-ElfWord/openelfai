@@ -374,8 +374,8 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                     icon: Icons.auto_awesome,
                     label: '打赏',
                     semantic: '打赏',
-                    color: elf.isMine ? Colors.white38 : AppColors.cyan,
-                    onTap: elf.isMine ? null : () {
+                    color: (elf.isMine || elf.isOfficial) ? Colors.white38 : AppColors.cyan,
+                    onTap: (elf.isMine || elf.isOfficial) ? null : () {
                       if (checkLoginOrPrompt(context)) _tipSheet(p, elf);
                     },
                   ),
