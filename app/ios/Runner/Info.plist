@@ -48,6 +48,10 @@
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
+			<key>CFBundleURLName</key><string>openelf-wechat-share</string>
+			<key>CFBundleURLSchemes</key><array><string>$(OPENELF_WECHAT_APP_ID)</string></array>
+		</dict>
+		<dict>
 			<key>CFBundleURLName</key>
 			<string>openelf-douyin-share</string>
 			<key>CFBundleURLSchemes</key>

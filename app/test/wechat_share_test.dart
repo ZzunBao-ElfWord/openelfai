@@ -40,13 +40,35 @@ void main() {
         .setMockMethodCallHandler(OpenElfWechatShare.channel, null);
   });
   test('空AppID不探测或初始化SDK，未使用身份未确认的公众号ID', () async {
-    expect(WechatShareConfig.appId, isEmpty);
-    expect(SocialShareConfig.build.publicAppIds[SocialChannel.wechat], isEmpty);
-    expect(await const WechatShareAdapter().availability(),
+    expect(await const WechatShareAdapter(appId: '').availability(),
         ShareAvailability.notConfigured);
     await expectLater(
-        const WechatShareAdapter().share(card()), throwsStateError);
+        const WechatShareAdapter(appId: '').share(card()), throwsStateError);
     expect(calls, isEmpty);
+  });
+  test('用户确认的移动AppID在Dart与原生配置一致；iOS部署闸门未提前放开', () async {
+    expect(WechatShareConfig.appId, 'wxf3b5d7fbc0abcd37');
+    expect(SocialShareConfig.build.publicAppIds[SocialChannel.wechat],
+        WechatShareConfig.appId);
+    final config = File('ios/Flutter/WechatShare.xcconfig').readAsStringSync();
+    expect(
+        config, contains('OPENELF_WECHAT_APP_ID = ${WechatShareConfig.appId}'));
+    final plist = File('ios/Runner/Info.plist').readAsStringSync();
+    expect(plist, contains('openelf-wechat-share'));
+    expect(
+        plist,
+        contains(
+            r'<key>CFBundleURLSchemes</key><array><string>$(OPENELF_WECHAT_APP_ID)</string></array>'));
+    expect(plist, isNot(contains('wx1eca4f1dfbeddaf5')));
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    expect(WechatShareConfig.iosAssociationReady, false);
+    expect(await const WechatShareAdapter().availability(),
+        ShareAvailability.integrationPending);
+    expect(calls, isEmpty);
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    expect(await const WechatShareAdapter().availability(),
+        ShareAvailability.ready);
+    expect((calls.single.arguments as Map)['appId'], WechatShareConfig.appId);
   });
   test('非法AppID与未配置iOS关联时不可用', () async {
     debugDefaultTargetPlatformOverride = TargetPlatform.android;

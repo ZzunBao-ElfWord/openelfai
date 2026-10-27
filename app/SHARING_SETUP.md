@@ -24,11 +24,11 @@
 - 抖音素材不附营销短链或品牌水印，仍保留“内容由 AI 生成”。不发送未经审核的链接卡片，不调用普通投稿权限。
 - `ready` 仅表示本地插件配置及安装检测满足尝试条件，不证明后台权限审核或真机发送成功；结果 handedOff 也不是发布凭据，不记收益/计分。
 
-## 微信原生代码（AppID 尚未填写）
+## 微信原生代码（AppID 已填写，未真机验收）
 
 - 本地插件 `third_party/openelf_wechat_share` 使用腾讯官方 Android SDK `6.8.40`、官方 CocoaPods `WechatOpenSDK 2.0.9`；未加入 fluwx 依赖。SDK 本身包含多项能力，本项目只调用图片分享，不实现微信登录、OAuth、支付或自动分发，不代表 SDK 二进制是去支付符号版。
-- `lib/sharing/wechat_share_config.dart` 的公开移动 AppID 暂空；`ios/Flutter/WechatShare.xcconfig` 对应值也为空。未采用用户提供的身份尚未确认的其他 AppID。不需要 AppSecret。
-- 收到确认的移动 AppID 后统一填写上面两处，并在 Info.plist 的 URL Types 加入该 AppID；空值期间不创建空 URL scheme。不能只填写 Dart 参数就宣称 iOS 可用。
+- 用户报告微信移动应用已通过审核，并确认 AppID 为 `wxf3b5d7fbc0abcd37`，已同步到 `lib/sharing/wechat_share_config.dart` 与 `ios/Flutter/WechatShare.xcconfig`；Info.plist 的 URL Types 通过同一 xcconfig 值注册。未采用之前身份尚未确认的其他 AppID，不需要 AppSecret。
+- 审核状态来自用户确认，未登录平台独立核实。填入 AppID 不代表 iOS 关联文件已上线或两端实际发送已验收。
 - 通过原内容页分享面板选择微信，再明确选择“微信好友”或“朋友圈”、同意说明后才初始化 SDK。取消不初始化、不发送；无配置保持未配置，不自动改用其他渠道。
 - Android 仅查询微信是否安装，不在状态探测中创建 SDK；实际分享启用微信签名校验，传随机 transaction 并匹配响应类型和 transaction，180秒超时清理。只传本次 PNG 字节和小缩略图，不申请相册/通讯录/存储权限，不写共享缓存，不增加微信支付回调入口。
 - iOS 校验 AppID、URL scheme 与登记 Universal Link 一致；只传图片数据，不保存系统相册。URL 和 Universal Link 由 SceneDelegate 转发；原抖音回调和 Flutter 默认处理保留。插件资源包带入与官方2.0.9一致的 PrivacyInfo 声明，因为其传统 CocoaPods 规格未列出资源；这不替代 App 的完整隐私披露。
@@ -36,7 +36,7 @@
 - 准备 `applinks:openelfai.com`，保留原推送 entitlement。网站 AASA 文件与部署要求在 `deploy/wechat-universal-links-20261027`，没有部署到线上。
 - `iosAssociationReady` 默认 false；关联文件部署、Apple 后台能力/签名描述文件匹配并验证后才打开，不为让按钮显示可用而打开。
 - PNG 的8MiB/4096像素边长限制为本项目内存防护预算，不是对微信产品限制的承诺。
-- 当前 Android 插件 Java 编译通过，Dart 自动化测试覆盖状态、取消、场景与错误处理。Windows 无 Xcode，iOS 未编译，两端未使用生产 AppID/真机发送。SDK 官方文档仍需在平台审核后结合实际权限核对。
+- 当前 Android 插件 Java 编译通过，Dart 自动化测试覆盖状态、取消、场景与错误处理、配置一致性。Windows 无 Xcode，iOS 未编译，两端未实际使用生产 AppID 调用 SDK 或真机发送。SDK 官方文档仍需结合实际权限核对。
 
 上线前隐私披露草案（未写入官网现行协议）：SDK 名称“微信 Open SDK”，开发者“深圳市腾讯计算机系统有限公司”，用途“用户主动将当前 AI 分享图片交给微信好友或朋友圈”；信息范围须依据所用官方版本说明披露分享图片、必要的应用/签名、设备系统与网络信息及 SDK 实际处理的数据。仅用户同意后调用，不读取通讯录、不用于账号绑定，不应宣称 SDK 不处理任何设备信息。正式披露应补上平台提供的官方 SDK 隐私说明链接并同步官网与 App，不以本草案替代完整政策。
 

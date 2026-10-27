@@ -146,6 +146,13 @@ void main() {
         today: [],
         relations: []);
     final copies = <String>[];
+    // This test verifies fallback UI, independently of production AppID and
+    // the device's installed apps. Never send real SDK calls from widget tests.
+    const wechatChannel = MethodChannel('openelf/wechat_share');
+    tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(wechatChannel, (_) async => 'notInstalled');
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(wechatChannel, null));
     tester.binding.defaultBinaryMessenger
         .setMockMethodCallHandler(SystemChannels.platform, (call) async {
       if (call.method == 'Clipboard.setData') {
