@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../payments/alipay_service.dart';
+import '../config/payment_features.dart';
 import '../payments/web_checkout.dart';
 import '../payments/web_qr_dialog.dart';
 import 'home_shell.dart';
@@ -311,9 +312,8 @@ class _ApiKeyPageState extends State<ApiKeyPage> {
 
   Widget _keyCard(MyKeyInfo info) {
     final revoked = info.revoked;
-    final display = revoked
-        ? info.apiKeyMasked
-        : (_revealed ?? info.apiKeyMasked);
+    final display =
+        revoked ? info.apiKeyMasked : (_revealed ?? info.apiKeyMasked);
 
     return _card(
       child: Column(
@@ -459,9 +459,11 @@ class _ApiKeyPageState extends State<ApiKeyPage> {
             children: [
               Expanded(
                 child: Text(
-                  empty
-                      ? '余额不足时 AI 只会回复固定话术，外部工具调用会返回 402。点击充值，或联系管理员人工充值。'
-                      : '充值到账后可用于 App 内 AI 对话与开放平台 API 调用。',
+                  !PaymentFeatures.apiTopupEnabled
+                      ? '平台 API 账户余额，仅供查看。'
+                      : empty
+                          ? '余额不足时 AI 只会回复固定话术，外部工具调用会返回 402。点击充值，或联系管理员人工充值。'
+                          : '充值到账后可用于 App 内 AI 对话与开放平台 API 调用。',
                   style: TextStyle(
                     fontSize: 10.5,
                     color: empty ? AppColors.danger : AppColors.textMuted,
@@ -469,8 +471,10 @@ class _ApiKeyPageState extends State<ApiKeyPage> {
                   ),
                 ),
               ),
-              const SizedBox(width: 10),
-              _rechargeButton(),
+              if (PaymentFeatures.apiTopupEnabled) ...[
+                const SizedBox(width: 10),
+                _rechargeButton(),
+              ],
             ],
           ),
         ],
@@ -511,6 +515,7 @@ class _ApiKeyPageState extends State<ApiKeyPage> {
   }
 
   Future<void> _openTopup({String? initialOrderId}) async {
+    if (!PaymentFeatures.apiTopupEnabled) return;
     final paid = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -597,11 +602,11 @@ class _ApiKeyPageState extends State<ApiKeyPage> {
   }
 
   ButtonStyle get _textButtonStyle => TextButton.styleFrom(
-    foregroundColor: AppColors.brand,
-    minimumSize: const Size(0, 30),
-    padding: const EdgeInsets.symmetric(horizontal: 8),
-    textStyle: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600),
-  );
+        foregroundColor: AppColors.brand,
+        minimumSize: const Size(0, 30),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        textStyle: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600),
+      );
 
   /// 微元换算成元：正常余额显示两位小数，不足一分钱用「<0.01」表示。
   static String _yuan(int micro) {
@@ -1120,8 +1125,8 @@ class _TopupSheetState extends State<_TopupSheet> {
                     label: _busy
                         ? '处理中…'
                         : selected == null
-                        ? '支付宝支付'
-                        : '支付宝支付 ¥${_priceText(selected)}',
+                            ? '支付宝支付'
+                            : '支付宝支付 ¥${_priceText(selected)}',
                     icon: Icons.account_balance_wallet_outlined,
                     onTap: _canPay ? _pay : null,
                   ),

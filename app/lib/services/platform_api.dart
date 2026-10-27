@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 
 import '../auth/remote_auth_repository.dart';
 import '../config/api_config.dart';
+import '../config/payment_features.dart';
 
 /// 平台 API 调用失败：code 对应服务端错误码，message 可直接展示给用户。
 class PlatformApiException implements Exception {
@@ -285,6 +286,7 @@ class PlatformApi {
 
   /// 余额充值档位。enabled=false 时返回空可用状态，由 UI 置灰。
   Future<TopupProducts> topupProducts() async {
+    _requireApiTopup();
     final body = await _request('GET', ApiConfig.topupProductsPath);
     return TopupProducts.fromJson(body);
   }
@@ -294,6 +296,7 @@ class PlatformApi {
     required String tierId,
     required String requestId,
   }) async {
+    _requireApiTopup();
     try {
       final body = await _request(
         'POST',
@@ -321,9 +324,18 @@ class PlatformApi {
 
   /// 重新拉起已有订单的支付宝支付。
   Future<TopupOrder> payTopupOrder(String id) async {
+    _requireApiTopup();
     final body = await _request('POST', ApiConfig.topupOrderPayPath(id),
         body: kIsWeb ? {'channel': 'web'} : null);
     return TopupOrder.fromJson(body);
+  }
+
+  /// iOS 不允许创建或继续支付平台余额订单，余额/历史状态查询保留。
+  void _requireApiTopup() {
+    if (!PaymentFeatures.apiTopupEnabled) {
+      throw const PlatformApiException(
+          'API_TOPUP_DISABLED', 'iOS 暂不提供平台 API 余额充值');
+    }
   }
 
   /// 查询充值订单状态。

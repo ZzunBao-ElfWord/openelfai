@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../models/elf.dart';
+import '../config/payment_features.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -291,7 +292,8 @@ class _ElfChatPageState extends State<ElfChatPage> {
                       textStyle: const TextStyle(
                           fontSize: 12.5, fontWeight: FontWeight.w600),
                     ),
-                    child: const Text('去充值'),
+                    child: Text(
+                        PaymentFeatures.apiTopupEnabled ? '去充值' : '查看 API 账户'),
                   ),
               ],
             ),
@@ -452,8 +454,8 @@ class _ElfChatPageState extends State<ElfChatPage> {
                         color: AppColors.textFaint,
                       ),
                       border: InputBorder.none,
-                      contentPadding:
-                          const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 10),
                     ),
                   ),
                 ),

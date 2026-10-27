@@ -15,7 +15,7 @@ jobs:
         working-directory: app
     env:
       BUILD_NAME: 1.0.4
-      BUILD_NUMBER: '13'
+      BUILD_NUMBER: '14'
 
     steps:
       - name: Check out latest integrated source
