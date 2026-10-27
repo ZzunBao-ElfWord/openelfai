@@ -9,6 +9,7 @@ import 'identity_verify_page.dart';
 import 'wallet_page.dart';
 import 'account_deletion_page.dart';
 import 'privacy_policy_page.dart';
+import 'user_agreement_page.dart';
 
 /// 设置页：账号信息、隐私政策、退出登录、删除账号。
 class SettingsPage extends StatelessWidget {
@@ -361,6 +362,12 @@ class SettingsPage extends StatelessWidget {
   // —— 交互 ——
 
   void _openPolicy(BuildContext ctx, PolicyKind kind) {
+    if (kind == PolicyKind.terms) {
+      Navigator.of(ctx).push(
+        MaterialPageRoute(builder: (_) => const UserAgreementPage()),
+      );
+      return;
+    }
     if (kind == PolicyKind.privacy) {
       Navigator.of(ctx).push(
         MaterialPageRoute(builder: (_) => const PrivacyPolicyPage()),

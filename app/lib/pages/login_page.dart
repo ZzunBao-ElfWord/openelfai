@@ -16,6 +16,7 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import 'home_shell.dart';
 import 'privacy_policy_page.dart';
+import 'user_agreement_page.dart';
 
 /// 登录页：手机号 + 短信验证码（服务端下发）。
 class LoginPage extends StatefulWidget {
@@ -418,6 +419,14 @@ class _LoginPageState extends State<LoginPage> {
                         builder: (_) => const PrivacyPolicyPage()),
                   ),
                   child: const Text('阅读隐私政策'),
+                ),
+                TextButton(
+                  key: const ValueKey('login-open-terms'),
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                        builder: (_) => const UserAgreementPage()),
+                  ),
+                  child: const Text('阅读用户协议'),
                 ),
               ],
             ),
