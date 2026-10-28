@@ -51,8 +51,14 @@
   },
   {
     "key": "commerce",
-    "before": "  return elf;\n}\n\nfunction createCommerceService({ store, settings, payout = null, realname = null,\n  identityPolicy = {} }) {\n  // 同一用户同一证件连续失败达到上限后锁定一段时间，避免拿证件号反复试探。\n  const identityMaxFailures = Math.max(1, Number(identityPolicy.maxFailures) || 5);\n",
-    "after": "  return elf;\n}\n\nfunction createCommerceService({ store, settings, payout = null, payoutQuery = null, realname = null,\n  identityPolicy = {} }) {\n  // 同一用户同一证件连续失败达到上限后锁定一段时间，避免拿证件号反复试探。\n  const identityMaxFailures = Math.max(1, Number(identityPolicy.maxFailures) || 5);\n"
+    "before": "function createCommerceService({ store, settings, payout = null, realname = null,\n  identityPolicy = {} }) {",
+    "after": "function createCommerceService({ store, settings, payout = null, payoutQuery = null, realname = null,\n  identityPolicy = {} }) {",
+    "variants": [
+      {
+        "before": "function createCommerceService({ store, settings, payout = null }) {",
+        "after": "function createCommerceService({ store, settings, payout = null, payoutQuery = null }) {"
+      }
+    ]
   },
   {
     "key": "commerce",
@@ -106,7 +112,7 @@
   },
   {
     "key": "commerce",
-    "before": "      maskedIdNumber: record.maskedIdNumber, provider: record.provider, verifiedAt: record.verifiedAt } };\n  }\n  return { snapshot, listFeed, listChat, recordChat, autoCycle, action, environment, verifyIdentity,\n    requestWithdrawal, reviewWithdrawal, listWithdrawals, listAllWithdrawals };\n}\n\nmodule.exports = { createCommerceService, CATALOG, MODULES, MODULE_PRICES, FORGET_COST };\n",
-    "after": "      maskedIdNumber: record.maskedIdNumber, provider: record.provider, verifiedAt: record.verifiedAt } };\n  }\n  return { snapshot, listFeed, listChat, recordChat, autoCycle, action, environment, verifyIdentity,\n    requestWithdrawal, reviewWithdrawal, reconcileWithdrawal, listWithdrawals, listAllWithdrawals };\n}\n\nmodule.exports = { createCommerceService, CATALOG, MODULES, MODULE_PRICES, FORGET_COST };\n"
+    "before": "  return { snapshot, listFeed, listChat, recordChat, autoCycle, action, environment, verifyIdentity,\n    requestWithdrawal, reviewWithdrawal, listWithdrawals, listAllWithdrawals };",
+    "after": "  return { snapshot, listFeed, listChat, recordChat, autoCycle, action, environment, verifyIdentity,\n    requestWithdrawal, reviewWithdrawal, reconcileWithdrawal, listWithdrawals, listAllWithdrawals };"
   }
 ]
