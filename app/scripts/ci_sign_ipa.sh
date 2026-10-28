@@ -26,12 +26,20 @@ with open(path, 'rb') as f:
     built = plistlib.load(f)
 with open(os.environ['OPENELF_SOURCE_APP'] + '/Info.plist', 'rb') as f:
     source = plistlib.load(f)
+def expanded(value):
+    if isinstance(value, str):
+        return value.replace('$(PRODUCT_MODULE_NAME)', 'Runner')
+    if isinstance(value, dict):
+        return {key: expanded(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [expanded(item) for item in value]
+    return value
 assert built.get('CFBundleIdentifier') == 'com.ai.openelf', 'Wrong app identity'
 assert built.get('CFBundleExecutable') == 'Runner', 'Missing app executable'
 for key in ('NSPhotoLibraryUsageDescription', 'NSPhotoLibraryAddUsageDescription',
             'LSApplicationQueriesSchemes', 'UIApplicationSceneManifest',
             'DouyinAppID', 'UILaunchStoryboardName', 'UIMainStoryboardFile'):
-    assert built.get(key) == source[key], 'Built metadata differs: ' + key
+    assert built.get(key) == expanded(source[key]), 'Built metadata differs: ' + key
 assert built.get('WechatShareAppID') == 'wxf3b5d7fbc0abcd37', 'Wrong mobile WeChat AppID'
 schemes = {s for entry in built.get('CFBundleURLTypes', []) for s in entry.get('CFBundleURLSchemes', [])}
 assert {'wxf3b5d7fbc0abcd37', 'awf8w18qtnqq1kum'} <= schemes, 'Missing share callbacks'
