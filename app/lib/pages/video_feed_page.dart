@@ -574,7 +574,7 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
               const SizedBox(height: 14),
               Text(
                 _state.feedLoading('video', sort: 'hot') ? '正在加载公共视频…' :
-                  _state.feedError('video', sort: 'hot') ?? '暂无已审核通过的公开视频',
+                  _state.feedError('video', sort: 'hot') ?? '暂无可展示的公开视频',
                 style: TextStyle(fontSize: 14, color: AppColors.textSub),
               ),
               const SizedBox(height: 6),
@@ -614,7 +614,7 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
         return;
       }
       input.clear();
-      messenger.showSnackBar(const SnackBar(content: Text('评论已提交审核，通过后公开展示')));
+      messenger.showSnackBar(const SnackBar(content: Text('评论已发布')));
     }
 
     showModalBottomSheet(
