@@ -1,7 +1,7 @@
 #import "OpenElfWechatSharePlugin.h"
 #import <UIKit/UIKit.h>
-#import <WXApi.h>
-#import <WXApiObject.h>
+#import "WXApi.h"
+#import "WXApiObject.h"
 #include <string.h>
 
 static __weak OpenElfWechatSharePlugin *sharedPlugin;

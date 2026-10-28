@@ -12,6 +12,7 @@ Pod::Spec.new do |s|
   s.dependency 'Flutter'
   s.dependency 'KwaiSDK', '3.7.3'
   s.platform = :ios, '15.0'
+  s.static_framework = true
   s.frameworks = 'UIKit', 'Photos'
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES', 'OTHER_LDFLAGS' => '$(inherited) -ObjC -all_load' }
 end
