@@ -5,6 +5,19 @@ const crypto = require('node:crypto');
 function shanghaiTime(ms) {
   return new Date(ms + 8 * 3600000).toISOString().slice(0, 19).replace('T', ' ');
 }
+// Call only after official SDK signature verification. An accepted request is
+// not necessarily a completed transfer; unknown results keep funds frozen.
+function transferOutcome(data, { outTradeNo, amountCents, query = false }) {
+  const unknown = { status: 'unknown', message: '转账结果待查证，保留原出款编号与冻结额度' };
+  if (data.code !== '10000' || data.out_biz_no !== outTradeNo) return unknown;
+  if (query || data.trans_amount !== undefined) {
+    const match = /^(\d{1,9})\.(\d{2})$/.exec(String(data.trans_amount));
+    if (!match || Number(match[1]) * 100 + Number(match[2]) !== amountCents) return unknown;
+  }
+  if (data.status === 'SUCCESS' && data.order_id) return { status: 'paid', orderId: data.order_id, payDate: data.pay_date || null };
+  if (data.status === 'FAIL') return { status: 'failed', message: '支付宝确认转账失败' };
+  return unknown;
+}
 function createAlipayGateway(settings) {
   if (!settings.enabled) return null;
   if (!/^\d{16}$/.test(settings.appId) || !/^2088\d{12}$/.test(settings.sellerId)) throw new Error('支付宝 APPID/PID 未正确配置');
@@ -62,6 +75,13 @@ function createAlipayGateway(settings) {
       if (data.seller_id && data.seller_id !== settings.sellerId) throw new Error('Alipay seller mismatch');
       return { ...data, app_id: settings.appId, seller_id: settings.sellerId };
     },
+    async queryTransfer({ outTradeNo, amountCents }) {
+      const data = await sdk.exec('alipay.fund.trans.common.query', {
+        timestamp: shanghaiTime(Date.now()), bizContent: { out_biz_no: outTradeNo,
+          product_code: 'TRANS_ACCOUNT_NO_PWD', biz_scene: 'DIRECT_TRANSFER' },
+      }, { validateSign: true });
+      return transferOutcome(data, { outTradeNo, amountCents, query: true });
+    },
     async transfer({ outTradeNo, account, amountCents, remark }) {
       // 单笔转账（提现出款）。必须校验返回签名，失败绝不当作成功。
       const data = await sdk.exec('alipay.fund.trans.uni.transfer', {
@@ -71,11 +91,8 @@ function createAlipayGateway(settings) {
           order_title: remark || 'OpenElf 创作者收益',
           payee_info: { identity: account, identity_type: 'ALIPAY_LOGON_ID' } },
       }, { validateSign: true });
-      if (data.code === '10000') return { status: 'paid', orderId: data.order_id || null, payDate: data.pay_date || null };
-      // 处理中/失败都按未完成处理，交由人工复核重试。
-      return { status: 'failed', code: data.sub_code || data.code || 'UNKNOWN',
-        message: data.sub_msg || data.msg || '支付宝转账未完成' };
+      return transferOutcome(data, { outTradeNo, amountCents });
     },
   };
 }
-module.exports = { createAlipayGateway, shanghaiTime };
+module.exports = { createAlipayGateway, shanghaiTime, transferOutcome };

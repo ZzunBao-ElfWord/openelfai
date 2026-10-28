@@ -173,7 +173,7 @@ test('用户间 AI 寄售已关闭：寄售动作被拒绝，市场只剩官方�
   const f = fixture(); await f.grant();
   let s = await f.commerce.snapshot(A, 'Production');
   const elf = s.commerce.elves.find((e) => e.isMine);
-  await assert.rejects(() => f.action(A, 'resell', { elfId: elf.id, price: 10 }), { code: 'INVALID_ACTION' });
+  await assert.rejects(() => f.action(A, 'resell', { elfId: elf.id, price: 10 }), { code: 'RESOURCE_OPERATION_DISABLED' });
   await assert.rejects(() => f.action(A, 'buy', { listingId: 'sl_anything' }), { code: 'LISTING_UNAVAILABLE' });
   s = await f.commerce.snapshot(A, 'Production');
   assert.deepEqual(s.commerce.secondary, []);
@@ -189,7 +189,7 @@ test('UGC 创建在服务端扣费、生成专属地址并切换当前 AI', asyn
   const mine = s.commerce.elves.filter(e => e.isMine);
   assert.equal(mine.length, 2);
   const created = mine.find(e => e.id.startsWith('ugc_'));
-  assert.ok(created.chainAddress.startsWith('0x'));
+  assert.equal(created.chainAddress, created.id);
   assert.equal(s.commerce.activeElfId, created.id);
 });
 test('官方购买使用服务器价格，可同时持有多只 AI', async () => {
@@ -496,7 +496,8 @@ test('创作者服务费：打赏入待结算、签协议+实名后可提现，�
   assert.equal(replay.withdrawal.id, created.withdrawal.id);
   assert.equal((await f.iap.wallet(A.id)).availableCents, 0);
   // 审核通过 → 出款成功。
-  const paid = await svc.reviewWithdrawal({ environment: 'Production', withdrawalId: created.withdrawal.id, action: 'approve' });
+  await assert.rejects(() => svc.reviewWithdrawal({ environment: 'Production', withdrawalId: created.withdrawal.id, action: 'approve' }), { code: 'PAYEE_REVIEW_REQUIRED' });
+  const paid = await svc.reviewWithdrawal({ environment: 'Production', withdrawalId: created.withdrawal.id, action: 'approve', payeeVerified: true });
   assert.equal(paid.withdrawal.status, 'paid');
   wallet = await f.iap.wallet(A.id);
   assert.equal(wallet.withdrawnCents, 994);
@@ -510,7 +511,7 @@ test('创作者服务费：打赏入待结算、签协议+实名后可提现，�
   await svc.snapshot(A, 'Production');
   const second = await svc.requestWithdrawal(A, { requestId: 'wd_req_0000000006', environment: 'Production',
     amountCents: 1000, account: '13800000001' });
-  const failed = await svc.reviewWithdrawal({ environment: 'Production', withdrawalId: second.withdrawal.id, action: 'approve' });
+  const failed = await svc.reviewWithdrawal({ environment: 'Production', withdrawalId: second.withdrawal.id, action: 'approve', payeeVerified: true });
   assert.equal(failed.withdrawal.status, 'failed');
   wallet = await f.iap.wallet(A.id);
   assert.equal(wallet.availableCents, 1000);

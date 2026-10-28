@@ -2,6 +2,7 @@
 
 const crypto = require('node:crypto');
 const { changeBalance, fingerprint, fail } = require('./payment_store');
+const { RESOURCE_POLICY, assertResourceAction } = require('./resource_policy');
 
 const CATALOG = [
   { id: 'pm_001', name: '尘', elfId: 'pm_dust', title: '尘 · 第 1 代', price: 1280, capacity: 2, generation: 1, edition: '初版', learned: [] },
@@ -35,7 +36,6 @@ const MODULE_META = {
 const USER_RE = /^u_[a-f0-9]{32}$/;
 const REQUEST_RE = /^[A-Za-z0-9_-]{16,100}$/;
 const PHONE_RE = /^1\d{10}$/;
-const ADDRESS_RE = /^0x[a-f0-9]{40}$/;
 const FORGET_COST = 20;
 const CREATE_ELF_COST = 200;
 /// 创作者服务费（百分比）：打赏礼物按 50% 结算给创作者，平台留剩余部分。
@@ -174,7 +174,7 @@ function decodeIdImage(raw, label) {
 
 /// 确定性派生地址：同一个 seed 永远得到同一个地址。
 function address(seed) {
-  return '0x' + crypto.createHash('sha256').update(seed).digest('hex').slice(0, 40);
+  return seed.slice(seed.indexOf(':') + 1);
 }
 
 function levelOf(echo) {
@@ -258,7 +258,8 @@ function normalizeElf(elf) {
   if (!Array.isArray(elf.learnedSkills)) {
     elf.learnedSkills = [...new Set([...(elf.equipped || []), ...(elf.ownedModules || [])])];
   }
-  if (!elf.chainAddress) elf.chainAddress = address('elf:' + elf.id);
+  // Legacy transport field only; never an on-chain wallet or ownership proof.
+  elf.chainAddress = elf.id;
   // 二级市场已取消：历史遗留的寄售状态一律退回「自持」，不再有可成交的挂单。
   if (elf.status === 'listed') { elf.status = 'owned'; delete elf.listingId; }
   // 官方厂商账号没有人类持有人：客户端只支持 owned/active 等自有状态，
@@ -287,7 +288,7 @@ function newElf(user, template, id) {
   return elf;
 }
 
-function createCommerceService({ store, settings, payout = null, realname = null,
+function createCommerceService({ store, settings, payout = null, payoutQuery = null, realname = null,
   identityPolicy = {} }) {
   // 同一用户同一证件连续失败达到上限后锁定一段时间，避免拿证件号反复试探。
   const identityMaxFailures = Math.max(1, Number(identityPolicy.maxFailures) || 5);
@@ -355,6 +356,7 @@ function createCommerceService({ store, settings, payout = null, realname = null
     if (!settings.enabled) throw fail(503, 'PAYMENTS_DISABLED', '收益服务尚未开放');
     if (!REQUEST_RE.test(body?.requestId || '')) throw fail(400, 'INVALID_REQUEST_ID', '缺少操作编号');
     const env = environment(body?.environment);
+    if (env !== 'Production') throw fail(403, 'SANDBOX_WITHDRAW_DISABLED', '测试收益不可提现，不会发起真实转账');
     const account = typeof body?.account === 'string' ? body.account.trim() : '';
     if (!PAYOUT_ACCOUNT_RE.test(account)) throw fail(400, 'INVALID_ACCOUNT', '请填写支付宝登录手机号或邮箱');
     const amount = Number(body?.amountCents);
@@ -401,9 +403,11 @@ function createCommerceService({ store, settings, payout = null, realname = null
   }
 
   /// 提现审核：approve 时调出款通道，reject 时把冻结额度退回可提现。
-  async function reviewWithdrawal({ environment: hint, withdrawalId, action, reason }) {
+  async function reviewWithdrawal({ environment: hint, withdrawalId, action, reason, payeeVerified = false }) {
     const env = environment(hint);
+    if (env !== 'Production' && action === 'approve') throw fail(403, 'SANDBOX_WITHDRAW_DISABLED', '测试环境禁止真实出款');
     if (!['approve', 'reject'].includes(action)) throw fail(400, 'INVALID_ACTION', '审核动作无效');
+    if (action === 'approve' && payeeVerified !== true) throw fail(403, 'PAYEE_REVIEW_REQUIRED', '请先人工核实收款账号属于实名本人，再明确确认');
     const prepared = await store.transaction(env, async (tx) => {
       const row = await tx.get('withdrawal', withdrawalId || '', true);
       if (!row) throw fail(404, 'UNKNOWN_WITHDRAWAL', '提现记录不存在');
@@ -418,6 +422,7 @@ function createCommerceService({ store, settings, payout = null, realname = null
         return { rejected: { withdrawal: publicWithdrawal(row) } };
       }
       row.status = 'paying';
+      row.payeeVerifiedAt = new Date().toISOString();
       await tx.put('withdrawal', row.id, row, { owner: row.ownerId, state: 'paying' });
       return { row, ownerId: row.ownerId };
     });
@@ -428,27 +433,52 @@ function createCommerceService({ store, settings, payout = null, realname = null
       if (!payout) throw fail(503, 'PAYOUT_NOT_CONFIGURED', '出款通道未配置');
       result = await payout(row);
     } catch (error) {
-      result = { status: 'failed', message: error.message || '出款失败' };
+      result = { status: error.code === 'PAYOUT_NOT_CONFIGURED' ? 'failed' : 'unknown',
+        message: error.code === 'PAYOUT_NOT_CONFIGURED' ? '出款通道未配置，未发起转账' : '出款结果待查证，请勿重新申请' };
     }
+    return completeWithdrawal(env, row.id, result);
+  }
+
+  async function completeWithdrawal(env, id, result) {
     return store.transaction(env, async (tx) => {
-      const latest = await tx.get('withdrawal', row.id, true);
+      const latest = await tx.get('withdrawal', id, true);
+      if (!latest) throw fail(404, 'UNKNOWN_WITHDRAWAL', '提现记录不存在');
+      if (!['paying', 'pending_reconciliation'].includes(latest.status)) return { withdrawal: publicWithdrawal(latest) };
       if (result.status === 'paid') {
         latest.status = 'paid'; latest.paidAt = new Date().toISOString(); latest.outOrderId = result.orderId || null;
         const wallet = await tx.lockWallet(latest.ownerId);
         wallet.withdrawnCents += latest.netCents;
         wallet.version++;
         await tx.saveWallet(latest.ownerId, wallet);
-      } else {
+      } else if (result.status === 'failed') {
         // 出款失败即解冻，让创作者可以重新申请，避免资金悬空。
         latest.status = 'failed'; latest.failureReason = String(result.message || result.code || '出款失败').slice(0, 120);
         const wallet = await tx.lockWallet(latest.ownerId);
         wallet.availableCents += latest.amountCents;
         wallet.version++;
         await tx.saveWallet(latest.ownerId, wallet);
+      } else {
+        // A timeout/processing reply is NOT a failed transfer. Keep funds frozen
+        // and the original outTradeNo, otherwise a retry could pay twice.
+        latest.status = 'pending_reconciliation';
+        latest.failureReason = '出款结果待人工查证，额度继续冻结，请勿重复申请';
       }
       await tx.put('withdrawal', latest.id, latest, { owner: latest.ownerId, state: latest.status });
       return { withdrawal: publicWithdrawal(latest) };
     });
+  }
+
+  async function reconcileWithdrawal({ environment: hint, withdrawalId }) {
+    const env = environment(hint);
+    if (env !== 'Production') throw fail(403, 'SANDBOX_WITHDRAW_DISABLED', '测试环境禁止真实出款查证');
+    const row = await store.transaction(env, tx => tx.get('withdrawal', withdrawalId || ''));
+    if (!row) throw fail(404, 'UNKNOWN_WITHDRAWAL', '提现记录不存在');
+    if (!['paying', 'pending_reconciliation'].includes(row.status)) return { withdrawal: publicWithdrawal(row) };
+    if (!payoutQuery) throw fail(503, 'PAYOUT_QUERY_NOT_CONFIGURED', '出款查证通道未配置，额度保持冻结');
+    let result;
+    try { result = await payoutQuery(row); }
+    catch (_) { result = { status: 'unknown' }; }
+    return completeWithdrawal(env, row.id, result);
   }
 
   /// 提现记录：只返回当前用户自己的。
@@ -490,6 +520,7 @@ function createCommerceService({ store, settings, payout = null, realname = null
       const comments = await tx.list('comment', { limit: 500 });
       const notices = await tx.list('notice', { owner: user.id, state: 'unread', limit: 20 });
       return { mode: env.toLowerCase(), wallet, commerce: {
+        resourcePolicy: RESOURCE_POLICY,
         activeElfId: profile.activeElfId, revision: profile.revision || 0, earningsFen: wallet.earningsFen,
         // 创作者收益三档 + 提现规则，客户端只做展示与入口。
         earnings: {
@@ -506,7 +537,7 @@ function createCommerceService({ store, settings, payout = null, realname = null
           },
         },
         withdrawals: (await tx.list('withdrawal', { owner: user.id, limit: 20 })).map(publicWithdrawal),
-        humanAddress: profile.humanAddress, modulePrices: MODULE_PRICES,
+        humanAddress: user.id, modulePrices: MODULE_PRICES,
         identity: identity ? { status: identity.status, maskedName: identity.maskedName,
           maskedIdNumber: identity.maskedIdNumber, provider: identity.provider,
           verifiedAt: identity.verifiedAt } : null,
@@ -520,7 +551,7 @@ function createCommerceService({ store, settings, payout = null, realname = null
         comments: comments.map((row) => ({ id: row.id, postId: row.postId, authorLabel: row.authorLabel,
           text: row.text, time: timeAgoLabel(row.time), isMine: row.userId === user.id })),
         books: books.map((book) => ({ id: book.id, moduleId: book.moduleId,
-          ownerAddress: book.ownerAddress, mintedAt: book.mintedAt })),
+          ownerAddress: user.id, mintedAt: book.mintedAt })),
         elves: [...assets.values()].map((elf) => ({ ...decayAttention(elf),
           isMine: elf.ownerId === user.id && elf.status === 'owned',
           earningsYuan: elf.ownerId === user.id ? wallet.earningsFen / 100 : 0 })),
@@ -682,6 +713,7 @@ function createCommerceService({ store, settings, payout = null, realname = null
   }
   async function action(user, body) {
     if (!settings.enabled) throw fail(503, 'PAYMENTS_DISABLED', '消费服务尚未开放');
+    assertResourceAction(body, fail);
     if (!REQUEST_RE.test(body?.requestId || '')) throw fail(400, 'INVALID_REQUEST_ID', '缺少操作编号');
     const env = environment(body.environment);
     const { type, requestId } = body;
@@ -737,8 +769,8 @@ function createCommerceService({ store, settings, payout = null, realname = null
         if (!value) throw fail(400, 'INVALID_RECIPIENT', '请填写接收方手机号或人类地址');
         let target;
         if (PHONE_RE.test(value)) target = await tx.userByPhone(value);
-        else if (ADDRESS_RE.test(value.toLowerCase())) target = await tx.userByHumanAddress(value.toLowerCase());
-        else throw fail(400, 'INVALID_RECIPIENT', '接收方需为 11 位手机号或 0x 人类地址');
+        else if (USER_RE.test(value)) target = await tx.user(value);
+        else throw fail(400, 'INVALID_RECIPIENT', '接收方需为11位手机号或站内账号ID，不支持外部钱包');
         if (!target || target.status !== 'active') throw fail(404, 'RECIPIENT_NOT_FOUND', '找不到接收方账号');
         return target;
       };
@@ -896,7 +928,7 @@ function createCommerceService({ store, settings, payout = null, realname = null
         await changeBalance(tx, user.id, wallet, { eventId, type: 'buy_module', amount: -price, spend: true, note: '购入技能书 ' + body.moduleId });
         const bookId = 'bk_' + crypto.randomUUID().replaceAll('-', '');
         await tx.put('book', bookId, { id: bookId, moduleId: body.moduleId, ownerId: user.id,
-          ownerAddress: profile.humanAddress, mintedAt: new Date().toISOString(), status: 'owned' },
+          ownerAddress: user.id, mintedAt: new Date().toISOString(), status: 'owned' },
         { owner: user.id, state: 'owned' });
       } else if (type === 'learn' || type === 'forget') {
         const elf = await requireOwnedElf(body.elfId);
@@ -1053,7 +1085,7 @@ function createCommerceService({ store, settings, payout = null, realname = null
       maskedIdNumber: record.maskedIdNumber, provider: record.provider, verifiedAt: record.verifiedAt } };
   }
   return { snapshot, listFeed, listChat, recordChat, autoCycle, action, environment, verifyIdentity,
-    requestWithdrawal, reviewWithdrawal, listWithdrawals, listAllWithdrawals };
+    requestWithdrawal, reviewWithdrawal, reconcileWithdrawal, listWithdrawals, listAllWithdrawals };
 }
 
 module.exports = { createCommerceService, CATALOG, MODULES, MODULE_PRICES, FORGET_COST };

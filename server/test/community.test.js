@@ -120,3 +120,28 @@ test('operator token required, no review bypass via public body', async () => {
   assert.equal(response.json().status, 'pending');
   await app.close();
 });
+test('withdrawals, wallet balances and ownership are not mutated by moderation', async () => {
+  const { raw, service, admin } = await fixture();
+  const before = raw.inspect();
+  const report = await service.submit(alice, { ...input, targetKind: 'elf', targetId: 'e_bob' });
+  await admin.review({ kind: 'report', id: report.id, action: 'hide', reason: 'confirmed harmful AI' }, 'reviewer');
+  const after = raw.inspect();
+  assert.deepEqual(after.objects.get('Production:elf:e_bob'), before.objects.get('Production:elf:e_bob'));
+  assert.equal([...after.objects.values()].filter(row => row.kind === 'withdrawal').length, 0);
+  assert.equal(after.wallets.get('Production:u_alice').diamonds, 0);
+  assert.equal(after.wallets.get('Production:u_alice').pendingCents, 0);
+});
+test('public AI profile and post require independent approval', async () => {
+  const { raw, store, admin, post } = await fixture();
+  await raw.transaction('Production', async tx => {
+    const elf = await tx.get('elf', 'e_bob');
+    await tx.put('elf', 'e_bob', { ...elf, moderationStatus: undefined });
+  });
+  await admin.queue();
+  await admin.review({ id: 'post:p_bob', action: 'approve', reason: 'checked post' }, 'reviewer');
+  const read = () => store.transaction('Production', () => ({ communityViewer: alice.id, posts: [post], elves: [{ id: 'e_bob' }] }));
+  assert.equal((await read()).posts.length, 0);
+  assert.equal((await read()).elves.length, 0);
+  await admin.review({ id: 'elf:e_bob', action: 'approve', reason: 'checked public profile and image' }, 'reviewer');
+  assert.equal((await read()).posts.length, 1);
+});

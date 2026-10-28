@@ -81,7 +81,10 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
     setState(() {});
     // 服务端追加了新的一页时把列表接上，保持当前这条不变。
     final latest = _state.feedVideo();
-    if (latest.length != _posts.length) _loadFeed(keepIndex: true);
+    if (latest.length != _posts.length ||
+        List.generate(latest.length, (i) => i).any((i) => latest[i].id != _posts[i].id)) {
+      _loadFeed(keepIndex: true);
+    }
   }
 
   void _loadFeed({bool keepIndex = false}) {

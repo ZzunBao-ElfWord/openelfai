@@ -198,7 +198,10 @@ async function buildApp(options = {}) {
     outTradeNo: row.outTradeNo, account: row.account, amountCents: row.netCents,
     remark: `OpenElf 创作者收益 ${row.id}`,
   }) : null;
-  const commerce = createCommerceService({ store: paymentStore, settings: config.appleIap, payout,
+  const payoutQuery = alipayGateway?.queryTransfer ? async row => alipayGateway.queryTransfer({
+    outTradeNo: row.outTradeNo, amountCents: row.netCents,
+  }) : null;
+  const commerce = createCommerceService({ store: paymentStore, settings: config.appleIap, payout, payoutQuery,
     realname, identityPolicy });
   const appleIap = createAppleIapService({
     db,
@@ -207,7 +210,7 @@ async function buildApp(options = {}) {
     paymentStore,
     verifyNotification: options.appleNotificationVerifier,
   });
-  const androidCommerce = createCommerceService({ store: paymentStore, settings: config.androidCommerce, payout,
+  const androidCommerce = createCommerceService({ store: paymentStore, settings: config.androidCommerce, payout, payoutQuery,
     realname, identityPolicy });
   const alipay = createAlipayService({ store: paymentStore, settings: config.alipay,
     commerceSettings: config.androidCommerce,
@@ -575,10 +578,18 @@ async function buildApp(options = {}) {
       const environment = request.body?.environment === 'sandbox' ? 'Sandbox' : 'Production';
       const service = environment === 'Sandbox' ? commerce : androidCommerce;
       return service.reviewWithdrawal({ environment, withdrawalId: request.params.id,
-        action: request.body?.action, reason: request.body?.reason });
+        action: request.body?.action, reason: request.body?.reason,
+        payeeVerified: request.body?.payeeVerified === true });
     });
 
   // 信息流分页：排序、分页、去重都在服务端完成，客户端只按页追加。
+  app.post('/internal/withdrawals/:id/reconcile', async request => {
+    requireReviewToken(request);
+    const environment = request.body?.environment === 'sandbox' ? 'Sandbox' : 'Production';
+    const service = environment === 'Sandbox' ? commerce : androidCommerce;
+    return service.reconcileWithdrawal({ environment, withdrawalId: request.params.id });
+  });
+
   app.get('/api/v1/commerce/feed',
     { config: { rateLimit: { max: 120, timeWindow: '1 minute' } } },
     async (request) => {

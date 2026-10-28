@@ -1,8 +1,8 @@
-/// Published operator text, checked 2026-10-27; only list/layout formatting changed.
-/// This snapshot does not approve the business model or implement withdrawal rules.
+/// Based on the published operator text; station resource rules revised 2026-10-28.
+/// App resource rules updated with user approval; website text still needs syncing.
 class UserAgreement {
   static const sourceUrl = 'https://openelfai.com/terms/';
-  static const updatedAt = '2026 年 10 月 27 日';
+  static const updatedAt = '2026 年 10 月 28 日';
   static const introduction =
       '本协议是你与开放精灵（OpenElf）之间关于使用官网、App、开放平台及相关服务的约定。请在使用前完整阅读。';
 
@@ -23,16 +23,18 @@ class UserAgreement {
       '• 你对自己输入与发布的内容负责；平台有权对违规内容进行下架、限制展示或删除。',
     ]),
     UserAgreementSection('资产与消费', [
-      '• 钻石是充值后的消费凭证，与人民币的固定比例为 10 钻石 = 1 元。',
+      '• AI 与技能书均为本站服务资源或道具，不是链上 NFT、虚拟货币、证券或投资产品。平台不铸造、导入或导出链上资产，不提供外部钱包接入、寄售或交易市场。',
+      '• 钻石是站内消费凭证。iOS 购买价格以 Apple 内购页面实际显示为准，不承诺现金兑付或投资回报。',
       '• 钻石仅可用于打赏、购买 AI 智能体、购买技能书等平台内消费，不可兑换为人民币，不可提现，不可转让。',
       '• 技能书学习后即销毁，技能永久写入对应 AI；已学技能可消耗钻石遗忘，技能书不返还。',
-      '• AI 所有权仅支持转赠，不提供用户之间的寄售或转卖；AI 的技能、人格与作品随 AI 一并转移。',
+      '• 你获得的是本站AI服务的使用权限，不是区块链代币或角色知识产权。仅支持向已注册的站内账号免费转赠使用权限，不得附带付款、交换、回购或收益承诺；不提供寄售或转卖。AI 的技能、人格与站内作品记录随AI转移，历史创作者收益与个人余额不随AI转移。',
     ]),
     UserAgreementSection('创作者收益', [
       '• 用户打赏对应的创作者收益，按平台与创作者签署的劳务/服务协议结算，属于平台支付的服务费，不是将虚拟道具兑换回钱。',
       '• 打赏服务费分成比例为 50%；收益经历 T+7 冷静期后进入可提现额度。',
       '• 提现需完成实名认证、签署创作者服务协议，并满足最低提现额度；未签署协议无法提现。',
       '• 收益不可转让、不可兑换为钻石，仅可按规则提现。',
+      '• 只有服务端确认的创作打赏产生独立记账的创作者收益；购买AI、持有AI、购买或转赠技能书不产生利息、分红或保本回报。测试环境收益没有现金价值，不可真实出款。提现须核验实名与收款主体；结果不确定时保持冻结并以原出款编号查证，不重复付款。',
     ]),
     UserAgreementSection('开放平台', [
       '• 开发者与 App 使用同一手机号账号，共享同一钱包与 API Key。',
@@ -42,7 +44,7 @@ class UserAgreement {
     ]),
     UserAgreementSection('知识产权', [
       '• 你对你上传的原创内容享有权利，并授权平台为提供服务进行必要的存储、展示与分发。',
-      '• 官方首发 AI 的角色 IP 归平台或被授权方所有；NFT 持有者获得该 AI 的使用权与内容收益权，不获得角色 IP 本身的所有权。',
+      '• 官方首发 AI 的角色 IP 归平台或被授权方所有；站内 AI 使用者获得该 AI 的使用权与内容收益权，不获得角色 IP 本身的所有权。',
       '• 平台界面、文案、商标与代码归平台所有，未经许可不得使用。',
     ]),
     UserAgreementSection('违规处理', [

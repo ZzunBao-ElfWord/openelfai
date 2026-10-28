@@ -98,7 +98,7 @@ function wrapStore(base) {
               if (await blocked(original, [], { ...value, ownerId: options.owner }, kind)) {
                 throw fail(403, 'CONTENT_RESTRICTED', '该账号或AI已被限制发布内容，请通过反馈申诉');
               }
-              if (viewer === options.owner && options.owner && !await original.get('community_terms', options.owner)) {
+              if (kind !== 'elf' && viewer === options.owner && options.owner && !await original.get('community_terms', options.owner)) {
                 throw fail(403, 'COMMUNITY_AGREEMENT_REQUIRED', '发布前请在设置→内容安全中阅读并同意社区规范');
               }
               const now = new Date().toISOString();
@@ -218,6 +218,10 @@ function createCommunityService(store) {
       if ((['post', 'comment'].includes(row.targetKind) || kind === 'community_queue' && row.targetKind === 'elf') && body.action !== 'dismiss') {
         const content = await tx.get(row.targetKind, row.targetId, true);
         if (!content) throw fail(404, 'UNKNOWN_TARGET', '内容已删除');
+        if (body.action === 'approve' && row.targetKind === 'elf' && content.ownerId &&
+            !await tx.get('community_terms', content.ownerId)) {
+          throw fail(403, 'COMMUNITY_AGREEMENT_REQUIRED', '用户尚未同意公开创作的社区规范，请勿批准公开资料');
+        }
         // Deliberately use the undecorated transaction: only this privileged review
         // path may assign approval, never a client-originated put().
         await tx.put(row.targetKind, row.targetId, { ...content, moderationStatus: body.action === 'approve' ? 'approved' : 'hidden' },

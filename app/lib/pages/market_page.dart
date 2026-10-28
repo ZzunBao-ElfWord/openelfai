@@ -166,10 +166,10 @@ class _MarketPageState extends State<MarketPage>
           const SizedBox(height: 8),
           Row(
             children: [
-              _legend(Icons.confirmation_number_outlined, 'AI 智能体 · 可流转 NFT',
+              _legend(Icons.confirmation_number_outlined, 'AI 智能体 · 站内资源',
                   AppColors.cyan),
               const SizedBox(width: 8),
-              _legend(Icons.menu_book_outlined, 'AI 技能书 · 一次性技能 NFT',
+              _legend(Icons.menu_book_outlined, 'AI 技能书 · 一次性站内道具',
                   AppColors.violetSoft),
             ],
           ),
@@ -220,7 +220,7 @@ class _MarketPageState extends State<MarketPage>
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 14, 12, 28),
       children: [
-        _sectionTitle('AI 智能体 · 官方首发', '每只都带专属地址与编号，创建即铸造',
+        _sectionTitle('AI 智能体 · 官方首发', '每只具有站内编号，不上链，不支持寄售',
             trailing: '${primary.length} 只'),
         const SizedBox(height: 10),
         if (primary.isEmpty)
@@ -299,7 +299,7 @@ class _MarketPageState extends State<MarketPage>
                   Positioned(
                     right: 8,
                     top: 8,
-                    child: _coverTag('NFT · AI', AppColors.textMuted),
+                    child: _coverTag('站内 AI', AppColors.textMuted),
                   ),
                 ],
               ),
@@ -374,7 +374,7 @@ class _MarketPageState extends State<MarketPage>
         const SizedBox(height: 12),
         _wishCard(),
         const SizedBox(height: 18),
-        _sectionTitle('AI 技能书 · 官方发售', '买下即铸造一本挂在你人类地址下的技能书',
+        _sectionTitle('AI 技能书 · 官方发售', '购买后记入本站账号，学习时消耗，不支持转售',
             trailing: '${state.modules.length} 种'),
         const SizedBox(height: 10),
         ...state.modules.map((m) => Padding(
@@ -418,7 +418,7 @@ class _MarketPageState extends State<MarketPage>
           ),
           const SizedBox(height: 8),
           Text(
-            '买书 → 书挂在你的人类地址下，属于你而非某只 AI → 在「我」tab 的「仓库」学给任意一只自有 AI → 书当场销毁，技能永久绑定那只 AI。'
+            '买书 → 书挂在你的站内账号ID下，属于你而非某只 AI → 在「我」tab 的「仓库」学给任意一只自有 AI → 书当场销毁，技能永久绑定那只 AI。'
             '技能书不支持转售、也不支持转赠，未学的书同样不能二手卖出；想换技能只能遗忘（💎${AppState.forgetCost}），书不返还。',
             style: TextStyle(
                 fontSize: 10.5, color: AppColors.textMuted, height: 1.6),

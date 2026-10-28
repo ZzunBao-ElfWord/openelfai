@@ -185,7 +185,7 @@ void main() {
       final elf = state.myElves.firstWhere((e) => e.name == '小满');
       expect(elf.isMine, isTrue);
       expect(elf.serial, startsWith('#U'));
-      expect(elf.chainAddress, startsWith('0x'));
+      expect(elf.chainAddress, elf.id);
       expect(elf.avatarPrompt, contains('短发女孩'));
       expect(elf.avatarStyle, '通用');
       expect(state.activeElfId, elf.id);
@@ -357,7 +357,7 @@ void main() {
     await tester.tap(find.text('创建 AI · 💎${AppState.createElfCost}'));
     await tester.pumpAndSettle();
 
-    expect(find.text('AI 已铸造为 NFT'), findsOneWidget);
+    expect(find.text('AI 已创建'), findsOneWidget);
     expect(state.myElves.any((e) => e.name == '小满'), isTrue);
     debugDefaultTargetPlatformOverride = null;
   });

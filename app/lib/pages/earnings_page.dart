@@ -448,6 +448,7 @@ class _EarningsPageState extends State<EarningsPage> {
   static String _statusLabel(String status) => switch (status) {
         'pending_review' => '审核中',
         'paying' => '出款中',
+        'pending_reconciliation' => '待查证 · 额度冻结',
         'paid' => '已到账',
         'failed' => '出款失败 · 已退回',
         'rejected' => '未通过 · 已退回',

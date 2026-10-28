@@ -5,20 +5,22 @@ import 'package:openelf/compliance/user_agreement.dart';
 import 'package:openelf/pages/user_agreement_page.dart';
 
 void main() {
-  test('官网用户协议十一节完整保留，不增改业务规则', () {
+  test('用户确认的站内资源协议保持十一节并明确无NFT和钻石转现', () {
     expect(UserAgreement.sourceUrl, 'https://openelfai.com/terms/');
-    expect(UserAgreement.updatedAt, '2026 年 10 月 27 日');
+    expect(UserAgreement.updatedAt, '2026 年 10 月 28 日');
     expect(UserAgreement.sections.length, 11);
     final text = UserAgreement.sections
         .map((s) => '${s.title}\n${s.paragraphs.join('\n')}')
         .join('\n');
     for (final required in [
-      '10 钻石 = 1 元',
+      'Apple 内购页面实际显示',
       '不可兑换为人民币',
       'T+7',
       '分成比例为 50%',
-      '不提供用户之间的寄售或转卖',
-      'NFT 持有者',
+      '不提供寄售或转卖',
+      '不是链上 NFT',
+      '免费转赠使用权限',
+      '测试环境收益没有现金价值',
       'support@openelfai.com',
       '在法律允许的范围内',
       '以更新日期较新的版本为准',
@@ -36,7 +38,7 @@ void main() {
     final scroll = tester.state<ScrollableState>(find.byType(Scrollable));
     scroll.position.jumpTo(scroll.position.maxScrollExtent);
     await tester.pumpAndSettle();
-    expect(find.text('官网原文：https://openelfai.com/terms/').hitTestable(),
+    expect(find.textContaining('官网协议参考：https://openelfai.com/terms/').hitTestable(),
         findsOneWidget);
     expect(tester.takeException(), isNull);
   });

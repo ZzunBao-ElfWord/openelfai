@@ -133,12 +133,12 @@ class _CreateElfPageState extends State<CreateElfPage> {
       barrierDismissible: false,
       builder: (dctx) => AlertDialog(
         backgroundColor: AppColors.surface,
-        title: Text('AI 已铸造为 NFT', style: TextStyle(color: AppColors.text)),
+        title: Text('AI 已创建', style: TextStyle(color: AppColors.text)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('${elf?.name ?? ''} ${elf?.serial ?? ''} 已归入你的人类地址。',
+            Text('${elf?.name ?? ''} ${elf?.serial ?? ''} 已归入你的站内账号ID。',
                 style: TextStyle(fontSize: 13, color: AppColors.textSub)),
             const SizedBox(height: 8),
             Text('智能体编号',
@@ -150,7 +150,7 @@ class _CreateElfPageState extends State<CreateElfPage> {
                     color: AppColors.textSub,
                     fontFamily: 'monospace')),
             const SizedBox(height: 8),
-            Text('AI 专属地址',
+            Text('AI 站内编号',
                 style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
             const SizedBox(height: 2),
             Text(elf?.chainAddress ?? '-',

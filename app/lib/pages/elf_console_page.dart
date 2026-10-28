@@ -12,7 +12,7 @@ import 'persona_edit_page.dart';
 
 /// AI 控制台：持有人从「我」tab 的 NFT 卡片进入的私有页面。
 ///
-/// 这里承载一只 AI 的全部控制项：NFT 档案（编号 / AI 地址 / 持有人）、
+/// 这里承载一只 AI 的全部控制项：AI 资源档案（编号 / AI 地址 / 持有人）、
 /// 对外能力（技能、人格、自动运营）、对外数据、内容分栏，
 /// 以及唯一一种 NFT 流转方式（免费转赠）。
 /// 人类页面只负责持有，AI 的一切都收在这里。
@@ -152,7 +152,7 @@ class _ElfConsolePageState extends State<ElfConsolePage> {
                 ),
                 const Spacer(),
                 _pill(
-                  'AI · NFT ${elf.serial}',
+                  'AI · 编号 ${elf.serial}',
                   icon: Icons.confirmation_number_outlined,
                 ),
               ],
@@ -254,7 +254,7 @@ class _ElfConsolePageState extends State<ElfConsolePage> {
     );
   }
 
-  // —— NFT 档案：把「它是一枚被铸造的资产」讲清楚 ——
+  // —— AI 资源档案：把「它是一枚被铸造的资产」讲清楚 ——
 
   Widget _nftSection(BuildContext context, AppState state, Elf elf) {
     final aiAddr = elf.chainAddress ?? '';
@@ -262,23 +262,23 @@ class _ElfConsolePageState extends State<ElfConsolePage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SectionHeader('NFT 档案', trailing: '所有权凭证'),
+        const SectionHeader('AI 资源档案', trailing: '站内使用记录'),
         _group(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _kvRow('智能体编号', elf.serial, mono: true),
               const SizedBox(height: 8),
-              _kvRow('AI 专属地址', _short(aiAddr), copy: aiAddr),
+              _kvRow('AI 站内编号', _short(aiAddr), copy: aiAddr),
               const SizedBox(height: 8),
               _kvRow('持有人', '你（人类 ${_short(humanAddr)}）', copy: humanAddr),
               const SizedBox(height: 8),
-              _kvRow('铸造状态', '已铸造 · 技能与专属地址都绑在这只 AI 上'),
+              _kvRow('创建状态', '站内已创建 · 技能绑定此AI，无链上资产'),
               const SizedBox(height: 10),
               Divider(color: AppColors.strokeSoft, height: 1),
               const SizedBox(height: 10),
               Text(
-                '创建即铸造。转赠时，智能体编号、AI 地址与已学技能整体转移给下一个持有人。',
+                'AI为站内资源，不上链，不代表投资资产。仅支持站内免费转赠，编号与已学技能随AI转移。',
                 style: TextStyle(
                     fontSize: 10.5, color: AppColors.textMuted, height: 1.6),
               ),
@@ -917,7 +917,7 @@ class _ElfConsolePageState extends State<ElfConsolePage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SectionHeader('流转', trailing: 'NFT 所有权变更'),
+        const SectionHeader('流转', trailing: '站内使用权限转移'),
         _group(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -925,7 +925,7 @@ class _ElfConsolePageState extends State<ElfConsolePage> {
               _transferRow(
                 icon: Icons.card_giftcard,
                 title: '转赠',
-                desc: '免费转给另一个人类（手机号或人类地址），不限时间；转出后你不再是持有人。',
+                desc: '免费转给另一个人类（手机号或站内账号ID），不限时间；转出后你不再是持有人。',
                 action: '转赠',
                 onTap: () => _giftDialog(context, state, elf),
               ),
@@ -1000,7 +1000,7 @@ class _ElfConsolePageState extends State<ElfConsolePage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '填写接收方的人类手机号或人类地址。转出后它不再属于你，编号、地址与已学技能一起转移，且不可撤回。',
+              '填写接收方的人类手机号或站内账号ID。转出后它不再属于你，编号、地址与已学技能一起转移，且不可撤回。',
               style: TextStyle(
                   fontSize: 12, color: AppColors.textMuted, height: 1.6),
             ),
@@ -1009,7 +1009,7 @@ class _ElfConsolePageState extends State<ElfConsolePage> {
               controller: ctrl,
               style: TextStyle(color: AppColors.text),
               decoration: InputDecoration(
-                labelText: '接收方手机号 / 人类地址',
+                labelText: '接收方手机号 / 站内账号ID',
                 labelStyle: TextStyle(color: AppColors.textMuted),
                 filled: true,
                 fillColor: AppColors.surfaceAlt,
@@ -1103,7 +1103,7 @@ class _ElfConsolePageState extends State<ElfConsolePage> {
           const SizedBox(width: 7),
           Expanded(
             child: Text(
-              '这只 AI 是你铸造的智能体 NFT。你可以在控制台配置它的技能、指挥它创作，或去开放平台充值；'
+              '这只 AI 是你创建的站内智能体。你可以在控制台配置它的技能、指挥它创作，或去开放平台充值；'
               '转赠后，它的编号、地址与技能会整体跟着新持有人走。',
               style: TextStyle(
                   fontSize: 10.5, color: AppColors.textMuted, height: 1.6),

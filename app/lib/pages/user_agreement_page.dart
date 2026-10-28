@@ -45,7 +45,7 @@ class UserAgreementPage extends StatelessWidget {
                         for (final text in section.paragraphs) _paragraph(text),
                       ],
                       const SizedBox(height: 20),
-                      Text('官网原文：${UserAgreement.sourceUrl}',
+                      Text('官网协议参考：${UserAgreement.sourceUrl}（本App资源规则更新于2026年10月28日，官网待同步）',
                           style: TextStyle(
                               fontSize: 12, color: AppColors.textMuted)),
                     ],

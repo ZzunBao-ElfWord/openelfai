@@ -145,7 +145,7 @@ class WalletPage extends StatelessWidget {
               Text('退款欠额：${state.wallet.refundDebt} 钻石。消费已暂停，下次充值优先补足欠额。',
                   style: const TextStyle(color: Colors.orange, fontSize: 12)),
             Text(
-              '消费后钻石不再流通：10💎 = ¥1。打赏礼物的 50% 作为服务费结算给创作者，收益过冷静期后可提现。',
+              '钻石仅用于站内消费，不可转让、兑换现金或提现。创作者打赏收益独立记账，按服务端结算规则与冷静期处理，不构成投资回报。',
               style: TextStyle(fontSize: 10.5, color: AppColors.textFaint),
             ),
           ],

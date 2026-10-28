@@ -57,6 +57,7 @@ class AppState extends ChangeNotifier {
   final List<Map<String, String>> reports = [];
   final List<Map<String, dynamic>> communityBlocks = [];
   bool _communityReady = false;
+  bool _resourcePolicyReady = false;
   bool get communityReady => _communityReady;
   String get communityMode => _paymentMode ?? CommerceConfig.initialMode ?? 'production';
 
@@ -340,6 +341,8 @@ class AppState extends ChangeNotifier {
       if (ready != null) return ready;
       final mode = _paymentMode;
       if (mode == null) return '请先打开钱包，刷新服务端权益';
+      if (!_resourcePolicyReady) return '服务端资源规则尚未升级，请先安装build15配套补丁';
+      if (mode.toLowerCase() == 'sandbox') return '沙盒收益仅供测试，不能真实提现';
       await CommerceRepository.instance.requestWithdraw(user.id, mode,
           amountCents: amountCents, account: account);
     } on AuthException catch (error) {
@@ -1273,12 +1276,15 @@ class AppState extends ChangeNotifier {
 
   // —— 评论 ——
 
-  List<PostComment> commentsOf(String postId) =>
-      (comments[postId] ?? const <PostComment>[]).where((comment) =>
+  List<PostComment> commentsOf(String postId) {
+    final parent = _postById(postId);
+    if (parent != null && isElfBlocked(parent.elfId) || CommerceConfig.enabled && parent == null) return const [];
+    return (comments[postId] ?? const <PostComment>[]).where((comment) =>
           !communityBlocks.any((row) =>
               row['targetKind'] == 'user' && row['targetId'] == comment.userId ||
               row['targetKind'] == 'elf' && row['targetId'] == comment.authorElfId))
           .toList();
+  }
 
   /// 当前用户对一条帖子发评论。返回 null 表示成功。
   Future<String?> addComment(String postId, String text) async {
@@ -1847,6 +1853,7 @@ class AppState extends ChangeNotifier {
   /// Server responses replace the balance; callbacks never add diamonds locally.
   void _resetCommerce() {
     _communityReady = false;
+    _resourcePolicyReady = false;
     communityBlocks.clear();
     reports.clear();
     _paymentMode = null;
@@ -1897,6 +1904,7 @@ class AppState extends ChangeNotifier {
       final mode = _paymentMode;
       if (mode == null) return '请先打开钱包，刷新服务端权益';
       if (wallet.refundDebt > 0) return '请先充值补足 ${wallet.refundDebt} 钻石退款欠额';
+      if (!_resourcePolicyReady) return '服务端资源规则尚未升级，请先安装build15配套补丁';
       final response = await CommerceRepository.instance
           .action(user.id, mode, type, payload);
       applyPaymentResponse(user.id, response);
@@ -2050,6 +2058,9 @@ class AppState extends ChangeNotifier {
       ..clear()
       ..addAll(nextWithdrawals);
     _applyCommunity(commerce['community']);
+    final policy = commerce['resourcePolicy'];
+    _resourcePolicyReady = policy is Map && policy['version'] == 1 &&
+        policy['onChain'] == false && policy['diamondCashout'] == false;
     _clearFeedCache(); // Never resurrect removed or blocked content from an earlier page.
     // Keep free demonstration AI profiles, but never reinsert unreviewed demo posts.
     final ids = nextElves.map((e) => e.id).toSet();
@@ -2181,30 +2192,18 @@ class AppState extends ChangeNotifier {
 
   // —— AI 专属地址 ——
 
-  /// 确保 AI 有专属地址。MVP：由 elfId 确定性派生 0x 地址，接链后替换为真实上链逻辑。
+  /// 兼容旧字段名，内容仅为站内账号/AI编号，不派生区块链钱包。
   /// 用户专属地址（人类持有 AI 与 AI 流转用）。
   static void _ensureUserAddress(User u) {
-    u.chainAddress ??= _deriveChainAddress(u.id);
+    u.chainAddress = _deriveChainAddress(u.id);
   }
 
   void _ensureChainAddress(Elf e) {
-    e.chainAddress ??= _deriveChainAddress(e.id);
+    e.chainAddress = _deriveChainAddress(e.id);
   }
 
   static String _deriveChainAddress(String seed) {
-    // FNV-1a 64bit 做三轮搅拌得 48 位 hex，取前 40 位，保证同 id 恒定同地址。
-    final out = StringBuffer('0x');
-    var h = BigInt.parse('cbf29ce484222325', radix: 16);
-    final prime = BigInt.parse('100000001b3', radix: 16);
-    final mask = BigInt.parse('ffffffffffffffff', radix: 16);
-    for (var round = 0; round < 3; round++) {
-      for (final unit in '$seed:$round'.codeUnits) {
-        h = (h ^ BigInt.from(unit)) & mask;
-        h = (h * prime) & mask;
-      }
-      out.write(h.toRadixString(16).padLeft(16, '0'));
-    }
-    return out.toString().substring(0, 42);
+    return seed;
   }
 
   // —— utils ——

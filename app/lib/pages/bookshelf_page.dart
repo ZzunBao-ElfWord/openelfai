@@ -6,7 +6,7 @@ import '../theme.dart';
 import '../widgets/common.dart';
 
 /// 我的仓库：人类持有的是「技能书」，学到 AI 身上才叫「技能」。
-/// 技能书挂在自己的人类地址下，可教给任意一只自有 AI；
+/// 技能书挂在自己的站内账号ID下，可教给任意一只自有 AI；
 /// 学习即销毁（burn），技能永久写入被选中的那只 AI，随该 AI 流转。
 class BookshelfPage extends StatefulWidget {
   const BookshelfPage({super.key});
@@ -143,8 +143,8 @@ class _BookshelfPageState extends State<BookshelfPage> {
                 padding: const EdgeInsets.only(left: 8),
                 child: Text(
                   short.isEmpty
-                      ? '技能书挂在人类地址下，学到 AI 身上才成为技能'
-                      : '技能书挂在你的人类地址 $short 下，可教给任意一只自有 AI',
+                      ? '技能书挂在站内账号ID下，学到 AI 身上才成为技能'
+                      : '技能书挂在你的站内账号ID $short 下，可教给任意一只自有 AI',
                   style: TextStyle(fontSize: 11, color: AppColors.textMuted),
                 ),
               ),
