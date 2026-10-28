@@ -239,12 +239,18 @@ class ShareHelper {
     SocialChannel.douyin: DouyinShareAdapter(),
     SocialChannel.bilibili: BilibiliShareAdapter(),
   });
-  static bool _busy = false;
+  static Object? _activeSession;
 
   static Future<void> shareElf(BuildContext context, Elf elf,
       {String? excerpt}) async {
-    if (_busy) return;
-    _busy = true;
+    if (_activeSession != null) return;
+    final session = Object();
+    _activeSession = session;
+    void release() {
+      // An old native callback must not unlock a newer Flutter share panel.
+      if (identical(_activeSession, session)) _activeSession = null;
+    }
+
     try {
       var action = await showModalBottomSheet<ShareAction>(
         context: context,
@@ -283,6 +289,7 @@ class ShareHelper {
         return;
       }
       await _shareCard(context, elf,
+          onHandOff: release,
           excerpt: excerpt,
           channel: action.channel,
           douyinScene: douyinScene,
@@ -294,12 +301,13 @@ class ShareHelper {
             .showSnackBar(const SnackBar(content: Text('分享未完成，请稍后重试')));
       }
     } finally {
-      _busy = false;
+      release();
     }
   }
 
   static Future<void> _shareCard(BuildContext context, Elf elf,
-      {String? excerpt,
+      {required VoidCallback onHandOff,
+      String? excerpt,
       SocialChannel? channel,
       bool preview = false,
       DouyinShareScene douyinScene = DouyinShareScene.contacts,
@@ -334,6 +342,7 @@ class ShareHelper {
       ),
     );
     overlay.insert(entry);
+    var overlayRemoved = false;
     try {
       // Wait for the inserted overlay to actually paint, rather than guessing
       // device speed with a fixed delay (which can leave the key unmounted).
@@ -349,6 +358,10 @@ class ShareHelper {
       }
       if (bytes == null) throw StateError('分享图片生成失败');
       final png = bytes.buffer.asUint8List();
+      // The render surface is no longer needed. Do not retain it while an
+      // external app/sheet waits for a callback that may never arrive.
+      entry.remove();
+      overlayRemoved = true;
       final link = shareLinkFor(elf);
       if (!context.mounted) return;
       final text = '${elf.name} 正在 OpenElf 世界里生长，来注视它 → $link';
@@ -373,6 +386,7 @@ class ShareHelper {
         if (share != true || !context.mounted) return;
       }
       if (channel != null) {
+        onHandOff();
         final result = await _service.share(
             channel,
             SocialShareContent(
@@ -393,6 +407,9 @@ class ShareHelper {
         }
         return;
       }
+      // Single-flight protects our own panel/preparation, not the lifetime of
+      // an external share UI. iOS swipe dismissal need not return promptly.
+      onHandOff();
       await Share.shareXFiles(
         [
           XFile.fromData(png,
@@ -402,7 +419,7 @@ class ShareHelper {
         sharePositionOrigin: origin,
       );
     } finally {
-      entry.remove();
+      if (!overlayRemoved) entry.remove();
     }
   }
 }
