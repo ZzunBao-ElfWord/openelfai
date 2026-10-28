@@ -557,7 +557,8 @@ async function buildApp(options = {}) {
     const token = config.withdrawReviewToken;
     if (!token) throw fail(404, 'NOT_FOUND', '接口不存在');
     const given = String(request.headers['x-review-token'] || '');
-    if (given.length !== token.length || !crypto.timingSafeEqual(Buffer.from(given), Buffer.from(token))) {
+    const digest = value => crypto.createHash('sha256').update(value).digest();
+    if (!crypto.timingSafeEqual(digest(given), digest(token))) {
       throw fail(401, 'UNAUTHORIZED', '审核令牌无效');
     }
   }
@@ -570,6 +571,17 @@ async function buildApp(options = {}) {
       const service = environment === 'Sandbox' ? commerce : androidCommerce;
       reply.header('cache-control', 'no-store');
       return service.listAllWithdrawals(environment, status);
+    });
+  const earningsReview = require('./earnings_review').createEarningsReview(paymentStore);
+  app.get('/internal/earnings-risk/:userId', async (request, reply) => {
+    requireReviewToken(request);
+    reply.header('cache-control', 'no-store');
+    return earningsReview.inspect(request.params.userId);
+  });
+  app.post('/internal/earnings-risk/:userId/review',
+    { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async request => {
+      requireReviewToken(request);
+      return earningsReview.review(request.params.userId, request.body);
     });
   app.post('/internal/withdrawals/:id/review',
     { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },

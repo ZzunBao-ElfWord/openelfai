@@ -1,0 +1,25 @@
+{
+  "original_sha256": "dc86ff3c04f4ec5ae8f8346f8ff3a8bdfe410cad75f364255781319d6ba0cb4b",
+  "icons": {
+    "assets/brand/app_icon.png": "eda4a5bd293378e86069bcaf5fb240ce9a8a8cec9929864886ab465c256fcab9",
+    "android/app/src/main/res/mipmap-mdpi/ic_launcher.png": "3dd6cc08ed0df7fade73209e1ad89fa6cbe2b8da207c7c34fa1363bdb839e903",
+    "android/app/src/main/res/mipmap-mdpi/ic_launcher_foreground.png": "0ccb6980961f706f6d4ba9c9c537083d8c810eb25d3b9f825fdf19fb2597518f",
+    "android/app/src/main/res/mipmap-hdpi/ic_launcher.png": "9b7a45b412476dfbed4013d3a6ff8eae361fa3fcbeb13677de0e5ef23d6a1baf",
+    "android/app/src/main/res/mipmap-hdpi/ic_launcher_foreground.png": "0557be8e54267cd4075cd8384d08cf600bf460afe0ed8af1e021e568a00430fb",
+    "android/app/src/main/res/mipmap-xhdpi/ic_launcher.png": "40ae6d7ade57ea8db1cb723c580427a30f10421e8d3c2e95f6c5ac2597907bad",
+    "android/app/src/main/res/mipmap-xhdpi/ic_launcher_foreground.png": "ef361af70855db05362fe30d40df6d8b81f3e12bf0e2d123db27410f75b2ecef",
+    "android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png": "3497dcb91d9cb16a7cd273dfccaec842a5a237d09238d3a24ce16fecffb070db",
+    "android/app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.png": "3008955cc6a16ae4ea0ecb1f8fc904edc53bca910e5231567de32751870a1168",
+    "android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png": "62364ac24e46a56d8d65f3ad02aac8aa5597ef10f5785742fe51b2d719273b53",
+    "android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png": "6c139289b785f072d9bf758259c78d6a7d9b8935cc7014a4d2fa9c122e5f1a87",
+    "android/app/src/main/res/drawable-nodpi/launch_icon.png": "2b111b5799f6d891813e4882e77b7d9c19dd6489829d64bcd76fcfcc841eec34",
+    "ios/Runner/Assets.xcassets/LaunchImage.imageset/LaunchImage.png": "66115896173a8ac8ba80c9e9519269f7731878bddf5016c0bc0499b058f4ff9f",
+    "ios/Runner/Assets.xcassets/LaunchImage.imageset/LaunchImage@2x.png": "2e728880763b0d18225423718446ff744497560322e2afbd9ee153f2d50a88bd",
+    "ios/Runner/Assets.xcassets/LaunchImage.imageset/LaunchImage@3x.png": "37babb220e243c8ba35df403a4d59acb9585543a1e1f8f1c98a946ba25636940",
+    "web/favicon.png": "6b6e80307f301d5d2ef5afd52e7fd38555b98f4311fafe2f1cd7e4f4ad75a325",
+    "web/icons/Icon-192.png": "62364ac24e46a56d8d65f3ad02aac8aa5597ef10f5785742fe51b2d719273b53",
+    "web/icons/Icon-maskable-192.png": "b80bfe19e93c202b8e62cc96141eb7a122460622fc20754b7e2b308585509682",
+    "web/icons/Icon-512.png": "f6b85d0399e11f41dde973cb0b6f385e90d9bc8b56fd039b5d7589e0c983cf7b",
+    "web/icons/Icon-maskable-512.png": "5f99477e1234400d07cb5409c3882be27dd28c82ce04b6fe335a365cd5016e72"
+  }
+}

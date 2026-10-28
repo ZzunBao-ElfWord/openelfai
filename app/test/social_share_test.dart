@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:share_plus_platform_interface/share_plus_platform_interface.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -138,7 +139,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('未配置渠道需用户确认才可复制，不自动上传；取消后可再次分享', (tester) async {
+  testWidgets('两端共享分享、取消及划掉后重开，不自动上传', (tester) async {
     final elf = Elf(
         id: 'demo',
         serial: '#001',
@@ -233,10 +234,10 @@ void main() {
     }
 
     // Reproduce a native sheet swiped away without a completion callback.
-    final platform = SharePlatform.instance;
+    final previousSharePlatform = SharePlatform.instance;
     final pending = PendingSystemShare();
     SharePlatform.instance = pending;
-    addTearDown(() => SharePlatform.instance = platform);
+    addTearDown(() => SharePlatform.instance = previousSharePlatform);
     await tester.tap(find.text('分享'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('更多分享'));
@@ -266,5 +267,7 @@ void main() {
     expect(find.text('内容由 AI 生成'), findsOneWidget);
     expect(find.text('OpenElf'), findsNothing);
     expect(find.text(sharePathFor(elf)), findsNothing);
-  });
+  },
+      variant:
+          const TargetPlatformVariant({TargetPlatform.android, TargetPlatform.iOS}));
 }

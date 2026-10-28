@@ -274,6 +274,7 @@ class EarningsSummary {
   final int feeBps;
   final int dailyLimitCents;
   final int tipSharePercent;
+  final String? withdrawalBlockedReason;
   final bool verified;
 
   /// 创作者服务协议：签署后平台才按服务费结算收益，未签不能提现。
@@ -291,6 +292,7 @@ class EarningsSummary {
     this.feeBps = 60,
     this.dailyLimitCents = 200000,
     this.tipSharePercent = 50,
+    this.withdrawalBlockedReason,
     this.verified = false,
     this.agreementAccepted = false,
     this.agreementVersion = '',
@@ -300,6 +302,10 @@ class EarningsSummary {
   /// 旧服务端没有 earnings 字段时，只把累计收益当作待结算展示。
   factory EarningsSummary.fromLifetime(int cents) =>
       EarningsSummary(pendingCents: cents, lifetimeCents: cents);
+
+  int withdrawalFeeCents(int amountCents) => amountCents <= 0
+      ? 0
+      : ((amountCents * feeBps + 5000) ~/ 10000).clamp(1, amountCents);
 }
 
 /// 一笔提现记录（状态由服务端维护）。

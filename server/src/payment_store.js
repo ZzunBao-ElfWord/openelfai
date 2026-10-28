@@ -111,6 +111,15 @@ function createPaymentStore(db) {
               const rows = await query(`SELECT payload FROM payment_objects WHERE ${filters.join(' AND ')} ORDER BY updated_at DESC, object_id ASC LIMIT ${Math.trunc(count)}` + (lock ? ' FOR UPDATE' : ''), params);
               return rows.map((row) => JSON.parse(row.payload));
             },
+            async scan(kind, { owner, state, after = '', limit = 200, lock = false } = {}) {
+              const filters = ['environment = ?', 'kind = ?', 'object_id > ?'];
+              const params = [environment, kind, after];
+              if (owner !== undefined) { filters.push('owner_id = ?'); params.push(owner); }
+              if (state !== undefined) { filters.push('state = ?'); params.push(state); }
+              const count = Math.max(1, Math.min(500, Number(limit) || 200));
+              const rows = await query(`SELECT object_id, payload FROM payment_objects WHERE ${filters.join(' AND ')} ORDER BY object_id ASC LIMIT ${Math.trunc(count)}` + (lock ? ' FOR UPDATE' : ''), params);
+              return rows.map(row => ({ key: row.object_id, value: JSON.parse(row.payload) }));
+            },
             async legacyOrder(id) {
               return (await query(`SELECT * FROM ${names.order} WHERE transaction_id = ? FOR UPDATE`, [id]))[0] || null;
             },
@@ -147,6 +156,13 @@ function fail(statusCode, code, message) { return Object.assign(new Error(messag
 async function changeBalance(tx, userId, wallet, { eventId, type, amount, note, recharge = false, spend = false }) {
   if (!Number.isSafeInteger(amount)) throw new Error('Invalid ledger amount');
   if (await tx.logExists(userId, eventId)) return wallet;
+  // Retain a durable risk signal even when the refund is covered by unspent
+  // diamonds or later repaid. This is NOT an automatic creator clawback.
+  if (type === 'refund' && amount < 0) {
+    await tx.put('income_refund_risk', userId, { payerId: userId, eventId,
+      detectedAt: new Date().toISOString(), reason: 'refund_requires_income_review' },
+    { owner: userId, state: 'needs_review' });
+  }
   if (spend && (wallet.refundDebt > 0 || wallet.diamonds < -amount)) {
     throw fail(409, wallet.refundDebt ? 'REFUND_DEBT' : 'INSUFFICIENT_BALANCE', wallet.refundDebt ? '请先补足退款欠额后再消费' : '钻石余额不足');
   }

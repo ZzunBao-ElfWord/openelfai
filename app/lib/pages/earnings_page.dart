@@ -70,10 +70,12 @@ class _EarningsPageState extends State<EarningsPage> {
             animation: state,
             builder: (context, _) {
               final summary = state.creatorEarnings;
-              final verified = state.identity?.status == IdentityStatus.verified;
+              final verified =
+                  state.identity?.status == IdentityStatus.verified;
               final signed = summary.agreementAccepted;
               final canWithdraw = verified &&
                   signed &&
+                  summary.withdrawalBlockedReason == null &&
                   summary.availableCents >= summary.minWithdrawCents;
               return ListView(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
@@ -83,6 +85,8 @@ class _EarningsPageState extends State<EarningsPage> {
                   _hero(summary),
                   const SizedBox(height: 14),
                   if (_error != null) _errorBanner(_error!),
+                  if (summary.withdrawalBlockedReason != null)
+                    _errorBanner(summary.withdrawalBlockedReason!),
                   if (!verified)
                     _realNameGate(context)
                   else if (!signed)
@@ -91,9 +95,11 @@ class _EarningsPageState extends State<EarningsPage> {
                     Opacity(
                       opacity: canWithdraw ? 1 : 0.45,
                       child: BrandButton(
-                        label: canWithdraw
-                            ? '提现到支付宝'
-                            : '满 ¥${_yuan(summary.minWithdrawCents)} 可提现',
+                        label: summary.withdrawalBlockedReason != null
+                            ? '收益待核对，暂不可提现'
+                            : canWithdraw
+                                ? '提现到支付宝'
+                                : '满 ¥${_yuan(summary.minWithdrawCents)} 可提现',
                         icon: Icons.account_balance_wallet_outlined,
                         onTap: canWithdraw ? _openWithdraw : null,
                       ),
@@ -200,16 +206,14 @@ class _EarningsPageState extends State<EarningsPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
-            style: TextStyle(fontSize: 10, color: AppColors.textFaint)),
+        Text(label, style: TextStyle(fontSize: 10, color: AppColors.textFaint)),
         const SizedBox(height: 2),
         Text(value,
             style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
                 color: AppColors.textSub)),
-        Text(hint,
-            style: TextStyle(fontSize: 9.5, color: AppColors.textFaint)),
+        Text(hint, style: TextStyle(fontSize: 9.5, color: AppColors.textFaint)),
       ],
     );
   }
@@ -327,8 +331,8 @@ class _EarningsPageState extends State<EarningsPage> {
           '平台按你名下 AI 收到的打赏礼物流水结算服务费，收益进入待结算，'
           '冷静期满后转为可提现，提现到本人支付宝。收益属于劳务/服务报酬，'
           '不可转让给其他用户。',
-          style: TextStyle(
-              fontSize: 12, color: AppColors.textMuted, height: 1.6),
+          style:
+              TextStyle(fontSize: 12, color: AppColors.textMuted, height: 1.6),
         ),
         actions: [
           TextButton(
@@ -422,8 +426,7 @@ class _EarningsPageState extends State<EarningsPage> {
                       color: color)),
               const Spacer(),
               Text(_time(row.createdAt),
-                  style:
-                      TextStyle(fontSize: 10, color: AppColors.textFaint)),
+                  style: TextStyle(fontSize: 10, color: AppColors.textFaint)),
             ],
           ),
           const SizedBox(height: 3),
@@ -482,8 +485,7 @@ class _EarningsPageState extends State<EarningsPage> {
     return '${value.endsWith('.00') ? value.substring(0, value.length - 3) : value}%';
   }
 
-  static String _yuan(int cents) =>
-      WorldData.formatYuan(cents / 100);
+  static String _yuan(int cents) => WorldData.formatYuan(cents / 100);
 }
 
 /// 提现表单：金额（元）+ 支付宝登录号。错误就地展示，避免被弹层遮挡。
@@ -558,7 +560,7 @@ class _WithdrawSheetState extends State<_WithdrawSheet> {
     final amount = double.tryParse(_amountCtrl.text.trim());
     final estimate = amount == null || amount <= 0
         ? 0
-        : (amount * 100).round() * summary.feeBps ~/ 10000;
+        : summary.withdrawalFeeCents((amount * 100).round());
     return Padding(
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,
@@ -587,21 +589,23 @@ class _WithdrawSheetState extends State<_WithdrawSheet> {
                   borderRadius: BorderRadius.circular(8),
                   child: Padding(
                     padding: const EdgeInsets.all(4),
-                    child: Icon(Icons.close,
-                        size: 18, color: AppColors.textMuted),
+                    child:
+                        Icon(Icons.close, size: 18, color: AppColors.textMuted),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 4),
-            Text('可提现 ${_yuan(summary.availableCents)} · 手续费 ${summary.feeBps / 100}%',
+            Text(
+                '可提现 ${_yuan(summary.availableCents)} · 手续费 ${summary.feeBps / 100}%',
                 style: TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
             const SizedBox(height: 14),
             _field(
               controller: _amountCtrl,
               label: '提现金额（元）',
               hint: '不少于 ¥${_yuan(summary.minWithdrawCents)}',
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
               onChanged: (_) => setState(() => _error = null),
             ),
             const SizedBox(height: 10),

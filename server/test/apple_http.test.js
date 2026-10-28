@@ -16,6 +16,28 @@ const { userToken } = require('../src/apple_iap');
 const { memoryStore } = require('./helpers/payment_memory');
 const user = { id: 'u_1234567890abcdef1234567890abcdef', nickname: 'test', status: 'active' };
 
+test('HTTP：收益核对内部入口默认关闭，普通登录不授权；内部令牌只读查看不触发付款', async () => {
+  const store = memoryStore(); store.addUser(user);
+  const previousToken = config.withdrawReviewToken;
+  config.withdrawReviewToken = '';
+  const app = await buildApp({ db: { execute: async () => { throw new Error('Unexpected SQL'); } },
+    paymentStore: store, sms: {}, captcha: {}, logger: false, appleVerifier: async () => { throw new Error('No purchase'); } });
+  const url = '/internal/earnings-risk/' + user.id;
+  try {
+    assert.equal((await app.inject(url)).statusCode, 404);
+    config.withdrawReviewToken = 'test-internal-review-token-not-for-production';
+    const access = signAccessToken({ secret: config.jwtSecret, userId: user.id, sessionId: 'test-session', ttlSec: 900 });
+    assert.equal((await app.inject({ url, headers: { authorization: 'Bearer ' + access } })).statusCode, 401);
+    const headers = { 'x-review-token': config.withdrawReviewToken };
+    assert.equal((await app.inject({ url, headers })).statusCode, 200);
+    const denied = await app.inject({ method: 'POST', url: url + '/review', headers,
+      payload: { action: 'resolve_refund', expectedEventId: 'nonexistent' } });
+    assert.equal(denied.statusCode, 400);
+    assert.equal(store.inspect().wallets.size, 0);
+    assert.equal(store.inspect().objects.size, 0);
+  } finally { config.withdrawReviewToken = previousToken; await app.close(); }
+});
+
 test('HTTP：鉴权、商品、验单、消费、重复请求和退款通知贯通', async () => {
   const store = memoryStore(); store.addUser(user);
   const token = signAccessToken({ secret: config.jwtSecret, userId: user.id, sessionId: 'test-session', ttlSec: 900 });
