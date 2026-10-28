@@ -1,6 +1,6 @@
-/// Public IDs stay empty until the corresponding mobile app is approved.
+/// Public application IDs only; an ID does not imply capability approval.
 class BilibiliShareConfig {
-  static const clientId = '';
+  static const clientId = 'd7c750df23e3448a';
 }
 
 class KwaiShareConfig {

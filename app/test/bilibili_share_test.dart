@@ -42,12 +42,13 @@ SocialShareContent material(
         png: png ?? Uint8List.fromList([137, 80, 78, 71, 13, 10, 26, 10]));
 
 void main() {
-  test('待审核Client ID集中留空，不用示例值或启动账号授权', () async {
-    expect(BilibiliShareConfig.clientId, isEmpty);
+  test('真实公开Client ID集中配置，未接官方网关仍待接入', () async {
+    expect(BilibiliShareConfig.clientId, 'd7c750df23e3448a');
     expect(
-        SocialShareConfig.build.publicAppIds[SocialChannel.bilibili], isEmpty);
+        SocialShareConfig.build.publicAppIds[SocialChannel.bilibili],
+        BilibiliShareConfig.clientId);
     expect(await BilibiliShareAdapter().availability(),
-        ShareAvailability.notConfigured);
+        ShareAvailability.integrationPending);
     await expectLater(
         BilibiliShareAdapter().share(material()), throwsStateError);
   });

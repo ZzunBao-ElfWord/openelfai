@@ -15,7 +15,7 @@ jobs:
         working-directory: app
     env:
       BUILD_NAME: 1.0.4
-      BUILD_NUMBER: '18'
+      BUILD_NUMBER: '19'
 
     steps:
       - name: Check out latest integrated source
@@ -93,8 +93,8 @@ jobs:
       - name: Resolve current Flutter dependencies
         run: flutter pub get
 
-      - name: Validate branded iOS icons
-        run: python3 scripts/generate_ios_icons.py --check
+      - name: Validate unified OpenElf app icons
+        run: python3 scripts/generate_app_icons.py --check
 
       - name: Stamp explicit release metadata
         run: |

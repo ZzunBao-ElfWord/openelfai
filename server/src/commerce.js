@@ -3,6 +3,7 @@
 const crypto = require('node:crypto');
 const { changeBalance, fingerprint, fail } = require('./payment_store');
 const { RESOURCE_POLICY, assertResourceAction } = require('./resource_policy');
+const { earningsRows, incomeRisk } = require('./earnings_safety');
 
 const CATALOG = [
   { id: 'pm_001', name: '尘', elfId: 'pm_dust', title: '尘 · 第 1 代', price: 1280, capacity: 2, generation: 1, edition: '初版', learned: [] },
@@ -317,14 +318,14 @@ function createCommerceService({ store, settings, payout = null, payoutQuery = n
     return profile;
   }
   /// 一笔创作收益：累加终身收益并进入「待结算」，冷静期后才转为「可提现」。
-  async function creditEarning(tx, ownerId, wallet, { diamonds, source, refId, at }) {
+  async function creditEarning(tx, ownerId, wallet, { diamonds, source, refId, payerId, at }) {
     const cents = Math.round(diamonds * 10 * (CREATOR_SHARE_PERCENT[source] || 0) / 100);
     if (cents <= 0) return 0;
     const id = 'ea_' + crypto.randomUUID().replaceAll('-', '');
     wallet.earningsFen += cents;
     wallet.pendingCents += cents;
     wallet.version++;
-    await tx.put('earning', id, { id, source, refId: refId || null, cents,
+    await tx.put('earning', id, { id, source, refId: refId || null, payerId, cents,
       createdAt: new Date(at).toISOString(), settleAt: at + SETTLE_MS },
     { owner: ownerId, state: 'pending' });
     return cents;
@@ -332,9 +333,8 @@ function createCommerceService({ store, settings, payout = null, payoutQuery = n
 
   /// 到期收益结算：待结算 → 可提现。由快照与提现申请触发，不额外起定时器。
   async function settleEarnings(tx, userId, wallet, at) {
-    const rows = await tx.list('earning', { owner: userId, state: 'pending', limit: 500, lock: true });
     let moved = 0;
-    for (const row of rows) {
+    for await (const row of earningsRows(tx, userId, { state: 'pending', lock: true })) {
       if (Number(row.settleAt) > at) continue;
       wallet.pendingCents = Math.max(0, wallet.pendingCents - row.cents);
       wallet.availableCents += row.cents;
@@ -379,10 +379,19 @@ function createCommerceService({ store, settings, payout = null, payoutQuery = n
       if (agreement?.version !== CREATOR_AGREEMENT_VERSION) {
         throw fail(403, 'AGREEMENT_REQUIRED', '提现前请先签署创作者服务协议');
       }
+      const risk = await incomeRisk(tx, user.id, wallet, { lock: true });
+      if (risk) throw fail(409, 'EARNINGS_REVIEW_REQUIRED', risk);
       await settleEarnings(tx, user.id, wallet, Date.now());
       if (wallet.availableCents < amount) throw fail(409, 'INSUFFICIENT_EARNINGS', '可提现收益不足');
       const today = new Date().toISOString().slice(0, 10);
-      const recent = await tx.list('withdrawal', { owner: user.id, limit: 200 });
+      const recent = [];
+      let after = '';
+      for (;;) {
+        const page = await tx.scan('withdrawal', { owner: user.id, after, limit: 200 });
+        recent.push(...page.map(row => row.value));
+        if (page.length < 200) break;
+        after = page[page.length - 1].key;
+      }
       const used = recent.filter((row) => row.status !== 'rejected' && String(row.createdAt).slice(0, 10) === today)
         .reduce((sum, row) => sum + row.amountCents, 0);
       if (used + amount > WITHDRAW_DAILY_LIMIT_CENTS) throw fail(409, 'WITHDRAW_LIMIT', '超过单日提现上限');
@@ -421,6 +430,9 @@ function createCommerceService({ store, settings, payout = null, payoutQuery = n
         await tx.put('withdrawal', row.id, row, { owner: row.ownerId, state: 'rejected' });
         return { rejected: { withdrawal: publicWithdrawal(row) } };
       }
+      const wallet = await tx.lockWallet(row.ownerId);
+      const risk = await incomeRisk(tx, row.ownerId, wallet, { lock: true });
+      if (risk) throw fail(409, 'EARNINGS_REVIEW_REQUIRED', risk);
       row.status = 'paying';
       row.payeeVerifiedAt = new Date().toISOString();
       await tx.put('withdrawal', row.id, row, { owner: row.ownerId, state: 'paying' });
@@ -502,6 +514,13 @@ function createCommerceService({ store, settings, payout = null, payoutQuery = n
     return store.transaction(env, async (tx) => {
       const wallet = await tx.lockWallet(user.id);
       await settleEarnings(tx, user.id, wallet, Date.now());
+      const withdrawalBlockedReason = await incomeRisk(tx, user.id, wallet);
+      const earningsByElf = new Map();
+      for await (const row of earningsRows(tx, user.id)) {
+        if (row.source === 'tip' && row.refId) {
+          earningsByElf.set(row.refId, (earningsByElf.get(row.refId) || 0) + row.cents);
+        }
+      }
       const profile = await ensureProfile(tx, user, wallet);
       const assets = new Map((await tx.list('elf')).map((elf) => [elf.id, normalizeElf(elf)]));
       for (const elf of await tx.list('elf', { owner: user.id })) assets.set(elf.id, normalizeElf(elf));
@@ -525,6 +544,7 @@ function createCommerceService({ store, settings, payout = null, payoutQuery = n
         // 创作者收益三档 + 提现规则，客户端只做展示与入口。
         earnings: {
           pendingCents: wallet.pendingCents, availableCents: wallet.availableCents,
+          withdrawalBlockedReason,
           withdrawnCents: wallet.withdrawnCents, lifetimeCents: wallet.earningsFen,
           settleDays: SETTLE_DAYS, minWithdrawCents: WITHDRAW_MIN_CENTS,
           feeBps: WITHDRAW_FEE_BPS, dailyLimitCents: WITHDRAW_DAILY_LIMIT_CENTS,
@@ -554,7 +574,7 @@ function createCommerceService({ store, settings, payout = null, payoutQuery = n
           ownerAddress: user.id, mintedAt: book.mintedAt })),
         elves: [...assets.values()].map((elf) => ({ ...decayAttention(elf),
           isMine: elf.ownerId === user.id && elf.status === 'owned',
-          earningsYuan: elf.ownerId === user.id ? wallet.earningsFen / 100 : 0 })),
+          earningsYuan: elf.ownerId === user.id ? (earningsByElf.get(elf.id) || 0) / 100 : 0 })),
         primary: CATALOG.map((item) => ({ ...item, market: 'primary', subtitle: '官方首发', note: '由服务器登记持有权益' })),
         // 已取消用户间 AI 寄售：市场只保留官方首发，AI 流转只剩免费转赠。
         secondary: [],
@@ -749,7 +769,8 @@ function createCommerceService({ store, settings, payout = null, payoutQuery = n
         const target = wallets.get(id);
         // 创作者分成进「待结算」，冷静期后才可提现；平台保留剩余部分。
         await creditEarning(tx, id, target, { diamonds, source,
-          refId: body.listingId || body.elfId || null, at: Date.now() });
+          refId: source === 'tip' ? body.elfId : body.listingId || body.elfId || null,
+          payerId: user.id, at: Date.now() });
         await tx.saveWallet(id, target);
       };
       /// 指定 AI 优先，其次回落到当前选中的 AI；找不到或不属于当前用户返回 null。

@@ -42,7 +42,7 @@ class SettingsPage extends StatelessWidget {
                     icon: Icons.account_balance_wallet_outlined,
                     label: '钻石钱包',
                     subtitle:
-                        '💎${state.wallet.diamonds} · 累计收益 ${WorldData.formatYuan(state.myElf?.earningsYuan ?? 0)}',
+                        '💎${state.wallet.diamonds} · 累计收益 ${WorldData.formatYuan(state.creatorEarningsYuan)}',
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute(builder: (_) => const WalletPage()),
                     ),
@@ -91,7 +91,7 @@ class SettingsPage extends StatelessWidget {
                     label: '内容安全与反馈',
                     subtitle: '发现违规或有建议？告诉我们',
                     onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                      builder: (_) => const CommunitySafetyPage())),
+                        builder: (_) => const CommunitySafetyPage())),
                   ),
                   if (state.currentUser != null) ...[
                     const SizedBox(height: 24),
@@ -365,7 +365,8 @@ class SettingsPage extends StatelessWidget {
 
   void _openPolicy(BuildContext ctx, PolicyKind kind) {
     if (kind == PolicyKind.community) {
-      Navigator.of(ctx).push(MaterialPageRoute(builder: (_) => const CommunitySafetyPage()));
+      Navigator.of(ctx)
+          .push(MaterialPageRoute(builder: (_) => const CommunitySafetyPage()));
       return;
     }
     if (kind == PolicyKind.terms) {
@@ -454,7 +455,7 @@ class SettingsPage extends StatelessWidget {
   Future<void> _confirmDeleteAccount(BuildContext ctx) async {
     final deleted = await Navigator.of(ctx).push<bool>(MaterialPageRoute(
       builder: (_) => AccountDeletionPage(
-        auth: createAuth(), onDeleted: AppState.instance.onLogout),
+          auth: createAuth(), onDeleted: AppState.instance.onLogout),
     ));
     if (deleted != true || !ctx.mounted) return;
     final messenger = ScaffoldMessenger.of(ctx);
