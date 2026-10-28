@@ -4,6 +4,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const vm = require('node:vm');
 const cp = require('node:child_process');
+const { applyResourceDelta } = require('./asset-delta.cjs');
 function once(source, before, after) {
   if (source.includes(after)) return source;
   if (source.split(before).length !== 2) throw new Error('目标代码与已核对版本不同，停止增量安装');
@@ -24,8 +25,9 @@ function prepare(input) {
   const match = deletion.match(/const PERSONAL_KINDS = \[[\s\S]*?\];/g);
   if (match?.length !== 1) throw new Error('未找到已核对的注销清理列表');
   if (!match[0].includes("'community_block'")) deletion = deletion.replace(match[0], match[0].replace(/\];$/, ",\n  'community_block', 'community_terms', 'community_report', 'community_queue'];"));
-  for (const source of [app, commerce, deletion]) new vm.Script(source);
-  return { app, commerce, deletion };
+  const output = applyResourceDelta({ ...input, app, commerce, deletion });
+  for (const source of Object.values(output)) new vm.Script(source);
+  return output;
 }
 const run = (cmd, args, timeout = 20000) => cp.execFileSync(cmd, args, { encoding: 'utf8', timeout, stdio: ['ignore', 'pipe', 'pipe'] });
 function healthy() {
@@ -47,24 +49,27 @@ async function main() {
   const mode = process.argv[2];
   if (!['--check', '--install'].includes(mode)) throw new Error('使用 --check 或 --install');
   const root = '/opt/openelf-api';
-  const files = { app: root + '/src/app.js', commerce: root + '/src/commerce.js', deletion: root + '/src/account_deletion.js' };
+  const files = { app: root + '/src/app.js', commerce: root + '/src/commerce.js',
+    deletion: root + '/src/account_deletion.js', gateway: root + '/src/alipay_gateway.js' };
   const envFile = '/etc/openelf-api.env';
   for (const file of [root, ...Object.values(files), envFile]) if (fs.realpathSync(file) !== file) throw new Error('路径是软链接，停止安装');
   const input = Object.fromEntries(Object.entries(files).map(([key, file]) => [key, fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n')]));
   const output = prepare(input);
-  const moduleSource = fs.readFileSync(path.join(__dirname, 'community.js'), 'utf8');
-  new vm.Script(moduleSource);
-  const moduleFile = root + '/src/community.js';
-  if (fs.existsSync(moduleFile) && fs.readFileSync(moduleFile, 'utf8') !== moduleSource) throw new Error('已有未知内容安全模块，停止覆盖');
+  const modules = ['community.js', 'resource_policy.js'].map(name => ({
+    file: root + '/src/' + name, source: fs.readFileSync(path.join(__dirname, name), 'utf8') }));
+  for (const module of modules) {
+    new vm.Script(module.source);
+    if (fs.existsSync(module.file) && fs.readFileSync(module.file, 'utf8') !== module.source) throw new Error('已有未知安全/资源模块，停止覆盖');
+  }
   const envSource = fs.readFileSync(envFile, 'utf8');
   const hasToken = /^\s*(?:export\s+)?COMMUNITY_REVIEW_TOKEN\s*=/m.test(envSource);
   if (hasToken && (!process.env.COMMUNITY_REVIEW_TOKEN || process.env.COMMUNITY_REVIEW_TOKEN.length < 32)) throw new Error('现有审核令牌未加载或不足32位，请使用 node --env-file=/etc/openelf-api.env');
-  console.log('增量入口、信息流、注销清理及语法检查通过；不修改资金、NFT或流转规则');
+  console.log('内容安全、站内资源、沙盒出款隔离与语法预检通过；不发起付款或迁移现有余额');
   console.log('注意：新内容与尚未审核的旧内容均不公开，需人工处理审核队列。');
   if (mode === '--check') return;
   const token = hasToken ? process.env.COMMUNITY_REVIEW_TOKEN : crypto.randomBytes(32).toString('hex');
   const envOutput = hasToken ? envSource : envSource.replace(/\s*$/, '') + '\nCOMMUNITY_REVIEW_TOKEN=' + token + '\n';
-  if (Object.keys(files).every(key => output[key] === input[key]) && fs.existsSync(moduleFile) && hasToken) {
+  if (Object.keys(files).every(key => output[key] === input[key]) && modules.every(module => fs.existsSync(module.file)) && hasToken) {
     healthy(); await verify(token); console.log('相同补丁已安装'); return;
   }
   run('systemctl', ['is-active', '--quiet', 'openelf-api']);
@@ -81,7 +86,7 @@ async function main() {
   };
   console.log('备份（含敏感配置，请勿外传）：' + backup);
   try {
-    replace(moduleFile, moduleSource);
+    for (const module of modules) replace(module.file, module.source);
     for (const [key, file] of Object.entries(files)) replace(file, output[key]);
     if (!hasToken) replace(envFile, envOutput);
     run('systemctl', ['restart', 'openelf-api'], 60000); healthy(); await verify(token);
