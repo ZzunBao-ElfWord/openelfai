@@ -13,6 +13,12 @@ class CommunityRepository {
   static final instance = CommunityRepository();
   final CommunityRequest _request;
 
+  Future<Map<String, dynamic>> feed({String channel = 'world',
+      String sort = 'recommend', int page = 0}) => _request(
+      '/api/v1/community/feed?${Uri(queryParameters: {
+        'channel': channel, 'sort': sort, 'page': '$page', 'size': '20',
+      }).query}');
+
   static String requestId() => List.generate(24,
           (_) => Random.secure().nextInt(256).toRadixString(16).padLeft(2, '0'))
       .join();

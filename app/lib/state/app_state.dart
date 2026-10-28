@@ -57,9 +57,10 @@ class AppState extends ChangeNotifier {
   final List<Map<String, String>> reports = [];
   final List<Map<String, dynamic>> communityBlocks = [];
   bool _communityReady = false;
+  bool _publicFeedReady = false;
   bool _resourcePolicyReady = false;
   bool get communityReady => _communityReady;
-  String get communityMode => _paymentMode ?? CommerceConfig.initialMode ?? 'production';
+  String get communityMode => 'production';
 
   User? currentUser;
 
@@ -86,6 +87,10 @@ class AppState extends ChangeNotifier {
   final Map<String, int> _feedPage = {};
   final Map<String, bool> _feedHasMore = {};
   final Set<String> _feedLoading = {};
+  final Map<String, String> _feedErrors = {};
+  int _feedEpoch = 0;
+  String? feedError(String channel, {String sort = 'recommend'}) =>
+      _feedErrors['$channel:$sort'];
   final Set<String> _ownedModules = {};
   final Map<String, int> _modulePrices = {};
   bool get commerceReady => _commerceReady;
@@ -264,6 +269,7 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     // 登录后异步刷新真实钱包余额，不阻塞登录流程。
     unawaited(refreshPlatformBalance());
+    unawaited(loadFeed(reset: true));
     // 单一真源：登录后即拉取服务端权益快照（AI/技能书/挂单/钱包）。
     if (CommerceConfig.android || CommerceConfig.initialMode == 'production') unawaited(_ensureCommerceReady());
   }
@@ -601,7 +607,7 @@ class AppState extends ChangeNotifier {
   /// 服务端分页结果优先；分页还没加载（或本页为空）时，
   /// 用服务端快照里的帖子兜底，避免刚发布的内容在世界里「看不见」。
   List<ElfPost> _feedOf(String channel, String sort) {
-    if (CommerceConfig.enabled && !_communityReady) return const [];
+    if (CommerceConfig.enabled && !_publicFeedReady) return const [];
     final cached = _feedCache['$channel:$sort'];
     if (cached != null) return List.unmodifiable(cached.where((p) => !isElfBlocked(p.elfId)));
     final local = _localFeed(channel, sort);
@@ -621,6 +627,9 @@ class AppState extends ChangeNotifier {
       _feedHasMore['$channel:$sort'] ?? false;
 
   void _clearFeedCache() {
+    _feedEpoch++;
+    _publicFeedReady = false;
+    _feedErrors.clear();
     _feedCache.clear();
     _feedPage.clear();
     _feedHasMore.clear();
@@ -630,27 +639,33 @@ class AppState extends ChangeNotifier {
   /// 拉取一页信息流。reset 用于下拉刷新/首次进入，否则追加下一页。
   /// 排序、分页、去重都由服务端决定，客户端不再重排或拼装种子内容。
   Future<String?> loadFeed(
-      {String channel = 'world', String sort = 'recommend', bool reset = false}) async {
+      {String channel = 'world', String sort = 'recommend', bool reset = false,
+      CommunityRepository? repository}) async {
     if (!CommerceConfig.enabled) return null;
     final user = currentUser;
     if (user == null) return '请先登录';
     final key = '$channel:$sort';
     if (_feedLoading.contains(key)) return null;
     if (!reset && !(_feedHasMore[key] ?? true)) return null;
-    final mode =
-        _paymentMode ?? (CommerceConfig.initialMode);
-    if (mode == null) return '请先打开钱包，刷新服务端权益';
+    final epoch = _feedEpoch;
+    _feedErrors.remove(key);
     _feedLoading.add(key);
     notifyListeners();
     try {
       final page = reset ? 0 : (_feedPage[key] ?? -1) + 1;
-      final response = await CommerceRepository.instance
-          .feed(user.id, mode, channel: channel, sort: sort, page: page);
-      if (currentUser?.id != user.id) return null;
+      final response = await (repository ?? CommunityRepository.instance)
+          .feed(channel: channel, sort: sort, page: page);
+      if (currentUser?.id != user.id || epoch != _feedEpoch) return null;
+      if (response['protocol'] != 1 || response['contentEnvironment'] != 'production' ||
+          response['community'] is! Map || response['community']['version'] != 1) {
+        throw const AuthException('CONTENT_PROTOCOL', '公共内容服务尚未更新，请联系管理员');
+      }
       final incoming = (response['posts'] as List)
           .map((v) => _data.decodePaymentPost(Map<String, dynamic>.from(v as Map)))
           .toList();
       _mergeFeedElves(response['elves']);
+      _applyCommunity(response['community']);
+      _publicFeedReady = true;
       final list = reset ? <ElfPost>[] : List<ElfPost>.from(_feedCache[key] ?? const []);
       final seen = list.map((p) => p.id).toSet();
       final fresh = incoming.where((p) => seen.add(p.id)).toList();
@@ -662,12 +677,21 @@ class AppState extends ChangeNotifier {
       notifyListeners();
       return null;
     } on AuthException catch (error) {
+      if (currentUser?.id == user.id && epoch == _feedEpoch) {
+        _feedErrors[key] = error.code == 'NOT_FOUND'
+            ? '公共内容接口尚未部署，请联系管理员' : error.message;
+      }
       return error.message;
     } catch (_) {
+      if (currentUser?.id == user.id && epoch == _feedEpoch) {
+        _feedErrors[key] = '信息流加载失败，请检查网络后重试';
+      }
       return '信息流加载失败，请稍后重试';
     } finally {
-      _feedLoading.remove(key);
-      notifyListeners();
+      if (currentUser?.id == user.id && epoch == _feedEpoch) {
+        _feedLoading.remove(key);
+        notifyListeners();
+      }
     }
   }
 
@@ -1805,6 +1829,9 @@ class AppState extends ChangeNotifier {
   /// 钻石是消费凭证：扣掉后直接销毁，按 10💎=¥1 结算成创作者收益。
   Future<String?> tip(
       {required String elfId, String? postId, required int amount}) async {
+    if (CommerceConfig.enabled && _paymentMode != 'production') {
+      return '测试环境钻石不能打赏正式公共内容，不会扣费';
+    }
     if (CommerceConfig.enabled)
       return _performCommerce(
           'tip', {'elfId': elfId, 'postId': postId, 'amount': amount});
@@ -1926,6 +1953,11 @@ class AppState extends ChangeNotifier {
     if (!CommerceConfig.enabled) return null;
     final user = currentUser;
     if (user == null) return null;
+    if (_paymentMode != 'production') {
+      rollback?.call();
+      notifyListeners();
+      return '当前测试环境仅浏览正式公共内容，互动尚未开放';
+    }
     final mode =
         _paymentMode ?? (CommerceConfig.initialMode);
     if (mode == null) {
@@ -2057,11 +2089,11 @@ class AppState extends ChangeNotifier {
     withdrawals
       ..clear()
       ..addAll(nextWithdrawals);
-    _applyCommunity(commerce['community']);
+    if (mode == 'production') _applyCommunity(commerce['community']);
     final policy = commerce['resourcePolicy'];
     _resourcePolicyReady = policy is Map && policy['version'] == 1 &&
         policy['onChain'] == false && policy['diamondCashout'] == false;
-    _clearFeedCache(); // Never resurrect removed or blocked content from an earlier page.
+    // A payment snapshot must not clear shared public content or replace its mode.
     // Keep free demonstration AI profiles, but never reinsert unreviewed demo posts.
     final ids = nextElves.map((e) => e.id).toSet();
     final demos = elves
@@ -2074,7 +2106,8 @@ class AppState extends ChangeNotifier {
     final postIds = nextPosts.map((p) => p.id).toSet();
     // 只做并集：信息流分页加载过的帖子同样来自服务端，不能被快照冲掉标记。
     _remotePostIds.addAll(postIds);
-    posts = nextPosts;
+    posts = {for (final post in [...nextPosts, ..._feedCache.values.expand((rows) => rows)])
+      post.id: post}.values.toList();
     primaryListings = nextPrimary;
     if (nextModules != null) modules = nextModules;
     seats = nextElves

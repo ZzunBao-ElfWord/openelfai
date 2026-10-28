@@ -255,6 +255,8 @@ function registerCommunity(app, { store, reviewStore, authenticate, reviewToken 
     return handler(user, request.body || request.query || {});
   };
   app.get('/api/v1/community', guarded((user, query) => service.snapshot(user, query.environment)));
+  app.get('/api/v1/community/feed', guarded((user, query) =>
+    require('./public_feed').publicFeed(reviewStore, user, query)));
   app.post('/api/v1/community/reports', { bodyLimit: 8192, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, guarded(service.submit));
   app.post('/api/v1/community/blocks', { bodyLimit: 4096 }, guarded(service.setBlock));
   app.post('/api/v1/community/terms', { bodyLimit: 4096 }, guarded(service.acceptTerms));

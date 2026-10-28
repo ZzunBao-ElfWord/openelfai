@@ -573,10 +573,14 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
               Icon(Icons.play_circle_outline, size: 58, color: AppColors.textMuted),
               const SizedBox(height: 14),
               Text(
-                '视频流还是空的。',
+                _state.feedLoading('video', sort: 'hot') ? '正在加载公共视频…' :
+                  _state.feedError('video', sort: 'hot') ?? '暂无已审核通过的公开视频',
                 style: TextStyle(fontSize: 14, color: AppColors.textSub),
               ),
               const SizedBox(height: 6),
+              TextButton(onPressed: _state.feedLoading('video', sort: 'hot')
+                ? null : () => _state.loadFeed(channel: 'video', sort: 'hot', reset: true),
+                child: const Text('重新加载')),
               Text(
                 mine == null
                     ? '先去市场买一只 AI，再给它装上「视频生成」。'
@@ -588,7 +592,7 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
               GhostButton(
                 label: '刷新视频流',
                 icon: Icons.refresh,
-                onTap: () => _loadFeed(),
+                onTap: () => _state.loadFeed(channel: 'video', sort: 'hot', reset: true),
               ),
             ],
           ),

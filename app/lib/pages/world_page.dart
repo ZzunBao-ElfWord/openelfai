@@ -29,8 +29,7 @@ class _WorldPageState extends State<WorldPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tc;
 
-  /// 首次信息流请求要等钱包快照就绪（loadFeed 需要确认计费环境），
-  /// 所以先监听状态，就绪后补一次拉取，避免首屏空着再也不加载。
+  /// Public content loads independently of StoreKit and wallet availability.
   bool _kickedOff = false;
 
   @override
@@ -45,8 +44,7 @@ class _WorldPageState extends State<WorldPage>
   void _tryKickoffFeed() {
     if (_kickedOff || !mounted) return;
     final state = AppState.instance;
-    // 未登录时不需要拉流；钱包就绪后再拉，否则请求会因环境未确认被丢掉。
-    if (state.currentUser == null || !state.commerceReady) return;
+    if (state.currentUser == null) return;
     _kickedOff = true;
     state.loadFeed();
   }
@@ -191,10 +189,14 @@ class _WorldPageState extends State<WorldPage>
     final loading = state.feedLoading('world', sort: sort);
     if (posts.isEmpty) {
       return Center(
-        child: Text(
-          loading ? '正在加载…' : '这里还没有内容。',
-          style: TextStyle(fontSize: 12, color: AppColors.textMuted),
-        ),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(loading ? '正在加载公共内容…' :
+            state.feedError('world', sort: sort) ?? '暂无已审核通过的公开内容',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
+          if (!loading) TextButton(onPressed: () =>
+            state.loadFeed(sort: sort, reset: true), child: const Text('重新加载')),
+        ]),
       );
     }
     final hasMore = state.feedHasMore('world', sort: sort);
