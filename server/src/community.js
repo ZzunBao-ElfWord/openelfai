@@ -4,6 +4,9 @@ const { fail, fingerprint } = require('./payment_store');
 const REASONS = new Set(['色情或低俗', '侮辱或攻击', '违法违规', '垃圾广告', '侵权或冒用', 'AI有害内容', '其他']);
 const idOf = value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(value) ? value : null;
 const keyOf = (...values) => crypto.createHash('sha256').update(values.join(':')).digest('hex');
+const HIDDEN_STATES = new Set(['hidden', 'rejected', 'removed', 'deleted', 'blocked', 'draft', 'private']);
+const suppressed = row => !row || row.isDeleted === true || !!row.deletedAt ||
+  HIDDEN_STATES.has(row.moderationStatus) || HIDDEN_STATES.has(row.status);
 function environment(value) {
   if (value === undefined || value === 'production' || value === 'Production') return 'Production';
   if (value === 'sandbox' || value === 'Sandbox') return 'Sandbox';
@@ -22,17 +25,18 @@ async function blocked(tx, blocks, row, kind) {
     (block.targetKind === 'user' && block.targetId === owner));
 }
 async function visible(tx, row, kind, blocks) {
-  // Legacy content is not implicitly approved. The operator must review it too.
+  // Default display is an operator-selected policy, NOT an approval or safety verdict.
+  // Preserve explicit takedowns, private/draft states, sanctions and user blocks.
   const original = await tx.get(kind, row.id);
-  if (!original || original.moderationStatus !== 'approved') return false;
+  if (suppressed(original)) return false;
   if (kind === 'post') {
     const author = await tx.get('elf', original.elfId);
-    if (!author || author.moderationStatus !== 'approved') return false;
+    if (suppressed(author)) return false;
   }
   if (kind === 'comment') {
     const parent = await tx.get('post', original.postId);
     const author = parent ? await tx.get('elf', parent.elfId) : null;
-    if (!parent || parent.moderationStatus !== 'approved' || author?.moderationStatus !== 'approved' || await blocked(tx, blocks, parent, 'post')) return false;
+    if (suppressed(parent) || suppressed(author) || await blocked(tx, blocks, parent, 'post')) return false;
   }
   return !await blocked(tx, blocks, original, kind);
 }
@@ -67,8 +71,7 @@ async function filterResult(tx, value, userId) {
   return value;
 }
 
-// Enforce pre-publication review for ALL writers (manual posts, autonomous agents,
-// comments), not only for a client-selected platform or a trusted request field.
+// New content is public by default. Client updates cannot undo a server takedown.
 function wrapStore(base) {
   return { ...base, transaction(env, work) {
     return base.transaction(env, async original => {
@@ -92,7 +95,7 @@ function wrapStore(base) {
         async put(kind, id, value, options = {}) {
           if (kind === 'post' || kind === 'comment' || kind === 'elf') {
             const existing = await original.get(kind, id);
-            const status = existing?.moderationStatus || 'pending';
+            const status = existing?.moderationStatus || 'public';
             value = { ...value, moderationStatus: status };
             if (!existing) {
               if (await blocked(original, [], { ...value, ownerId: options.owner }, kind)) {
@@ -101,11 +104,6 @@ function wrapStore(base) {
               if (kind !== 'elf' && viewer === options.owner && options.owner && !await original.get('community_terms', options.owner)) {
                 throw fail(403, 'COMMUNITY_AGREEMENT_REQUIRED', '发布前请在设置→内容安全中阅读并同意社区规范');
               }
-              const now = new Date().toISOString();
-              await original.put('community_queue', kind + ':' + id, {
-                id: kind + ':' + id, targetKind: kind, targetId: id,
-                ownerId: options.owner || value.userId || null, status: 'pending', createdAt: now,
-              }, { owner: options.owner || null, state: 'pending', ref: id });
             }
           }
           await original.put(kind, id, value, options);
@@ -187,17 +185,7 @@ function createCommunityService(store) {
   async function queue(hint, kind = 'content') {
     return store.transaction(environment(hint), async tx => {
       if (kind === 'reports') return { reports: await tx.list('community_report', { state: 'pending', limit: 100 }) };
-      // Bring existing feed content into review as well; never grandfather it as safe.
-      for (const targetKind of ['elf', 'post', 'comment']) {
-        for (const content of await tx.list(targetKind, { limit: 500 })) {
-          const id = targetKind + ':' + content.id;
-          if (!content.moderationStatus && !await tx.get('community_queue', id)) {
-            await tx.put('community_queue', id, { id, targetKind, targetId: content.id,
-              ownerId: content.userId || null, status: 'pending', createdAt: new Date().toISOString() },
-            { state: 'pending', ref: content.id });
-          }
-        }
-      }
+      // Retain historical queue/audit records; do not enqueue or approve old content.
       const rows = await tx.list('community_queue', { state: 'pending', limit: 100 });
       const items = [];
       for (const row of rows) items.push({ ...row, content: await tx.get(row.targetKind, row.targetId) });
@@ -265,8 +253,8 @@ function registerCommunity(app, { store, reviewStore, authenticate, reviewToken 
     const { user } = await authenticate(request);
     await store.transaction('Production', async tx => {
       const elf = await tx.get('elf', request.body?.elfId || '');
-      if (elf && elf.ownerId !== user.id && elf.moderationStatus !== 'approved') {
-        throw fail(403, 'CONTENT_PENDING', '该AI的公开资料尚未通过审核');
+      if (elf && elf.ownerId !== user.id && suppressed(elf)) {
+        throw fail(403, 'CONTENT_BLOCKED', '该AI的公开资料已被隐藏或下架');
       }
       if (elf && await blocked(tx, await preferences(tx, user), elf, 'elf')) {
         throw fail(403, 'CONTENT_BLOCKED', '该AI已被屏蔽或限制使用');

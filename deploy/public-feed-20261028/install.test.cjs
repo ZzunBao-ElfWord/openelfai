@@ -6,7 +6,7 @@ const crypto = require('node:crypto');
 const { prepare, baseline } = require('./install.cjs');
 const current = fs.readFileSync(__dirname + '/../../server/src/community.js', 'utf8');
 const feed = fs.readFileSync(__dirname + '/../../server/src/public_feed.js', 'utf8');
-const old = current.replace("  app.get('/api/v1/community/feed', guarded((user, query) =>\n    require('./public_feed').publicFeed(reviewStore, user, query)));\n", '');
+const old = fs.readFileSync(__dirname + '/community-v2.fixture.js', 'utf8').replace(/\r\n/g, '\n').trimEnd() + '\n';
 test('baseline matches the exact community module installed by v2', () => {
   assert.equal(crypto.createHash('sha256').update(old).digest('hex'), baseline);
 });

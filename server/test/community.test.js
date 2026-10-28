@@ -18,14 +18,18 @@ async function fixture() {
   await service.acceptTerms(bob, { accepted: true, version: '2026-10-28' });
   const post = { id: 'p_bob', elfId: 'e_bob', body: 'Public AI content', moderationStatus: 'approved' };
   await store.transaction('Production', tx => tx.put('post', post.id, post, { owner: bob.id }));
+  // Preserve a historical queue entry to exercise privileged takedown/audit APIs.
+  await raw.transaction('Production', tx => tx.put('community_queue', 'post:p_bob',
+    { id: 'post:p_bob', targetKind: 'post', targetId: 'p_bob', status: 'pending' }, { state: 'pending' }));
   return { raw, store, service, admin, post };
 }
 const input = { requestId: 'test_request_123', targetKind: 'post', targetId: 'p_bob', reason: '其他', details: 'please review' };
 
-test('client approval is ignored and new content is pending until privileged review', async () => {
+test('new content is public without approval; updates cannot fake a review verdict', async () => {
   const { raw, store, admin, post } = await fixture();
   const read = () => store.transaction('Production', () => ({ communityViewer: alice.id, posts: [post] }));
-  assert.deepEqual((await read()).posts, []);
+  assert.equal((await read()).posts.length, 1);
+  assert.equal((await raw.transaction('Production', tx => tx.get('post', 'p_bob'))).moderationStatus, 'public');
   assert.equal((await admin.queue()).items[0].status, 'pending');
   await admin.review({ id: 'post:p_bob', action: 'approve', reason: 'checked text and media' }, 'reviewer');
   assert.equal((await read()).posts.length, 1);
@@ -83,20 +87,21 @@ test('report decision hides content globally and records resolution and audit', 
   assert.equal((await service.snapshot(alice)).reports[0].resolution, 'confirmed harassment');
   await assert.rejects(admin.review({ kind: 'report', id: report.id, action: 'dismiss', reason: 'retry' }, 'reviewer'), { code: 'ALREADY_REVIEWED' });
 });
-test('legacy content is hidden and imported into pending review instead of auto-approved', async () => {
+test('legacy and pending content is displayed without rewriting review records', async () => {
   const { raw, admin } = await fixture();
   await raw.transaction('Production', async tx => {
     await tx.put('post', 'legacy', { id: 'legacy', elfId: 'e_bob', body: 'old' });
-    assert.equal((await filterResult(tx, { posts: [{ id: 'legacy' }] }, alice.id)).posts.length, 0);
+    assert.equal((await filterResult(tx, { posts: [{ id: 'legacy' }] }, alice.id)).posts.length, 1);
   });
-  assert.ok((await admin.queue()).items.some(row => row.id === 'post:legacy'));
+  const before = raw.inspect();
+  assert.ok(!(await admin.queue()).items.some(row => row.id === 'post:legacy'));
+  assert.deepEqual(raw.inspect(), before);
 });
-test('pending comments and comments under a removed parent never leak', async () => {
+test('new comments display immediately but comments under a removed parent stay hidden', async () => {
   const { raw, store, admin } = await fixture();
   await admin.review({ id: 'post:p_bob', action: 'approve', reason: 'checked' }, 'reviewer');
   await store.transaction('Production', tx => tx.put('comment', 'c_bob', { id: 'c_bob', postId: 'p_bob', userId: bob.id, text: 'hello' }, { owner: bob.id }));
-  await raw.transaction('Production', async tx => assert.equal((await filterResult(tx, { comments: [{ id: 'c_bob' }] }, alice.id)).comments.length, 0));
-  await admin.review({ id: 'comment:c_bob', action: 'approve', reason: 'checked' }, 'reviewer');
+  await raw.transaction('Production', async tx => assert.equal((await filterResult(tx, { comments: [{ id: 'c_bob' }] }, alice.id)).comments.length, 1));
   await raw.transaction('Production', async tx => {
     assert.equal((await filterResult(tx, { comments: [{ id: 'c_bob' }] }, alice.id)).comments[0].userId, bob.id);
     const parent = await tx.get('post', 'p_bob');
@@ -131,17 +136,36 @@ test('withdrawals, wallet balances and ownership are not mutated by moderation',
   assert.equal(after.wallets.get('Production:u_alice').diamonds, 0);
   assert.equal(after.wallets.get('Production:u_alice').pendingCents, 0);
 });
-test('public AI profile and post require independent approval', async () => {
+test('old unreviewed AI and pending post are visible without approving either', async () => {
   const { raw, store, admin, post } = await fixture();
   await raw.transaction('Production', async tx => {
     const elf = await tx.get('elf', 'e_bob');
     await tx.put('elf', 'e_bob', { ...elf, moderationStatus: undefined });
   });
   await admin.queue();
-  await admin.review({ id: 'post:p_bob', action: 'approve', reason: 'checked post' }, 'reviewer');
+  const before = raw.inspect();
   const read = () => store.transaction('Production', () => ({ communityViewer: alice.id, posts: [post], elves: [{ id: 'e_bob' }] }));
-  assert.equal((await read()).posts.length, 0);
-  assert.equal((await read()).elves.length, 0);
-  await admin.review({ id: 'elf:e_bob', action: 'approve', reason: 'checked public profile and image' }, 'reviewer');
   assert.equal((await read()).posts.length, 1);
+  assert.equal((await read()).elves.length, 1);
+  assert.deepEqual(raw.inspect(), before);
+});
+
+test('default display never resurrects hidden, rejected, deleted, draft or private content', async () => {
+  const { raw, store, post } = await fixture();
+  for (const status of ['hidden', 'rejected', 'deleted', 'removed', 'blocked', 'draft', 'private']) {
+    await raw.transaction('Production', tx => tx.put('post', post.id, { ...post, moderationStatus: status }));
+    assert.deepEqual((await store.transaction('Production', () => ({ communityViewer: alice.id, posts: [post] }))).posts, []);
+    await store.transaction('Production', tx => tx.put('post', post.id, { ...post, moderationStatus: 'approved', likes: 500 }));
+    assert.equal((await raw.transaction('Production', tx => tx.get('post', post.id))).moderationStatus, status);
+  }
+});
+
+test('new content does not enter pre-publication queue and missing authors stay hidden', async () => {
+  const { raw, store } = await fixture();
+  const beforeQueues = [...raw.inspect().objects.values()].filter(row => row.kind === 'community_queue').length;
+  await store.transaction('Production', tx => tx.put('post', 'fresh', { id: 'fresh', elfId: 'e_bob' }, { owner: bob.id }));
+  assert.equal([...raw.inspect().objects.values()].filter(row => row.kind === 'community_queue').length, beforeQueues);
+  const missing = { id: 'missing_author', elfId: 'unknown' };
+  await raw.transaction('Production', tx => tx.put('post', missing.id, missing));
+  assert.deepEqual((await store.transaction('Production', () => ({ communityViewer: alice.id, posts: [missing] }))).posts, []);
 });

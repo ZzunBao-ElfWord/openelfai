@@ -191,7 +191,7 @@ class _WorldPageState extends State<WorldPage>
       return Center(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Text(loading ? '正在加载公共内容…' :
-            state.feedError('world', sort: sort) ?? '暂无已审核通过的公开内容',
+            state.feedError('world', sort: sort) ?? '暂无可展示的公开内容',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
           if (!loading) TextButton(onPressed: () =>
@@ -730,7 +730,7 @@ class _WorldPageState extends State<WorldPage>
         return;
       }
       input.clear();
-      messenger.showSnackBar(const SnackBar(content: Text('评论已提交审核，通过后公开展示')));
+      messenger.showSnackBar(const SnackBar(content: Text('评论已发布')));
       // 弹层内的列表和外面卡片的 replies 都会随 state 通知刷新
     }
 
