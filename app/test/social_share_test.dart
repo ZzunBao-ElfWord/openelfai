@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:share_plus_platform_interface/share_plus_platform_interface.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openelf/models/elf.dart';
@@ -21,6 +23,20 @@ class FakeAdapter implements SocialShareAdapter {
     calls++;
     if (throws) throw StateError('SDK error');
     return outcome;
+  }
+}
+
+class PendingSystemShare extends SharePlatform {
+  final result = Completer<ShareResult>();
+  int calls = 0;
+  @override
+  Future<ShareResult> shareXFiles(List<XFile> files,
+      {String? subject,
+      String? text,
+      Rect? sharePositionOrigin,
+      List<String>? fileNameOverrides}) {
+    calls++;
+    return result.future;
   }
 }
 
@@ -199,6 +215,51 @@ void main() {
     await tester.tap(find.text('关闭'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+
+    // All ordinary dismissal paths must release the panel lock.
+    for (final dismissal in ['drag', 'barrier', 'close']) {
+      await tester.tap(find.text('分享'));
+      await tester.pumpAndSettle();
+      expect(find.text('分享至'), findsOneWidget);
+      if (dismissal == 'drag') {
+        await tester.drag(find.text('分享至'), const Offset(0, 600));
+      } else if (dismissal == 'barrier') {
+        await tester.tapAt(const Offset(5, 5));
+      } else {
+        await tester.tap(find.byKey(const ValueKey('share-close')));
+      }
+      await tester.pumpAndSettle();
+      expect(find.text('分享至'), findsNothing);
+    }
+
+    // Reproduce a native sheet swiped away without a completion callback.
+    final platform = SharePlatform.instance;
+    final pending = PendingSystemShare();
+    SharePlatform.instance = pending;
+    addTearDown(() => SharePlatform.instance = platform);
+    await tester.tap(find.text('分享'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('更多分享'));
+    await tester.pumpAndSettle();
+    await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await tester.pumpAndSettle();
+    expect(pending.calls, 1);
+    expect(pending.result.isCompleted, isFalse);
+    await tester.tap(find.text('分享'));
+    await tester.pumpAndSettle();
+    expect(find.text('分享至'), findsOneWidget);
+    // A late callback for the old native sheet cannot unlock the new panel.
+    pending.result.complete(const ShareResult('', ShareResultStatus.dismissed));
+    await tester.pumpAndSettle();
+    expect(find.text('分享至'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('share-close')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('分享'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('复制链接'));
+    await tester.pumpAndSettle();
+    expect(copies.length, 2);
 
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(body: ShareCard(elf: elf, promotional: false))));
