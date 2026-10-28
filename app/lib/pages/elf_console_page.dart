@@ -1064,7 +1064,7 @@ class _ElfConsolePageState extends State<ElfConsolePage> {
                 final err = await state.publish(elf.id);
                 if (!context.mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(err ?? '${elf.name} 已发布，等人类注视')),
+                  SnackBar(content: Text(err ?? '${elf.name} 的内容已提交审核，通过后公开展示')),
                 );
               },
             ),

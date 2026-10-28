@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../auth/auth_repository.dart';
 import '../compliance/ai_creation_policy.dart';
 import '../compliance/identity_verification.dart';
+import '../compliance/community_repository.dart';
 import '../config/iap_config.dart';
 import '../config/commerce_config.dart';
 import '../data/world_data.dart';
@@ -52,8 +53,12 @@ class AppState extends ChangeNotifier {
   /// 帖子评论（按 postId 分组）。
   final Map<String, List<PostComment>> comments = {};
 
-  /// 举报记录（客户端临时存储，服务端审核接口待对接）。
+  /// 举报回执来自服务器，换号时清除；不包含审核证据或他人举报信息。
   final List<Map<String, String>> reports = [];
+  final List<Map<String, dynamic>> communityBlocks = [];
+  bool _communityReady = false;
+  bool get communityReady => _communityReady;
+  String get communityMode => _paymentMode ?? CommerceConfig.initialMode ?? 'production';
 
   User? currentUser;
 
@@ -372,6 +377,8 @@ class AppState extends ChangeNotifier {
     books.clear();
     _chats.clear();
     reports.clear();
+    communityBlocks.clear();
+    _communityReady = false;
     identity = null;
     currentUser = null;
     _localDataLoaded = false;
@@ -591,10 +598,12 @@ class AppState extends ChangeNotifier {
   /// 服务端分页结果优先；分页还没加载（或本页为空）时，
   /// 用服务端快照里的帖子兜底，避免刚发布的内容在世界里「看不见」。
   List<ElfPost> _feedOf(String channel, String sort) {
+    if (CommerceConfig.enabled && !_communityReady) return const [];
     final cached = _feedCache['$channel:$sort'];
-    if (cached != null && cached.isNotEmpty) return List.unmodifiable(cached);
+    if (cached != null) return List.unmodifiable(cached.where((p) => !isElfBlocked(p.elfId)));
     final local = _localFeed(channel, sort);
-    if (local.isNotEmpty) return List.unmodifiable(local);
+    if (local.isNotEmpty) return List.unmodifiable(local.where((p) =>
+        !isElfBlocked(p.elfId) && (!CommerceConfig.enabled || _remotePostIds.contains(p.id))));
     return cached ?? const [];
   }
 
@@ -1265,7 +1274,11 @@ class AppState extends ChangeNotifier {
   // —— 评论 ——
 
   List<PostComment> commentsOf(String postId) =>
-      comments[postId] ?? const <PostComment>[];
+      (comments[postId] ?? const <PostComment>[]).where((comment) =>
+          !communityBlocks.any((row) =>
+              row['targetKind'] == 'user' && row['targetId'] == comment.userId ||
+              row['targetKind'] == 'elf' && row['targetId'] == comment.authorElfId))
+          .toList();
 
   /// 当前用户对一条帖子发评论。返回 null 表示成功。
   Future<String?> addComment(String postId, String text) async {
@@ -1276,6 +1289,7 @@ class AppState extends ChangeNotifier {
     if (CommerceConfig.enabled && _remotePostIds.contains(postId)) {
       return _performInteraction('comment', {'postId': postId, 'text': body}, null);
     }
+    if (CommerceConfig.enabled) return '内容尚未通过服务端确认，不能评论';
     _appendComment(target, body);
     return null;
   }
@@ -1301,13 +1315,72 @@ class AppState extends ChangeNotifier {
 
   // —— 举报 ——
 
-  void report({required String targetId, required String reason}) {
-    reports.add({
-      'targetId': targetId,
-      'reason': reason,
-      'time': _now(),
-    });
-    // 举报不需要触发 UI 刷新，也不持久化（临时存储）
+  Future<String?> report({required String targetId, required String reason,
+      String details = '', required String requestId}) async {
+    final user = currentUser;
+    if (user == null) return '请先登录';
+    final separator = targetId.indexOf(':');
+    if (separator < 1) return '举报对象无效';
+    try {
+      final response = await CommunityRepository.instance.report(mode: communityMode,
+          requestId: requestId, targetKind: targetId.substring(0, separator),
+          targetId: targetId.substring(separator + 1), reason: reason, details: details);
+      if (currentUser?.id != user.id) return '账号已切换，请重新提交';
+      if (response['id'] is! String) return '未取得举报回执，请稍后重试';
+      reports.insert(0, {'id': response['id'], 'targetId': targetId, 'reason': reason,
+        'status': response['status']?.toString() ?? 'pending'});
+      notifyListeners();
+      return null;
+    } on AuthException catch (error) { return error.message; }
+    catch (_) { return '提交未确认，请重试；不会显示为已提交'; }
+  }
+
+  bool isElfBlocked(String elfId) {
+    final owner = elves.where((e) => e.id == elfId).firstOrNull?.ownerId;
+    return communityBlocks.any((row) =>
+        row['targetKind'] == 'elf' && row['targetId'] == elfId ||
+        row['targetKind'] == 'user' && row['targetId'] == owner);
+  }
+
+  Future<String?> setCommunityBlock(String kind, String id, bool value) async {
+    final user = currentUser;
+    if (user == null) return '请先登录';
+    try {
+      final response = await CommunityRepository.instance.setBlock(mode: communityMode,
+          targetKind: kind, targetId: id, blocked: value);
+      if (currentUser?.id != user.id) return '账号已切换';
+      communityBlocks
+        ..clear()
+        ..addAll((response['blocks'] as List).map((row) => Map<String, dynamic>.from(row)));
+      notifyListeners();
+      return null;
+    } on AuthException catch (error) { return error.message; }
+    catch (_) { return '屏蔽设置未保存，请重试'; }
+  }
+
+  Future<String?> refreshCommunity() async {
+    final user = currentUser;
+    if (user == null) return '请先登录';
+    try {
+      final response = await CommunityRepository.instance.snapshot(communityMode);
+      if (currentUser?.id != user.id) return '账号已切换';
+      _applyCommunity(response);
+      notifyListeners();
+      return null;
+    } on AuthException catch (error) { return error.message; }
+    catch (_) { return '暂时无法加载安全设置'; }
+  }
+
+  void _applyCommunity(dynamic data) {
+    _communityReady = data is Map && data['version'] == 1;
+    if (!_communityReady) return;
+    communityBlocks
+      ..clear()
+      ..addAll((data['blocks'] as List).map((row) => Map<String, dynamic>.from(row)));
+    reports
+      ..clear()
+      ..addAll((data['reports'] as List).map((row) => Map<String, String>.from(
+          (row as Map).map((key, value) => MapEntry(key.toString(), value?.toString() ?? '')))));
   }
 
   // —— 算力 ——
@@ -1773,6 +1846,9 @@ class AppState extends ChangeNotifier {
 
   /// Server responses replace the balance; callbacks never add diamonds locally.
   void _resetCommerce() {
+    _communityReady = false;
+    communityBlocks.clear();
+    reports.clear();
     _paymentMode = null;
     _paymentVersion = -1;
     _commerceRevision = -1;
@@ -1973,7 +2049,9 @@ class AppState extends ChangeNotifier {
     withdrawals
       ..clear()
       ..addAll(nextWithdrawals);
-    // Keep free demonstration content, never its simulated ownership or market.
+    _applyCommunity(commerce['community']);
+    _clearFeedCache(); // Never resurrect removed or blocked content from an earlier page.
+    // Keep free demonstration AI profiles, but never reinsert unreviewed demo posts.
     final ids = nextElves.map((e) => e.id).toSet();
     final demos = elves
         .where((e) => !_remoteElfIds.contains(e.id) && !ids.contains(e.id))
@@ -1985,10 +2063,7 @@ class AppState extends ChangeNotifier {
     final postIds = nextPosts.map((p) => p.id).toSet();
     // 只做并集：信息流分页加载过的帖子同样来自服务端，不能被快照冲掉标记。
     _remotePostIds.addAll(postIds);
-    posts = [
-      ...nextPosts,
-      ...posts.where((p) => !postIds.contains(p.id) && !p.id.startsWith('p_'))
-    ];
+    posts = nextPosts;
     primaryListings = nextPrimary;
     if (nextModules != null) modules = nextModules;
     seats = nextElves
@@ -2060,6 +2135,8 @@ class AppState extends ChangeNotifier {
               text: item['text'] as String? ?? '',
               time: _formatCommentTime(item['time'] as String?),
               isMine: item['isMine'] == true,
+              userId: item['userId'] as String?,
+              authorElfId: item['authorElfId'] as String?,
             ));
       }
     }

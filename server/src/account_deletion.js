@@ -6,7 +6,8 @@ const crypto = require('node:crypto');
 // inaccessible user ID so late payment notifications cannot credit a new account.
 const PERSONAL_KINDS = ['profile', 'identity', 'identity_request', 'elf', 'book',
   'chat', 'post', 'comment', 'comment_once', 'follow', 'like', 'collect', 'watch',
-  'notice', 'notice_mark', 'notice_once', 'referral', 'creator_agreement'];
+  'notice', 'notice_mark', 'notice_once', 'referral', 'creator_agreement',
+  'community_block', 'community_terms', 'community_report', 'community_queue'];
 
 function fail(statusCode, code, message) {
   return Object.assign(new Error(message), { statusCode, code });

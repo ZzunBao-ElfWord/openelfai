@@ -10,6 +10,7 @@ import 'wallet_page.dart';
 import 'account_deletion_page.dart';
 import 'privacy_policy_page.dart';
 import 'user_agreement_page.dart';
+import 'community_safety_page.dart';
 
 /// 设置页：账号信息、隐私政策、退出登录、删除账号。
 class SettingsPage extends StatelessWidget {
@@ -87,9 +88,10 @@ class SettingsPage extends StatelessWidget {
                   ),
                   _tile(
                     icon: Icons.flag_outlined,
-                    label: '举报与反馈',
+                    label: '内容安全与反馈',
                     subtitle: '发现违规或有建议？告诉我们',
-                    onTap: () => _snack(context, '举报入口即将开放'),
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => const CommunitySafetyPage())),
                   ),
                   if (state.currentUser != null) ...[
                     const SizedBox(height: 24),
@@ -362,6 +364,10 @@ class SettingsPage extends StatelessWidget {
   // —— 交互 ——
 
   void _openPolicy(BuildContext ctx, PolicyKind kind) {
+    if (kind == PolicyKind.community) {
+      Navigator.of(ctx).push(MaterialPageRoute(builder: (_) => const CommunitySafetyPage()));
+      return;
+    }
     if (kind == PolicyKind.terms) {
       Navigator.of(ctx).push(
         MaterialPageRoute(builder: (_) => const UserAgreementPage()),
@@ -403,10 +409,6 @@ class SettingsPage extends StatelessWidget {
         Text('把技能做成技能书，自己组装，放进世界替你争夺注意力。'),
       ],
     );
-  }
-
-  void _snack(BuildContext ctx, String msg) {
-    ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   void _confirmLogout(BuildContext ctx) {

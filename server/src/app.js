@@ -12,6 +12,7 @@ const { createPool } = require('./db');
 const { createAppleIapService, createAppleVerifier } = require('./apple_iap');
 const { createPaymentStore } = require('./payment_store');
 const { createCommerceService } = require('./commerce');
+const { wrapStore, registerCommunity } = require('./community');
 const { createRealnameVerifier } = require('./realname');
 const { createAlipayGateway } = require('./alipay_gateway');
 const { createAlipayService } = require('./alipay');
@@ -45,6 +46,8 @@ const CODE_RE = /^\d{6}$/;
 
 const CORS_ORIGINS = (process.env.PLATFORM_CORS_ORIGINS || 'https://openelfai.com,https://www.openelfai.com')
   .split(',')
+  // OPENELF_WEB_CORS_20261028: trusted Flutter Web origin.
+  .concat('https://web.openelfai.com')
   .map((origin) => origin.trim())
   .filter(Boolean);
 
@@ -181,7 +184,8 @@ async function buildApp(options = {}) {
   const captcha = options.captcha || createCaptchaVerifier(config.captcha);
   const appleVerifier = options.appleVerifier || (config.appleIap.enabled
     ? await createAppleVerifier(config.appleIap) : null);
-  const paymentStore = options.paymentStore || createPaymentStore(db);
+  const communityReviewStore = options.paymentStore || createPaymentStore(db);
+  const paymentStore = wrapStore(communityReviewStore);
   // 实名核验：服务端对接阿里云实人认证，客户端只上传原始要素与证件照。
   const realname = options.realname || createRealnameVerifier(config.realname);
   const identityPolicy = {
@@ -428,6 +432,8 @@ async function buildApp(options = {}) {
   }
 
   require('./account_deletion').registerAccountDeletion(app, { db, authenticate });
+  registerCommunity(app, { store: paymentStore, reviewStore: communityReviewStore,
+    authenticate, reviewToken: process.env.COMMUNITY_REVIEW_TOKEN || '' });
 
   async function ensureUser(phone) {
     const nowIso = new Date().toISOString();

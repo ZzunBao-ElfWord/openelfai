@@ -8,6 +8,7 @@ import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/share_card.dart';
+import '../widgets/content_safety.dart';
 import 'api_key_page.dart';
 import 'elf_console_page.dart';
 import 'login_page.dart';
@@ -65,6 +66,7 @@ class _ElfChatPageState extends State<ElfChatPage> {
 
   Future<void> _send() async {
     if (_sending) return;
+    if (_state.isElfBlocked(widget.elfId)) { _toast('此AI已被屏蔽，请先在设置中解除屏蔽'); return; }
     final text = _input.text.trim();
     if (text.isEmpty) return;
     // 游客（Web 免登录体验）：发消息前先提醒登录
@@ -97,6 +99,9 @@ class _ElfChatPageState extends State<ElfChatPage> {
   @override
   Widget build(BuildContext context) {
     final elf = _state.elf(widget.elfId);
+    if (_state.isElfBlocked(elf.id)) return Scaffold(
+      appBar: AppBar(title: const Text('已屏蔽此AI')),
+      body: const Center(child: Text('不再展示该AI的内容。可在设置→内容安全与反馈中解除屏蔽。')));
     final msgs = _state.chatOf(widget.elfId);
 
     return Scaffold(
@@ -531,6 +536,9 @@ class _ElfChatPageState extends State<ElfChatPage> {
                 _share(elf);
               },
             ),
+            ListTile(leading: const Icon(Icons.flag_outlined), title: const Text('举报与屏蔽'),
+              onTap: () { Navigator.of(ctx).pop(); ContentSafety.show(context,
+                targetKind: 'elf', targetId: elf.id, elfId: elf.id, ownerId: elf.ownerId); }),
             if (elf.isMine)
               ListTile(
                 leading: const Icon(Icons.tune_rounded),

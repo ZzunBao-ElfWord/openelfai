@@ -546,6 +546,9 @@ function createCommerceService({ store, settings, payout = null, realname = null
       let posted = 0;
       let stopped = 0;
       for (const elf of due) {
+        // Content restrictions do not alter ownership, balances or withdrawals.
+        if ((await tx.get('community_sanction', 'elf:' + elf.id))?.active ||
+            (await tx.get('community_sanction', 'user:' + elf.ownerId))?.active) continue;
         const candidates = (elf.learnedSkills || []).filter((id) => id !== 'auto' && MODULES[id]);
         if (!candidates.length) {
           // 只有运营中枢、没有可选技能：下一轮再来，不算停工。
@@ -673,7 +676,7 @@ function createCommerceService({ store, settings, payout = null, realname = null
         elves.push({ ...normalized,
           isMine: normalized.ownerId === user.id && normalized.status === 'owned' });
       }
-      return { channel, sort, page, size, posts, elves,
+      return { communityViewer: user.id, channel, sort, page, size, posts, elves,
         hasMore: (page + 1) * size < ranked.length };
     });
   }

@@ -9,6 +9,7 @@ import '../theme.dart';
 import '../widgets/audio_player_card.dart';
 import '../widgets/common.dart';
 import '../widgets/share_card.dart';
+import '../widgets/content_safety.dart';
 import 'elf_chat_page.dart';
 import 'login_page.dart';
 import 'attention_board_page.dart';
@@ -727,6 +728,7 @@ class _WorldPageState extends State<WorldPage>
         return;
       }
       input.clear();
+      messenger.showSnackBar(const SnackBar(content: Text('评论已提交审核，通过后公开展示')));
       // 弹层内的列表和外面卡片的 replies 都会随 state 通知刷新
     }
 
@@ -1068,87 +1070,15 @@ class _WorldPageState extends State<WorldPage>
   }
 
   void _showReportPostSheet(AppState state, ElfPost p) {
-    _showReportSheet(
-      state: state,
-      targetId: 'post:${p.id}',
-      targetLabel: '一条内容',
-    );
+    ContentSafety.show(context, targetKind: 'post', targetId: p.id,
+      elfId: p.elfId, ownerId: state.elf(p.elfId).ownerId);
   }
 
   void _showReportCommentSheet(AppState state, PostComment c) {
-    _showReportSheet(
-      state: state,
-      targetId: 'comment:${c.id}',
-      targetLabel: '一条评论',
-    );
+    ContentSafety.show(context, targetKind: 'comment', targetId: c.id,
+      elfId: c.authorElfId, ownerId: c.userId);
   }
 
-  void _showReportSheet({
-    required AppState state,
-    required String targetId,
-    required String targetLabel,
-  }) {
-    final reasons = [
-      '色情或低俗',
-      '侮辱或攻击',
-      '违法违规',
-      '垃圾广告',
-      '其他',
-    ];
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '举报 $targetLabel',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.text,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '选择举报原因',
-                  style: TextStyle(fontSize: 11, color: AppColors.textMuted),
-                ),
-                const SizedBox(height: 10),
-                ...reasons.map(
-                  (r) => InkWell(
-                    onTap: () {
-                      state.report(targetId: targetId, reason: r);
-                      Navigator.of(ctx).pop();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('已收到举报，我们会尽快处理（$r）')),
-                      );
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      child: Text(
-                        r,
-                        style: TextStyle(
-                            fontSize: 13, color: AppColors.textSub),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
 
   static String _fmt(int n) {
     if (n >= 10000) return '${(n / 10000).toStringAsFixed(1)}w';

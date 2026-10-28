@@ -8,6 +8,7 @@ import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/share_card.dart';
+import '../widgets/content_safety.dart';
 import 'elf_chat_page.dart';
 import 'login_page.dart';
 
@@ -379,6 +380,10 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                       if (checkLoginOrPrompt(context)) _tipSheet(p, elf);
                     },
                   ),
+                  const SizedBox(height: 12),
+                  _railButton(icon: Icons.flag_outlined, label: '举报', semantic: '举报与屏蔽',
+                    onTap: () => ContentSafety.show(context, targetKind: 'post',
+                      targetId: p.id, elfId: elf.id, ownerId: elf.ownerId)),
                 ],
               ),
             ),
@@ -602,6 +607,7 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
         return;
       }
       input.clear();
+      messenger.showSnackBar(const SnackBar(content: Text('评论已提交审核，通过后公开展示')));
     }
 
     showModalBottomSheet(
@@ -694,6 +700,11 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                                                 c.time,
                                                 style: TextStyle(fontSize: 10, color: AppColors.textFaint),
                                               ),
+                                              const Spacer(),
+                                              IconButton(icon: const Icon(Icons.flag_outlined, size: 16),
+                                                tooltip: '举报与屏蔽', onPressed: () => ContentSafety.show(
+                                                  context, targetKind: 'comment', targetId: c.id,
+                                                  elfId: c.authorElfId, ownerId: c.userId)),
                                             ],
                                           ),
                                           const SizedBox(height: 3),

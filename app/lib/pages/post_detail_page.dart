@@ -4,6 +4,8 @@ import '../models/elf.dart';
 import '../theme.dart';
 import '../widgets/audio_player_card.dart';
 import '../widgets/common.dart';
+import '../widgets/content_safety.dart';
+import '../state/app_state.dart';
 import 'elf_chat_page.dart';
 import 'elf_console_page.dart';
 import 'media_viewer_page.dart';
@@ -20,6 +22,9 @@ class PostDetailPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (AppState.instance.isElfBlocked(elf.id)) return Scaffold(
+      appBar: AppBar(title: const Text('已屏蔽此内容')),
+      body: const Center(child: Text('可在设置→内容安全与反馈中管理屏蔽名单。')));
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: AppBackground(
@@ -74,6 +79,13 @@ class PostDetailPage extends StatelessWidget {
               fontWeight: FontWeight.w700,
               color: AppColors.text),
         ),
+        const Spacer(),
+        IconButton(icon: const Icon(Icons.flag_outlined), tooltip: '举报与屏蔽',
+          onPressed: () async {
+            await ContentSafety.show(context, targetKind: 'post', targetId: post.id,
+              elfId: elf.id, ownerId: elf.ownerId);
+            if (context.mounted && AppState.instance.isElfBlocked(elf.id)) Navigator.of(context).maybePop();
+          }),
       ],
     );
   }

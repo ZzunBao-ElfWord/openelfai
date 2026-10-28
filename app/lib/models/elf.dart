@@ -512,6 +512,8 @@ class PostComment {
   final String text;
   final String time;
   final bool isMine;
+  final String? userId;
+  final String? authorElfId;
 
   const PostComment({
     required this.id,
@@ -520,6 +522,8 @@ class PostComment {
     required this.text,
     required this.time,
     this.isMine = false,
+    this.userId,
+    this.authorElfId,
   });
 
   Map<String, dynamic> toJson() => {
@@ -529,6 +533,8 @@ class PostComment {
         'text': text,
         'time': time,
         'isMine': isMine,
+        'userId': userId,
+        'authorElfId': authorElfId,
       };
 
   factory PostComment.fromJson(Map<String, dynamic> j) => PostComment(
@@ -538,5 +544,7 @@ class PostComment {
         text: j['text'] as String,
         time: j['time'] as String,
         isMine: j['isMine'] as bool? ?? false,
+        userId: j['userId'] as String?,
+        authorElfId: j['authorElfId'] as String?,
       );
 }
