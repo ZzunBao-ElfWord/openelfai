@@ -12,6 +12,7 @@ Pod::Spec.new do |s|
   s.dependency 'Flutter'
   s.dependency 'DouyinOpenSDK', '4.2.5'
   s.platform = :ios, '15.0'
+  s.static_framework = true
   s.frameworks = 'Photos', 'UIKit'
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES', 'OTHER_LDFLAGS' => '$(inherited) -ObjC' }
   s.user_target_xcconfig = { 'OTHER_LDFLAGS' => '$(inherited) -ObjC' }

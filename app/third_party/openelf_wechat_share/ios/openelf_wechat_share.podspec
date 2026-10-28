@@ -12,6 +12,7 @@ Pod::Spec.new do |s|
   s.dependency 'Flutter'
   s.dependency 'WechatOpenSDK', '2.0.9'
   s.platform = :ios, '15.0'
+  s.static_framework = true
   s.frameworks = 'UIKit'
   # Matching 2.0.9 official SDK manifest (its legacy podspec omits resources).
   s.resource_bundles = { 'openelf_wechat_share_privacy' => ['PrivacyInfo.xcprivacy'] }
