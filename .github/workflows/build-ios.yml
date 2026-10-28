@@ -96,6 +96,15 @@ jobs:
       - name: Validate branded iOS icons
         run: python3 scripts/generate_ios_icons.py --check
 
+      - name: Stamp explicit release metadata
+        run: |
+          # Resolve the release metadata before Xcode processes Info.plist.
+          # Keep the independent built-bundle checks in ci_sign_ipa.sh.
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $BUILD_NAME" ios/Runner/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" ios/Runner/Info.plist
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' ios/Runner/Info.plist
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' ios/Runner/Info.plist
+
       - name: Build latest iOS release
         run: |
           flutter build ios --release --no-codesign \
