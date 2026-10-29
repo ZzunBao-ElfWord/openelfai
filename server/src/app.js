@@ -435,6 +435,8 @@ async function buildApp(options = {}) {
   }
 
   require('./account_deletion').registerAccountDeletion(app, { db, authenticate });
+  require('./push_routes').registerPush(app, { db, authenticate,
+    settings: options.pushSettings, fetchImpl: options.pushFetch });
   registerCommunity(app, { store: paymentStore, reviewStore: communityReviewStore,
     authenticate, reviewToken: process.env.COMMUNITY_REVIEW_TOKEN || '' });
 

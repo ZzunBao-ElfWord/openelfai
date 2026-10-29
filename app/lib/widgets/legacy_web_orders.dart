@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../auth/remote_auth_repository.dart';
 import '../state/app_state.dart';
+import '../payments/order_status_text.dart';
 
 /// Old-app receipts stay readable; never re-sign or pay them with the new app.
 class LegacyWebOrders extends StatefulWidget {
@@ -41,7 +42,7 @@ class _LegacyWebOrdersState extends State<LegacyWebOrders> {
       });
     } catch (_) {
       if (mounted && AppState.instance.currentUser?.id == user)
-        setState(() => _message = '旧应用订单暂不可读，点击重试；不影响新应用充值');
+        setState(() => _message = '历史订单暂时无法加载，请稍后重试');
     }
   }
 
@@ -51,8 +52,7 @@ class _LegacyWebOrdersState extends State<LegacyWebOrders> {
     final id = row['id'];
     if (id is! String ||
         !RegExp(widget.diamonds ? r'^OE[a-f0-9]{32}$' : r'^OT[a-f0-9]{32}$')
-            .hasMatch(id))
-      return;
+            .hasMatch(id)) return;
     setState(() => _busy = true);
     try {
       final result = await RemoteAuthRepository.instance.authenticatedRequest(
@@ -66,7 +66,7 @@ class _LegacyWebOrdersState extends State<LegacyWebOrders> {
       await _load();
     } catch (_) {
       if (mounted && AppState.instance.currentUser?.id == user)
-        setState(() => _message = '旧订单结果仍待确认，记录未删除，请勿重复付款');
+        setState(() => _message = '付款结果暂未确认，请稍后查询，勿重复付款');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -84,11 +84,11 @@ class _LegacyWebOrdersState extends State<LegacyWebOrders> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              '旧网页应用订单核对',
+              '历史充值订单',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
             const Text(
-              '旧订单仅查单，不重新付款；新订单使用新应用。',
+              '可查询历史订单的支付结果，请勿重复付款。',
               style: TextStyle(fontSize: 12),
             ),
             if (_message != null) Text(_message!),
@@ -96,7 +96,7 @@ class _LegacyWebOrdersState extends State<LegacyWebOrders> {
               (r) => ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: Text(
-                  '¥${((r['amountFen'] as num) / 100).toStringAsFixed(2)} · ${r['status']}',
+                  '¥${((r['amountFen'] as num) / 100).toStringAsFixed(2)} · ${OrderStatusText.label(r['status'] is String ? r['status'] as String : null)}',
                 ),
                 subtitle: Text(
                   r['id'] as String,
@@ -104,13 +104,13 @@ class _LegacyWebOrdersState extends State<LegacyWebOrders> {
                 ),
                 trailing: TextButton(
                   onPressed: _busy ? null : () => _query(r),
-                  child: const Text('查单'),
+                  child: const Text('查询结果'),
                 ),
               ),
             ),
             TextButton(
               onPressed: _busy ? null : _load,
-              child: const Text('刷新旧订单'),
+              child: const Text('刷新订单'),
             ),
           ],
         ),

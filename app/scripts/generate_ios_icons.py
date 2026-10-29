@@ -51,12 +51,10 @@ def main():
 
     from PIL import Image
 
-    source = Image.open(SOURCE).convert('RGBA')
+    source = Image.open(SOURCE).convert('RGB')
     assert source.width == source.height, 'Brand icon must be square'
-    # App Store icons must be opaque; retain the existing artwork on its navy background.
-    opaque = Image.new('RGBA', source.size, '#0d1124')
-    opaque.alpha_composite(source)
-    opaque = opaque.convert('RGB')
+    # The OS, not a pre-rounded image, supplies the app icon's final mask.
+    opaque = source
     for name, dimensions in expected_sizes.items():
         opaque.resize(dimensions, Image.Resampling.LANCZOS).save(ICONS / name)
     manifest = {'source_sha256': digest(SOURCE),

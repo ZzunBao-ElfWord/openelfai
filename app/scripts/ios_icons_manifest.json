@@ -1,20 +1,20 @@
 {
-  "source_sha256": "eda4a5bd293378e86069bcaf5fb240ce9a8a8cec9929864886ab465c256fcab9",
+  "source_sha256": "82c2393d6daf0ab6d7be707a4fbecf8c995737d940513448cd9cef2e2acbd67a",
   "icons": {
-    "Icon-App-20x20@2x.png": "b688aeb28cf0fd041be5ca1d9d7bbd64a5ece6ac30eada03ba6bdb7166a06a83",
-    "Icon-App-20x20@3x.png": "0cd5790c748acbcfc74e4a09cd8b5094c778da36c87754edd587b3a792a01d62",
-    "Icon-App-29x29@1x.png": "98f99d7115e9fed59f65a9d180dc332e0c587668a8345dcef10186523582b23f",
-    "Icon-App-29x29@2x.png": "5d6ab318c3356a7692ef6c9631c8fbc73152d833733d32a8a85dee03eea72865",
-    "Icon-App-29x29@3x.png": "dd9f994ca1dde448a6ca0d79d5060c2d0a1365eecb1f4dc43fe7c554c6e3c62c",
-    "Icon-App-40x40@2x.png": "f07ad8adbd666b126d62a35b8cb22992a617b028d46ee98da947244eb0035858",
-    "Icon-App-40x40@3x.png": "987f2d15d7ae0d9b1ac03d3ccf20d2f2ff0967d8a0504f78af25aeb8f42d7ea9",
-    "Icon-App-60x60@2x.png": "987f2d15d7ae0d9b1ac03d3ccf20d2f2ff0967d8a0504f78af25aeb8f42d7ea9",
-    "Icon-App-60x60@3x.png": "f0beb99fe4c227c328cfa30b6b47ff343e3cce220532f7f9b17476ccc4513d1f",
-    "Icon-App-20x20@1x.png": "dc0df57ee56bc7b0adf86c6ab9eb95c34ca5425b20dc02672238fed76064a5bb",
-    "Icon-App-40x40@1x.png": "b688aeb28cf0fd041be5ca1d9d7bbd64a5ece6ac30eada03ba6bdb7166a06a83",
-    "Icon-App-76x76@1x.png": "5c65bd91c3980a9210bfc8287f3e603f6f576a69f1614652665771d8e79d2389",
-    "Icon-App-76x76@2x.png": "2f0afe7c59b14898a40df13aae8e61e60c929f682a1afd8b764d19ef4e9e58c4",
-    "Icon-App-83.5x83.5@2x.png": "7db71478d14ca2e9538bccd3f7e302c3a25a38663e9ccbaffd2f7da593220193",
-    "Icon-App-1024x1024@1x.png": "eda4a5bd293378e86069bcaf5fb240ce9a8a8cec9929864886ab465c256fcab9"
+    "Icon-App-20x20@2x.png": "7df3937b605d97ee9f4b4c89940cd332addd7e13675314abfbe0115ce9723a6c",
+    "Icon-App-20x20@3x.png": "bf349db96daccf89c2529e66c68ce37ca9033000bdd5694331a86e0fe2855a15",
+    "Icon-App-29x29@1x.png": "d45175843643d6ac340f66c69de4d233ca9381d858679b0f9dba86717094b106",
+    "Icon-App-29x29@2x.png": "5cc69eccad35bcba1a368f718b3856df104acd5707ca755db2d078cb101fa6b8",
+    "Icon-App-29x29@3x.png": "310ea233f19a712e53f4bd05c2366e2ea3a287f407b76ba83b04ecdfe22ed850",
+    "Icon-App-40x40@2x.png": "ab4c04572aae4c33fafc1c3cc3df0e20e96b4f0e6e13404cce066463245df5ed",
+    "Icon-App-40x40@3x.png": "40f731301851d15f7f3b442846aa0438b4d577911ee98c724b86ccf16ab2fb9c",
+    "Icon-App-60x60@2x.png": "40f731301851d15f7f3b442846aa0438b4d577911ee98c724b86ccf16ab2fb9c",
+    "Icon-App-60x60@3x.png": "48562a3f3c00e9248167daba64016929d9b2802fbcff7685fb6dbd8d1cc1ffe1",
+    "Icon-App-20x20@1x.png": "6099a4fbe2cb1cb2637b4746d68a6bd140aa330eefd3e15f61bf58252d0f4c54",
+    "Icon-App-40x40@1x.png": "7df3937b605d97ee9f4b4c89940cd332addd7e13675314abfbe0115ce9723a6c",
+    "Icon-App-76x76@1x.png": "6fd26c7fdfff2f52af84e42070bd1043e9f94c2597d0a9dff878d9778a4926f1",
+    "Icon-App-76x76@2x.png": "366ecef2c32ffd702e97c75727f0c7bdd270575b20204785ad809981d8188f96",
+    "Icon-App-83.5x83.5@2x.png": "796a2087ba4d7c4dbf111733bc488a0545f0b57e83ef77c57f2fe581474d3c0a",
+    "Icon-App-1024x1024@1x.png": "82c2393d6daf0ab6d7be707a4fbecf8c995737d940513448cd9cef2e2acbd67a"
   }
 }

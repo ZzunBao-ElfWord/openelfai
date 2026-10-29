@@ -58,8 +58,8 @@ bool checkLoginOrPrompt(BuildContext context) {
             );
           },
           child: Text('去登录',
-              style:
-                  TextStyle(color: AppColors.cyan, fontWeight: FontWeight.w700)),
+              style: TextStyle(
+                  color: AppColors.cyan, fontWeight: FontWeight.w700)),
         ),
       ],
     ),
@@ -228,99 +228,69 @@ class _LoginPageState extends State<LoginPage> {
             SafeArea(
               bottom: false,
               child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
-            // 桌面宽屏：登录表单收窄居中
-            child: WideContent(
-              maxWidth: 420,
-              child: Column(
-              children: [
-                // Logo + 标题
-                const SizedBox(height: 40),
-                Container(
-                  width: 88,
-                  height: 88,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(44),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.violet.withOpacity(0.34),
-                        blurRadius: 38,
-                        offset: const Offset(0, 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
+                // 桌面宽屏：登录表单收窄居中
+                child: WideContent(
+                  maxWidth: 420,
+                  child: Column(
+                    children: [
+                      // Logo + 标题
+                      const SizedBox(height: 40),
+                      Container(
+                        width: 88,
+                        height: 88,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(44),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.violet.withOpacity(0.34),
+                              blurRadius: 38,
+                              offset: const Offset(0, 12),
+                            ),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(20),
+                          child: Image.asset(
+                            'assets/brand/app_icon.png',
+                            fit: BoxFit.cover,
+                          ),
+                        ),
                       ),
-                    ],
-                  ),
-                  child: Image.asset(
-                    'assets/brand/app_icon.png',
-                    fit: BoxFit.cover,
-                  ),
-                ),
-                const SizedBox(height: 22),
-                ShaderMask(
-                  blendMode: BlendMode.srcIn,
-                  shaderCallback: (rect) =>
-                      AppColors.brandGradient.createShader(rect),
-                  child: const Text(
-                    'OpenElf',
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
-                      letterSpacing: 2,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  '我的 AI，我做主',
-                  style: TextStyle(fontSize: 12, color: AppColors.textSub),
-                ),
-                const SizedBox(height: 40),
+                      const SizedBox(height: 22),
+                      ShaderMask(
+                        blendMode: BlendMode.srcIn,
+                        shaderCallback: (rect) =>
+                            AppColors.brandGradient.createShader(rect),
+                        child: const Text(
+                          'OpenElf',
+                          style: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                            letterSpacing: 2,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '我的 AI，我做主',
+                        style:
+                            TextStyle(fontSize: 12, color: AppColors.textSub),
+                      ),
+                      const SizedBox(height: 40),
 
-                // 手机号
-                TextField(
-                  controller: _phoneCtrl,
-                  keyboardType: TextInputType.phone,
-                  maxLength: 11,
-                  style: TextStyle(color: AppColors.text),
-                  decoration: InputDecoration(
-                    counterText: '',
-                    hintText: '输入手机号',
-                    hintStyle: TextStyle(color: AppColors.textMuted),
-                    filled: true,
-                    fillColor: AppColors.surface,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide.none,
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide.none,
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(
-                          color: AppColors.cyan.withOpacity(0.6), width: 1),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 14),
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // 验证码
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _codeCtrl,
-                        keyboardType: TextInputType.number,
-                        maxLength: 6,
+                      // 手机号
+                      TextField(
+                        controller: _phoneCtrl,
+                        keyboardType: TextInputType.phone,
+                        maxLength: 11,
                         style: TextStyle(color: AppColors.text),
                         decoration: InputDecoration(
                           counterText: '',
-                          hintText: '验证码',
-                          hintStyle:
-                              TextStyle(color: AppColors.textMuted),
+                          hintText: '输入手机号',
+                          hintStyle: TextStyle(color: AppColors.textMuted),
                           filled: true,
                           fillColor: AppColors.surface,
                           border: OutlineInputBorder(
@@ -341,97 +311,137 @@ class _LoginPageState extends State<LoginPage> {
                               horizontal: 14, vertical: 14),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    SizedBox(
-                      width: 120,
-                      height: 48,
-                      child: ElevatedButton(
-                        onPressed:
-                            (_sending || _countdown > 0) ? null : _sendCode,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.violet.withOpacity(0.25),
-                          foregroundColor: AppColors.violetSoft,
-                          elevation: 0,
-                          padding: EdgeInsets.zero,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
+                      const SizedBox(height: 12),
+
+                      // 验证码
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _codeCtrl,
+                              keyboardType: TextInputType.number,
+                              maxLength: 6,
+                              style: TextStyle(color: AppColors.text),
+                              decoration: InputDecoration(
+                                counterText: '',
+                                hintText: '验证码',
+                                hintStyle:
+                                    TextStyle(color: AppColors.textMuted),
+                                filled: true,
+                                fillColor: AppColors.surface,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: BorderSide.none,
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: BorderSide.none,
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: BorderSide(
+                                      color: AppColors.cyan.withOpacity(0.6),
+                                      width: 1),
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 14, vertical: 14),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          SizedBox(
+                            width: 120,
+                            height: 48,
+                            child: ElevatedButton(
+                              onPressed: (_sending || _countdown > 0)
+                                  ? null
+                                  : _sendCode,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor:
+                                    AppColors.violet.withOpacity(0.25),
+                                foregroundColor: AppColors.violetSoft,
+                                elevation: 0,
+                                padding: EdgeInsets.zero,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              child: Text(
+                                _sending
+                                    ? '发送中…'
+                                    : (_countdown > 0
+                                        ? '${_countdown}s 后重发'
+                                        : '发送验证码'),
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 28),
+
+                      // 登录
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: AppColors.brandGradient,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(12),
+                              onTap: _loading ? null : _login,
+                              child: Center(
+                                child: _loading
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white),
+                                      )
+                                    : Text(
+                                        '登录',
+                                        style: TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.onBrand,
+                                        ),
+                                      ),
+                              ),
+                            ),
                           ),
                         ),
-                        child: Text(
-                          _sending
-                              ? '发送中…'
-                              : (_countdown > 0
-                                  ? '${_countdown}s 后重发'
-                                  : '发送验证码'),
-                          style: const TextStyle(fontSize: 12),
-                        ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 28),
-
-                // 登录
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: AppColors.brandGradient,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(12),
-                        onTap: _loading ? null : _login,
-                        child: Center(
-                          child: _loading
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                      strokeWidth: 2, color: Colors.white),
-                                )
-                              : Text(
-                                  '登录',
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.onBrand,
-                                  ),
-                                ),
-                        ),
+                      const SizedBox(height: 16),
+                      Text(
+                        '首次登录即视为同意《用户协议》与《隐私政策》',
+                        style: TextStyle(
+                            fontSize: 10.5, color: AppColors.textFaint),
                       ),
-                    ),
+                      TextButton(
+                        key: const ValueKey('login-open-privacy'),
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                              builder: (_) => const PrivacyPolicyPage()),
+                        ),
+                        child: const Text('阅读隐私政策'),
+                      ),
+                      TextButton(
+                        key: const ValueKey('login-open-terms'),
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                              builder: (_) => const UserAgreementPage()),
+                        ),
+                        child: const Text('阅读用户协议'),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 16),
-                Text(
-                  '首次登录即视为同意《用户协议》与《隐私政策》',
-                  style: TextStyle(fontSize: 10.5, color: AppColors.textFaint),
-                ),
-                TextButton(
-                  key: const ValueKey('login-open-privacy'),
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                        builder: (_) => const PrivacyPolicyPage()),
-                  ),
-                  child: const Text('阅读隐私政策'),
-                ),
-                TextButton(
-                  key: const ValueKey('login-open-terms'),
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                        builder: (_) => const UserAgreementPage()),
-                  ),
-                  child: const Text('阅读用户协议'),
-                ),
-              ],
-            ),
-            ),
-          ),
+              ),
             ),
             // 游客从提醒弹层 push 进来时提供返回入口
             if (Navigator.canPop(context))

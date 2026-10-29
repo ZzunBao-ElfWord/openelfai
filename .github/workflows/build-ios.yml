@@ -14,8 +14,8 @@ jobs:
       run:
         working-directory: app
     env:
-      BUILD_NAME: 1.0.4
-      BUILD_NUMBER: '19'
+      BUILD_NAME: 1.0.5
+      BUILD_NUMBER: '1'
 
     steps:
       - name: Check out latest integrated source
@@ -117,7 +117,7 @@ jobs:
       - name: Upload signed IPA
         uses: actions/upload-artifact@v4
         with:
-          name: OpenElf1.0.4-iOS
-          path: app/build/ios/export/OpenElf1.0.4.ipa
+          name: OpenElf1.0.5-build1-iOS
+          path: app/build/ios/export/OpenElf1.0.5.ipa
           if-no-files-found: error
           retention-days: 7

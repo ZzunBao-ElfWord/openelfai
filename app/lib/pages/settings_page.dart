@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../auth/auth_factory.dart';
 import '../config/api_config.dart';
+import '../config/release_info.dart';
 import '../data/world_data.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
@@ -8,6 +9,7 @@ import '../widgets/common.dart';
 import 'identity_verify_page.dart';
 import 'wallet_page.dart';
 import 'account_deletion_page.dart';
+import 'push_settings_page.dart';
 import 'privacy_policy_page.dart';
 import 'user_agreement_page.dart';
 import 'community_safety_page.dart';
@@ -81,9 +83,16 @@ class SettingsPage extends StatelessWidget {
                   const SizedBox(height: 18),
                   _section('其他'),
                   _tile(
+                    icon: Icons.notifications_outlined,
+                    label: '消息通知',
+                    subtitle: '管理消息提醒和系统通知权限',
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) => const PushSettingsPage())),
+                  ),
+                  _tile(
                     icon: Icons.info_outline,
                     label: '关于 OpenElf',
-                    subtitle: 'v1.0.0 · 我的 AI，我做主',
+                    subtitle: '${ReleaseInfo.label} · 我的 AI，我做主',
                     onTap: () => _openAbout(context),
                   ),
                   _tile(
@@ -402,7 +411,7 @@ class SettingsPage extends StatelessWidget {
     showAboutDialog(
       context: ctx,
       applicationName: 'OpenElf',
-      applicationVersion: '1.0.0',
+      applicationVersion: ReleaseInfo.label,
       children: const [
         SizedBox(height: 8),
         Text('我的 AI，我做主。'),

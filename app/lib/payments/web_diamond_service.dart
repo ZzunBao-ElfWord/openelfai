@@ -8,6 +8,7 @@ import '../auth/auth_repository.dart';
 import '../auth/remote_auth_repository.dart';
 import '../state/app_state.dart';
 import 'web_checkout.dart';
+import 'order_status_text.dart';
 
 typedef DiamondRequest = Future<Map<String, dynamic>> Function(
   String path, {
@@ -21,15 +22,17 @@ class WebDiamondService extends ChangeNotifier {
     void Function(String, Map<String, dynamic>)? apply,
     void Function(String)? onCheckoutReady,
     bool? supported,
-  }) : _request = request ?? RemoteAuthRepository.instance.authenticatedRequest,
-       _user = currentUser ?? (() => AppState.instance.currentUser?.id),
-       _apply = apply ?? AppState.instance.applyPaymentResponse,
-       _onCheckoutReady = onCheckoutReady ?? ((_) {}),
-       supported = supported ?? kIsWeb;
+  })  : _request =
+            request ?? RemoteAuthRepository.instance.authenticatedRequest,
+        _user = currentUser ?? (() => AppState.instance.currentUser?.id),
+        _apply = apply ?? AppState.instance.applyPaymentResponse,
+        _onCheckoutReady = onCheckoutReady ?? ((_) {}),
+        supported = supported ?? kIsWeb;
 
   static final instance = WebDiamondService();
   static const _base = '/api/v1/web/alipay';
-  static String _key(String user) => 'openelf.web-diamond.2021007112614465.production.$user';
+  static String _key(String user) =>
+      'openelf.web-diamond.2021007112614465.production.$user';
   static bool _validId(dynamic id) =>
       id is String && RegExp(r'^OE[a-f0-9]{32}$').hasMatch(id);
   static Future<Map<String, dynamic>?> _saved(String user) async {
@@ -117,13 +120,7 @@ class WebDiamondService extends ChangeNotifier {
       data,
     ); // Complete server snapshot; NEVER add diamonds locally.
     if (['paid', 'closed', 'refunded'].contains(status)) await _clear(owner);
-    message = status == 'paid'
-        ? '钻石已到账'
-        : status == 'review'
-        ? '订单待人工核对，请勿重复支付'
-        : status == 'pending'
-        ? '订单待付款，或支付结果待确认；请勿重复付款'
-        : '订单状态：$status';
+    message = status == 'paid' ? '钻石已到账' : OrderStatusText.message(status);
   }
 
   Future<String> queryOrderStatus(String id) async {
@@ -164,51 +161,51 @@ class WebDiamondService extends ChangeNotifier {
   }
 
   Future<void> initialize() => _run((owner) async {
-    _record = await _saved(owner);
-    _check(owner);
-    _products.clear();
-    final catalog = await _request('$_base/products');
-    _check(owner);
-    _mode(catalog);
-    if (catalog['protocol'] != 2) throw StateError('网页钻石充值协议不匹配');
-    for (final value in catalog['products'] as List) {
-      final p = Map<String, dynamic>.from(value as Map);
-      if (p['id'] is! String ||
-          p['diamonds'] is! int ||
-          p['priceFen'] is! int ||
-          p['diamonds'] <= 0 ||
-          p['priceFen'] <= 0) {
-        throw StateError('充值商品数据无效');
-      }
-      _products.add(p);
-    }
-    await _wallet(owner);
-    final pending = await _request('$_base/pending');
-    _check(owner);
-    _mode(pending);
-    if (!_validId(_record?['id'])) {
-      final orders = pending['orders'] as List;
-      if (orders.isNotEmpty) {
-        final first = Map<String, dynamic>.from(orders.first as Map);
-        if (!_validId(first['id'])) throw StateError('待支付订单数据异常');
-        await _save(owner, first);
-      }
-    }
-    if (_validId(_record?['id']) && _products.isNotEmpty) {
-      await _confirm(owner, _record!['id'] as String);
-    } else if (_products.isEmpty) {
-      message = '网页钻石充值暂未开启；钻石余额仍从服务器读取';
-    }
-  });
+        _record = await _saved(owner);
+        _check(owner);
+        _products.clear();
+        final catalog = await _request('$_base/products');
+        _check(owner);
+        _mode(catalog);
+        if (catalog['protocol'] != 2) throw StateError('网页钻石充值协议不匹配');
+        for (final value in catalog['products'] as List) {
+          final p = Map<String, dynamic>.from(value as Map);
+          if (p['id'] is! String ||
+              p['diamonds'] is! int ||
+              p['priceFen'] is! int ||
+              p['diamonds'] <= 0 ||
+              p['priceFen'] <= 0) {
+            throw StateError('充值商品数据无效');
+          }
+          _products.add(p);
+        }
+        await _wallet(owner);
+        final pending = await _request('$_base/pending');
+        _check(owner);
+        _mode(pending);
+        if (!_validId(_record?['id'])) {
+          final orders = pending['orders'] as List;
+          if (orders.isNotEmpty) {
+            final first = Map<String, dynamic>.from(orders.first as Map);
+            if (!_validId(first['id'])) throw StateError('待支付订单数据异常');
+            await _save(owner, first);
+          }
+        }
+        if (_validId(_record?['id']) && _products.isNotEmpty) {
+          await _confirm(owner, _record!['id'] as String);
+        } else if (_products.isEmpty) {
+          message = '网页钻石充值暂未开启；钻石余额仍从服务器读取';
+        }
+      });
   Future<void> refreshPending() => _run((owner) async {
-    _record = await _saved(owner);
-    _check(owner);
-    if (_validId(_record?['id'])) {
-      await _confirm(owner, _record!['id'] as String);
-    } else {
-      await _wallet(owner);
-    }
-  });
+        _record = await _saved(owner);
+        _check(owner);
+        if (_validId(_record?['id'])) {
+          await _confirm(owner, _record!['id'] as String);
+        } else {
+          await _wallet(owner);
+        }
+      });
   Future<void> _checkout(String owner, Map<String, dynamic> order) async {
     _check(owner);
     _mode(order);
@@ -241,34 +238,34 @@ class WebDiamondService extends ChangeNotifier {
   }
 
   Future<void> pay(String tierId) => _run((owner) async {
-    if (_products.every((p) => p['id'] != tierId)) {
-      throw StateError('请先刷新充值档位');
-    }
-    _record = await _saved(owner);
-    _check(owner);
-    if (_validId(_record?['id'])) throw StateError('请先确认或继续已有订单，勿重复下单');
-    if (_record?['tierId'] != null && _record?['tierId'] != tierId) {
-      throw StateError('上一笔下单结果待确认，请重试原充值档位');
-    }
-    var requestId = _record?['requestId'] as String?;
-    if (requestId == null) {
-      final random = Random.secure();
-      requestId =
-          'webdiamond-${List.generate(32, (_) => random.nextInt(16).toRadixString(16)).join()}';
-      await _save(owner, {'requestId': requestId, 'tierId': tierId});
-    }
-    final order = await _request(
-      '$_base/orders',
-      body: {'requestId': requestId, 'tierId': tierId},
-    );
-    await _checkout(owner, order);
-  });
+        if (_products.every((p) => p['id'] != tierId)) {
+          throw StateError('请先刷新充值档位');
+        }
+        _record = await _saved(owner);
+        _check(owner);
+        if (_validId(_record?['id'])) throw StateError('请先确认或继续已有订单，勿重复下单');
+        if (_record?['tierId'] != null && _record?['tierId'] != tierId) {
+          throw StateError('上一笔下单结果待确认，请重试原充值档位');
+        }
+        var requestId = _record?['requestId'] as String?;
+        if (requestId == null) {
+          final random = Random.secure();
+          requestId =
+              'webdiamond-${List.generate(32, (_) => random.nextInt(16).toRadixString(16)).join()}';
+          await _save(owner, {'requestId': requestId, 'tierId': tierId});
+        }
+        final order = await _request(
+          '$_base/orders',
+          body: {'requestId': requestId, 'tierId': tierId},
+        );
+        await _checkout(owner, order);
+      });
   Future<void> resume() => _run((owner) async {
-    _record = await _saved(owner);
-    _check(owner);
-    final id = _record?['id'];
-    if (!_validId(id)) throw StateError('没有待处理的钻石订单');
-    final order = await _request('$_base/orders/$id/pay', body: {});
-    await _checkout(owner, order);
-  });
+        _record = await _saved(owner);
+        _check(owner);
+        final id = _record?['id'];
+        if (!_validId(id)) throw StateError('没有待处理的钻石订单');
+        final order = await _request('$_base/orders/$id/pay', body: {});
+        await _checkout(owner, order);
+      });
 }

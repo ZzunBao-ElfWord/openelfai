@@ -1,6 +1,6 @@
 {
-    "name": "openelf",
-    "short_name": "openelf",
+    "name": "OpenElf",
+    "short_name": "OpenElf",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

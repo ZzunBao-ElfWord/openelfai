@@ -1,7 +1,7 @@
 name: openelf
 description: OpenElf - 持有制 AI 社区
 publish_to: 'none'
-version: 1.0.4+19
+version: 1.0.5+1
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -19,6 +19,7 @@ dependencies:
   share_plus: ^10.1.4
   app_links: ^6.3.2
   image_picker: ^1.2.3
+  jpush_flutter: 3.5.9
   openelf_ali_captcha:
     path: third_party/openelf_ali_captcha
   openelf_douyin_share:

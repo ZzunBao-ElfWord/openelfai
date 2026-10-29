@@ -1,6 +1,8 @@
 """Resize the supplied OpenElf artwork for all app icon surfaces.
 
-No artwork is redrawn or cropped. --check needs only the standard library.
+All displayed assets use the central P1 artwork on a clean white background.
+The original JPG is retained only as source, never as a displayed black-corner
+badge. --check needs only the standard library.
 Generation uses Pillow and the existing iOS icon generator.
 """
 import argparse
@@ -23,7 +25,7 @@ def targets():
                                       ('xhdpi', 96, 216), ('xxhdpi', 144, 324),
                                       ('xxxhdpi', 192, 432)]:
         prefix = f'android/app/src/main/res/mipmap-{density}/'
-        result[prefix + 'ic_launcher.png'] = (size, 'RGB', 'plain')
+        result[prefix + 'ic_launcher.png'] = (size, 'RGB', 'launcher')
         result[prefix + 'ic_launcher_foreground.png'] = (foreground, 'RGBA', 'adaptive')
     result['android/app/src/main/res/drawable-nodpi/launch_icon.png'] = (288, 'RGB', 'plain')
     for suffix, size in [('', 168), ('@2x', 336), ('@3x', 504)]:
@@ -64,24 +66,22 @@ def check():
 
 def generate():
     from PIL import Image, ImageOps
+    from launcher_artwork import adaptive_layer, launcher_square
     original = ImageOps.exif_transpose(Image.open(ORIGINAL)).convert('RGB')
     assert original.width == original.height, 'Use square artwork; never stretch or crop silently'
+    clean = launcher_square(original, 1024)
     for name, (size, mode, style) in targets().items():
         if style == 'adaptive':
-            # Android's 108dp layer has a 66dp safe area. Keep the ENTIRE
-            # supplied square inside it so round launchers cannot clip the elf.
-            icon = Image.new('RGBA', (size, size), (255, 255, 255, 0))
-            art_size = round(size * 66 / 108)
-            art = original.resize((art_size, art_size), Image.Resampling.LANCZOS).convert('RGBA')
-            inset = (size - art_size) // 2
-            icon.alpha_composite(art, (inset, inset))
+            icon = adaptive_layer(original, size)
+        elif style == 'launcher':
+            icon = launcher_square(original, size)
         elif style == 'maskable':
             icon = Image.new('RGB', (size, size), 'white')
             art_size = round(size * .8)
             inset = (size - art_size) // 2
-            icon.paste(original.resize((art_size, art_size), Image.Resampling.LANCZOS), (inset, inset))
+            icon.paste(clean.resize((art_size, art_size), Image.Resampling.LANCZOS), (inset, inset))
         else:
-            icon = original.resize((size, size), Image.Resampling.LANCZOS)
+            icon = clean.resize((size, size), Image.Resampling.LANCZOS)
         icon.convert(mode).save(APP / name)
     # Reuse the established iOS catalog and hash manifest format.
     opaque = Image.open(SOURCE).convert('RGB')

@@ -1,8 +1,8 @@
-/// Verbatim text snapshot of the operator's published policy (whitespace/layout only).
-/// Source checked on 2026-10-27. Update alongside the website; not a legal approval.
+/// Bundled policy plus the optional push-SDK disclosure added on 2026-10-29.
+/// Publish corresponding website updates before release; not a legal approval.
 class PrivacyPolicy {
   static const sourceUrl = 'https://openelfai.com/privacy/';
-  static const updatedAt = '2026 年 10 月 27 日';
+  static const updatedAt = '2026 年 10 月 29 日';
   static const introduction = '本政策说明开放精灵（OpenElf）在官网、App 与开放平台中如何处理你的个人信息。'
       '我们遵循最小必要原则，只收集提供服务所必需的信息。';
 
@@ -29,6 +29,12 @@ class PrivacyPolicy {
       '• 支付渠道（支付宝等）。',
       '• 大模型服务商；部分服务商可能位于境外，用于生成对话与内容。',
       '我们只提供实现功能所需的最少信息，并要求服务商按协议与法律保护你的信息。我们不会出售你的个人信息。',
+    ]),
+    PrivacyPolicySection('可选的消息通知服务', [
+      '你在“消息通知”页面同意并开启后，我们才启用极光推送 SDK；未开启时不启动推送业务。',
+      '为注册设备、发送通知及处理点击跳转，极光 SDK 会处理推送所需的设备标识、系统与网络信息、设备推送注册标识。我们将当前登录账号与设备推送标识绑定，用于向你的设备发送通知。',
+      '你可在应用内关闭消息通知，或在系统设置中撤回通知权限。退出、注销或切换账号时会解绑或重新绑定推送设备。关闭时若网络不可用，服务端解绑需在网络恢复后重试。',
+      '极光隐私政策：https://www.jiguang.cn/license/privacy。消息通知不是使用登录、浏览等基础功能的必要条件。',
     ]),
     PrivacyPolicySection('存储与安全', [
       '• 数据存储于中华人民共和国境内的服务器；如确需跨境传输，我们将依法履行相应程序。',

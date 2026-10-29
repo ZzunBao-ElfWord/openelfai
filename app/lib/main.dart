@@ -10,11 +10,14 @@ import 'pages/wallet_page.dart';
 import 'payments/web_diamond_service.dart';
 import 'state/app_state.dart';
 import 'theme.dart';
+import 'push/push_service.dart';
 import 'widgets/common.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await ThemeController.instance.load();
+  // SDK startup requires the user's explicit notification consent.
+  await PushService.instance.restore();
   runApp(const OpenelfApp());
 }
 
@@ -167,9 +170,12 @@ class _SplashScreenState extends State<SplashScreen> {
                       ),
                     ],
                   ),
-                  child: Image.asset(
-                    'assets/brand/app_icon.png',
-                    fit: BoxFit.cover,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(19),
+                    child: Image.asset(
+                      'assets/brand/app_icon.png',
+                      fit: BoxFit.cover,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 26),

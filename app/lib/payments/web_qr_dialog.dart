@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'web_checkout.dart';
+import 'order_status_text.dart';
 import 'web_qr_frame_stub.dart'
     if (dart.library.js_interop) 'web_qr_frame_web.dart';
 
@@ -99,7 +100,7 @@ class _QrDialogState extends State<_QrDialog> {
       ].contains(status)) {
         _timer?.cancel();
         _terminal = true;
-        _message = '订单状态：$status，请关闭后刷新余额与订单';
+        _message = OrderStatusText.message(status);
       } else {
         _message = '等待付款确认。扫码或关闭弹窗不代表已到账';
       }
@@ -113,40 +114,41 @@ class _QrDialogState extends State<_QrDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: Text('支付宝扫码付款 ¥${(widget.amountFen / 100).toStringAsFixed(2)}'),
-    content: SizedBox(
-      width: 280,
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (!_terminal)
-              SizedBox(
-                height: 280,
-                width: 280,
-                child: ColoredBox(color: Colors.white, child: _frame),
-              ),
-            const SizedBox(height: 10),
-            Text(_message),
-            const SizedBox(height: 8),
-            Text('订单：${widget.orderId}', style: const TextStyle(fontSize: 10)),
-            const Text(
-              '若二维码区域提示应用未上线或权限不足，需先处理支付宝审核/签约；不会自动跳转。',
-              style: TextStyle(fontSize: 11),
+        title: Text('支付宝扫码付款 ¥${(widget.amountFen / 100).toStringAsFixed(2)}'),
+        content: SizedBox(
+          width: 280,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (!_terminal)
+                  SizedBox(
+                    height: 280,
+                    width: 280,
+                    child: ColoredBox(color: Colors.white, child: _frame),
+                  ),
+                const SizedBox(height: 10),
+                Text(_message),
+                const SizedBox(height: 8),
+                Text('订单：${widget.orderId}',
+                    style: const TextStyle(fontSize: 10)),
+                const Text(
+                  '付款遇到问题，请稍后重试或联系客服；已付款请勿重复支付。',
+                  style: TextStyle(fontSize: 11),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
-      ),
-    ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(context, false),
-        child: const Text('关闭并保留订单'),
-      ),
-      TextButton(
-        onPressed: _busy || _terminal ? null : _check,
-        child: Text(_busy ? '查询中…' : '我已付款，查询到账'),
-      ),
-    ],
-  );
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('关闭并保留订单'),
+          ),
+          TextButton(
+            onPressed: _busy || _terminal ? null : _check,
+            child: Text(_busy ? '查询中…' : '我已付款，查询到账'),
+          ),
+        ],
+      );
 }

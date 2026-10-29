@@ -66,8 +66,9 @@ class _IosRechargePanelState extends State<IosRechargePanel>
                                     if (context.mounted) {
                                       ScaffoldMessenger.of(context)
                                           .showSnackBar(
-                                        const SnackBar(
-                                            content: Text('暂时无法购买，请刷新后重试')),
+                                        SnackBar(
+                                            content: Text(
+                                                _iap.error ?? '暂时无法购买，请刷新后重试')),
                                       );
                                     }
                                   }
@@ -79,9 +80,8 @@ class _IosRechargePanelState extends State<IosRechargePanel>
                                   style: TextStyle(
                                       fontSize: 20, color: AppColors.text)),
                               const SizedBox(height: 6),
-                              Text(product.price,
-                                  style: TextStyle(
-                                      color: AppColors.textMuted)),
+                              Text(_iap.priceTextFor(product),
+                                  style: TextStyle(color: AppColors.textMuted)),
                             ],
                           ),
                         ))
@@ -89,13 +89,12 @@ class _IosRechargePanelState extends State<IosRechargePanel>
               ),
             if (!_iap.loading && _iap.products.isEmpty)
               Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
+                padding: const EdgeInsets.symmetric(vertical: 12),
                 child: Text('充值暂未开放',
                     style: TextStyle(color: AppColors.textMuted)),
               ),
             if (_iap.error != null)
-              Text(_iap.error!,
-                  style: TextStyle(color: AppColors.textMuted)),
+              Text(_iap.error!, style: TextStyle(color: AppColors.textMuted)),
             if (_iap.busy && !_iap.hasUnconfirmed)
               Text('订单处理中，请等待 App Store 确认',
                   style: TextStyle(color: AppColors.textMuted)),
@@ -103,7 +102,7 @@ class _IosRechargePanelState extends State<IosRechargePanel>
               spacing: 10,
               children: [
                 TextButton(
-                  onPressed: _iap.loading ? null : _iap.initialize,
+                  onPressed: _iap.loading || _iap.busy ? null : _iap.initialize,
                   child: const Text('刷新商品与余额'),
                 ),
                 if (_iap.hasUnconfirmed)

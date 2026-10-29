@@ -12,23 +12,33 @@ class FakeStore implements IapStore {
   final events = StreamController<List<PurchaseDetails>>.broadcast(sync: true);
   final completed = <String?>[];
   PurchaseParam? lastPurchase;
+  int queries = 0;
+  String price = '¥1.00', currency = 'CNY';
+  double rawPrice = 1;
+  bool failQuery = false;
+  void Function(int)? onQuery;
 
   @override
   Stream<List<PurchaseDetails>> get purchaseStream => events.stream;
   @override
   Future<bool> isAvailable() async => true;
   @override
-  Future<ProductDetailsResponse> queryProductDetails(Set<String> ids) async =>
-      ProductDetailsResponse(productDetails: [
-        ProductDetails(
-          id: sku,
-          title: '7钻石',
-          description: '7钻石',
-          price: '¥1.00',
-          rawPrice: 1,
-          currencyCode: 'CNY',
-        )
-      ], notFoundIDs: []);
+  Future<ProductDetailsResponse> queryProductDetails(Set<String> ids) async {
+    queries++;
+    onQuery?.call(queries);
+    if (failQuery) throw StateError('query failed');
+    return ProductDetailsResponse(productDetails: [
+      ProductDetails(
+        id: sku,
+        title: '7钻石',
+        description: '7钻石',
+        price: price,
+        rawPrice: rawPrice,
+        currencyCode: currency,
+      )
+    ], notFoundIDs: []);
+  }
+
   @override
   Future<bool> buyConsumable({required PurchaseParam purchaseParam}) async {
     lastPurchase = purchaseParam;
@@ -59,6 +69,7 @@ class Fixture {
   String? userId = 'u_1234567890abcdef1234567890abcdef';
   String mode = 'sandbox';
   String nativeEnvironment = 'Sandbox';
+  String? country = 'CHN';
   int protocol = 2;
   String orderStatus = 'credited';
   int balance = 0;
@@ -71,6 +82,7 @@ class Fixture {
     store: store,
     currentUserId: () => userId,
     environment: () async => nativeEnvironment,
+    storefront: () async => country,
     applyWallet: (user, diamonds, total) => applied.add(diamonds),
     request: (path, {body}) async {
       if (path.contains('/products?')) {
@@ -106,6 +118,129 @@ class Fixture {
 }
 
 void main() {
+  test('中国商店返回美元时重新查询，不换算或展示错误金额', () async {
+    final f = Fixture();
+    addTearDown(f.close);
+    f.store
+      ..price = 'US\$0.99'
+      ..currency = 'USD'
+      ..rawPrice = .99;
+    await f.service.initialize();
+    expect(f.store.queries, 2);
+    expect(f.service.priceTextFor(f.service.products.single), '点击查看付款价格');
+    expect(f.service.products.single.rawPrice, .99);
+    await f.service.buy(sku);
+    expect(f.store.lastPurchase, isNotNull);
+    expect(f.verifyCalls, 0);
+  });
+  test('异常价格第二次查询恢复人民币后显示Apple原价', () async {
+    final f = Fixture();
+    addTearDown(f.close);
+    f.store
+      ..price = 'US\$0.99'
+      ..currency = 'USD'
+      ..rawPrice = .99;
+    f.store.onQuery = (n) {
+      if (n == 2) {
+        f.store
+          ..price = '¥1.00'
+          ..currency = 'CNY'
+          ..rawPrice = 1;
+      }
+    };
+    await f.service.initialize();
+    expect(f.store.queries, 2);
+    expect(f.service.priceTextFor(f.service.products.single), '¥1.00');
+  });
+  test('购买前再次查询，价格变动时先更新列表不弹付款', () async {
+    final f = Fixture();
+    addTearDown(f.close);
+    await f.service.initialize();
+    f.store
+      ..price = '¥2.00'
+      ..rawPrice = 2;
+    await expectLater(f.service.buy(sku), throwsStateError);
+    expect(f.store.lastPurchase, isNull);
+    expect(f.service.error, contains('价格已更新'));
+    expect(f.service.priceTextFor(f.service.products.single), '¥2.00');
+    await f.service.buy(sku);
+    expect(f.store.lastPurchase!.productDetails.price, '¥2.00');
+  });
+  test('美国商店美元不被错误改成人民币', () async {
+    final f = Fixture()..country = 'USA';
+    addTearDown(f.close);
+    f.store
+      ..price = 'US\$0.99'
+      ..currency = 'USD'
+      ..rawPrice = .99;
+    await f.service.initialize();
+    expect(f.store.queries, 1);
+    expect(f.service.priceTextFor(f.service.products.single), 'US\$0.99');
+  });
+  test('沙盒商店未知且返回美元时不猜测币种或金额', () async {
+    final f = Fixture()..country = null;
+    addTearDown(f.close);
+    f.store
+      ..price = 'US\$0.99'
+      ..currency = 'USD'
+      ..rawPrice = .99;
+    await f.service.initialize();
+    expect(f.service.priceTextFor(f.service.products.single), '点击查看付款价格');
+  });
+  test('购买前刷新失败，不使用旧商品启动付款', () async {
+    final f = Fixture();
+    addTearDown(f.close);
+    await f.service.initialize();
+    f.store.failQuery = true;
+    await expectLater(f.service.buy(sku), throwsStateError);
+    expect(f.store.lastPurchase, isNull);
+    expect(f.service.busy, false);
+    expect(f.verifyCalls, 0);
+  });
+  test('商店地区变化后须重新核对价格再购买', () async {
+    final f = Fixture();
+    addTearDown(f.close);
+    await f.service.initialize();
+    f.country = 'USA';
+    f.store
+      ..price = 'US\$0.99'
+      ..currency = 'USD'
+      ..rawPrice = .99;
+    await expectLater(f.service.buy(sku), throwsStateError);
+    expect(f.store.lastPurchase, isNull);
+    expect(f.service.error, contains('价格已更新'));
+  });
+  test('查询期间地区变化会重查，稳定后才发布价格', () async {
+    final f = Fixture();
+    addTearDown(f.close);
+    f.store.onQuery = (_) {
+      f.country = 'USA';
+      f.store
+        ..price = 'US\$0.99'
+        ..currency = 'USD'
+        ..rawPrice = .99;
+    };
+    await f.service.initialize();
+    expect(f.store.queries, 2);
+    expect(f.service.priceTextFor(f.service.products.single), 'US\$0.99');
+  });
+  test('刷新商品再次查询Apple，不沿用上一次美元元数据', () async {
+    final f = Fixture();
+    addTearDown(f.close);
+    f.store
+      ..price = 'US\$0.99'
+      ..currency = 'USD'
+      ..rawPrice = .99;
+    await f.service.initialize();
+    expect(f.store.queries, 2);
+    f.store
+      ..price = '¥1.00'
+      ..currency = 'CNY'
+      ..rawPrice = 1;
+    await f.service.loadProducts();
+    expect(f.store.queries, 3);
+    expect(f.service.priceTextFor(f.service.products.single), '¥1.00');
+  });
   test('正式包使用正式钱包，沙盒包仍使用沙盒钱包', () async {
     final f = Fixture()
       ..nativeEnvironment = 'Production'

@@ -24,6 +24,9 @@ android {
 
     defaultConfig {
         applicationId = "com.openelf.app"
+        manifestPlaceholders["JPUSH_PKGNAME"] = "com.openelf.app"
+        manifestPlaceholders["JPUSH_APPKEY"] = "3439c18b0c3021ae5e29ba92"
+        manifestPlaceholders["JPUSH_CHANNEL"] = "developer-default"
         // Public ID only; intentionally blank while the Kwai app is in review.
         manifestPlaceholders["KWAI_APP_ID"] = providers.gradleProperty("OPENELF_KWAI_APP_ID").getOrElse("")
         // You can update the following values to match your application needs.
@@ -34,7 +37,12 @@ android {
         // is added automatically by Flutter. (https://developer.android.com/studio/build/configure-apk-splits#configure-APK-versions)
         // You can force using the value of versionCode by specifying the `-P force-version-code-ignoring-abi=true`
         // flag during build.
-        versionCode = flutter.versionCode
+        // Display builds restart after 20; Android update codes must not reset.
+        // 1.0.4 (20) -> code 20; 1.0.5 (1) -> code 21.
+        val releaseParts = flutter.versionName.split(".").map { it.toInt() }
+        require(releaseParts.size == 3 && releaseParts[0] == 1 && releaseParts[1] == 0 && releaseParts[2] >= 4)
+        require(flutter.versionCode in 1..20)
+        versionCode = (releaseParts[2] - 4) * 20 + flutter.versionCode
         versionName = flutter.versionName
     }
 

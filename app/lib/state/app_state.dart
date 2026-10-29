@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../push/push_service.dart';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -259,6 +260,7 @@ class AppState extends ChangeNotifier {
     _resetCommerce();
     _ensureUserAddress(user);
     currentUser = user;
+    unawaited(PushService.instance.setAccount(user.id));
     if (CommerceConfig.enabled) wallet = Wallet();
     // 登录时如果本地还没有种子数据（比如首次启动直接登录），先注入
     if (!_initialized) {

@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/api_config.dart';
+import '../push/push_service.dart';
 import '../models/user.dart';
 import 'auth_repository.dart';
 
@@ -15,7 +16,8 @@ import 'auth_repository.dart';
 class RemoteAuthRepository implements AuthRepository {
   RemoteAuthRepository._();
 
-  RemoteAuthRepository.forTesting({required http.Client client}) : _client = client;
+  RemoteAuthRepository.forTesting({required http.Client client})
+      : _client = client;
 
   static final RemoteAuthRepository instance = RemoteAuthRepository._();
 
@@ -115,6 +117,7 @@ class RemoteAuthRepository implements AuthRepository {
   @override
   Future<void> logout() async {
     _sessionEpoch++;
+    await PushService.instance.signOut();
     final accessToken = await _secure.read(key: _kAccessToken);
     final refreshToken = await _secure.read(key: _kRefreshToken);
 
@@ -143,9 +146,12 @@ class RemoteAuthRepository implements AuthRepository {
     }
     _sessionEpoch++;
     // A refresh started before deletion must not restore an old local session.
+    await PushService.instance.signOut();
     final pending = _refreshing;
     if (pending != null) {
-      try { await pending; } catch (_) {}
+      try {
+        await pending;
+      } catch (_) {}
     }
     await _clearSession();
     if (userId != null && userId.isNotEmpty) {
@@ -327,6 +333,7 @@ class RemoteAuthRepository implements AuthRepository {
   }
 
   Future<void> _clearSession() async {
+    PushService.instance.clearLocalAccount();
     await _secure.delete(key: _kAccessToken);
     await _secure.delete(key: _kRefreshToken);
     await (await _prefs).remove(_kUserCache);
