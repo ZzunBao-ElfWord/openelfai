@@ -3,6 +3,7 @@ import '../push/push_service.dart';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../auth/auth_repository.dart';
 import '../compliance/ai_creation_policy.dart';
 import '../compliance/identity_verification.dart';
@@ -15,6 +16,7 @@ import '../models/user.dart';
 import '../persistence/data_repository.dart';
 import '../payments/commerce_repository.dart';
 import '../services/platform_api.dart';
+import '../services/stage_bind_service.dart';
 
 class AppState extends ChangeNotifier {
   AppState._();
@@ -44,7 +46,7 @@ class AppState extends ChangeNotifier {
   /// 已计过站外回流分的 elfId（v1.3，同一设备对同一 AI 永久只计 1 次）。
   final Set<String> referralCounted = {};
 
-  /// 我的书包：持有的技能书 NFT 实例（挂在我的专属地址下）。
+  /// 我的仓库：持有的技能书实例（挂在我的专属地址下）。
   /// 学习即销毁，书不转售也不转赠。
   final List<BookInstance> books = [];
 
@@ -80,6 +82,9 @@ class AppState extends ChangeNotifier {
   /// 创作者收益三档与提现规则：全部以服务端快照为准。
   EarningsSummary creatorEarnings = const EarningsSummary();
   final List<WithdrawalRecord> withdrawals = [];
+
+  /// 个性化推荐开关（合规要求可关闭）。关闭后「推荐」按时间倒序展示。
+  bool personalizedRecommendation = true;
   bool _commerceBusy = false;
   bool _commerceReady = false;
   final Set<String> _remoteElfIds = {};
@@ -159,6 +164,8 @@ class AppState extends ChangeNotifier {
   Future<void> restoreAsync() async {
     try {
       await _data.init();
+      final prefs = await SharedPreferences.getInstance();
+      personalizedRecommendation = prefs.getBool('feed.personalized') ?? true;
       final loaded = await _data.load();
       if (loaded != null) {
         _localDataLoaded = true;
@@ -261,6 +268,8 @@ class AppState extends ChangeNotifier {
     _ensureUserAddress(user);
     currentUser = user;
     unawaited(PushService.instance.setAccount(user.id));
+    // 第三方账号（舞台）绑定态跟随当前账号加载。
+    await StageBindService.instance.load(user.id);
     if (CommerceConfig.enabled) wallet = Wallet();
     // 登录时如果本地还没有种子数据（比如首次启动直接登录），先注入
     if (!_initialized) {
@@ -393,6 +402,7 @@ class AppState extends ChangeNotifier {
     _communityReady = false;
     identity = null;
     currentUser = null;
+    StageBindService.instance.reset();
     _localDataLoaded = false;
     _cachedUserId = null;
     platformBalanceMicro = 0;
@@ -609,12 +619,26 @@ class AppState extends ChangeNotifier {
 
   /// 服务端分页结果优先；分页还没加载（或本页为空）时，
   /// 用服务端快照里的帖子兜底，避免刚发布的内容在世界里「看不见」。
+  /// 关闭个性化推荐后，「推荐」统一降级为按时间排序。
+  String _effectiveSort(String sort) =>
+      (!personalizedRecommendation && sort == 'recommend') ? 'latest' : sort;
+
+  Future<void> setPersonalizedRecommendation(bool enabled) async {
+    if (personalizedRecommendation == enabled) return;
+    personalizedRecommendation = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('feed.personalized', enabled);
+    _clearFeedCache();
+    notifyListeners();
+    unawaited(loadFeed(reset: true));
+  }
+
   List<ElfPost> _feedOf(String channel, String sort) {
     if (CommerceConfig.enabled && !_publicFeedReady) return const [];
-    final cached = _feedCache['$channel:$sort'];
+    final cached = _feedCache['$channel:${_effectiveSort(sort)}'];
     if (cached != null)
       return List.unmodifiable(cached.where((p) => !isElfBlocked(p.elfId)));
-    final local = _localFeed(channel, sort);
+    final local = _localFeed(channel, _effectiveSort(sort));
     if (local.isNotEmpty)
       return List.unmodifiable(local.where((p) =>
           !isElfBlocked(p.elfId) &&
@@ -628,9 +652,9 @@ class AppState extends ChangeNotifier {
   List<ElfPost> feedVideo() => _feedOf('video', 'hot');
 
   bool feedLoading(String channel, {String sort = 'recommend'}) =>
-      _feedLoading.contains('$channel:$sort');
+      _feedLoading.contains('$channel:${_effectiveSort(sort)}');
   bool feedHasMore(String channel, {String sort = 'recommend'}) =>
-      _feedHasMore['$channel:$sort'] ?? false;
+      _feedHasMore['$channel:${_effectiveSort(sort)}'] ?? false;
 
   void _clearFeedCache() {
     _feedEpoch++;
@@ -652,6 +676,7 @@ class AppState extends ChangeNotifier {
     if (!CommerceConfig.enabled) return null;
     final user = currentUser;
     if (user == null) return '请先登录';
+    sort = _effectiveSort(sort);
     final key = '$channel:$sort';
     if (_feedLoading.contains(key)) return null;
     if (!reset && !(_feedHasMore[key] ?? true)) return null;
@@ -790,6 +815,7 @@ class AppState extends ChangeNotifier {
       return scored.map((s) => s.post).toList();
     }
     if (sort == 'mine') return myElves.expand((e) => postsOf(e.id)).toList();
+    if (sort == 'latest') return posts.take(20).toList();
     final now = DateTime.now();
     final scored = posts.map((p) {
       final dwellFactor = p.dwell > 10 ? 1.5 : (p.dwell / 10).clamp(0.3, 1.5);
@@ -838,7 +864,7 @@ class AppState extends ChangeNotifier {
   List<BookInstance> booksOf(String moduleId) =>
       books.where((b) => b.moduleId == moduleId).toList();
 
-  /// 铸造一本技能书（MVP：本地确定性伪造 NFT 实例，接链后替换）。
+  /// 生成一本技能书（MVP：本地确定性伪造实例，接链后替换）。
   BookInstance _mintBook(String moduleId) => BookInstance(
         id: 'bk${_bookSeq++}',
         moduleId: moduleId,
@@ -1098,6 +1124,41 @@ class AppState extends ChangeNotifier {
     posts.insert(0, post);
     notifyListeners();
     return null;
+  }
+
+  // —— 人类直接上传 AI 生成的视频 ——
+
+  /// 上传 AI 生成的视频：服务端校验视频格式与 AI 归属后发布成视频帖。
+  /// 上传不扣费，因此不走钱包就绪与操作位，只要求已登录且 AI 属于自己。
+  Future<String?> uploadAiVideo({
+    required String elfId,
+    required String caption,
+    required List<int> bytes,
+  }) async {
+    if (!myElves.any((e) => e.id == elfId)) return '只能上传到你自己的 AI 名下';
+    final text = caption.trim();
+    if (text.isEmpty) return '请填写视频文案';
+    if (text.length > 200) return '文案不能超过 200 字';
+    if (bytes.isEmpty) return '请选择视频文件';
+    final user = currentUser;
+    if (user == null) return '请先登录';
+    final mode = _paymentMode ??
+        (CommerceConfig.android ? CommerceConfig.androidMode : 'production');
+    try {
+      await CommerceRepository.instance.uploadVideo(
+        user.id,
+        mode,
+        elfId: elfId,
+        caption: text,
+        bytes: bytes,
+      );
+      _refreshWorldFeed();
+      return null;
+    } on AuthException catch (error) {
+      return error.message;
+    } catch (_) {
+      return '视频上传失败，请稍后重试';
+    }
   }
 
   // —— 自动运营中枢：装上 auto 能力的 AI 定时自动发 ——
@@ -1451,6 +1512,49 @@ class AppState extends ChangeNotifier {
               MapEntry(key.toString(), value?.toString() ?? '')))));
   }
 
+  /// 服务端举报。返回 null 表示成功，否则返回可直接展示的错误文案。
+  Future<String?> submitReport({
+    required String targetType,
+    required String targetId,
+    required String reason,
+    String detail = '',
+    bool block = false,
+  }) async {
+    try {
+      await PlatformApi.instance.reportContent(
+        targetType: targetType,
+        targetId: targetId,
+        reason: reason,
+        detail: detail,
+        block: block,
+      );
+      reports.add({
+        'targetId': '$targetType:$targetId',
+        'reason': reason,
+        'time': _now(),
+      });
+      return null;
+    } on PlatformApiException catch (error) {
+      return error.message;
+    } catch (_) {
+      return '举报提交失败，请稍后重试';
+    }
+  }
+
+  /// 拉黑一只 AI：服务端立即生效，本地先隐藏它的内容，避免刷新前仍可见。
+  Future<String?> blockElf(String elfId) async {
+    try {
+      await PlatformApi.instance.blockElf(elfId);
+    } on PlatformApiException catch (error) {
+      return error.message;
+    } catch (_) {
+      return '拉黑失败，请稍后重试';
+    }
+    posts = posts.where((post) => post.elfId != elfId).toList();
+    notifyListeners();
+    return null;
+  }
+
   // —— 算力 ——
 
   Seat? seatOf(String elfId) {
@@ -1764,7 +1868,7 @@ class AppState extends ChangeNotifier {
         [trimmedName, trimmedPrompt, persona, fear, habit]);
     if (blocked != null) return blocked;
     if (CommerceConfig.enabled) {
-      // 单一真源：创建、扣费、铸 NFT 与专属地址全部由服务端完成。
+      // 单一真源：创建、扣费、生成智能体与专属地址全部由服务端完成。
       return _performCommerce('create_elf', {
         'name': trimmedName,
         'prompt': trimmedPrompt,

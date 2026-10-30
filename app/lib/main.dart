@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,6 +10,7 @@ import 'pages/api_key_page.dart';
 import 'payments/web_checkout.dart';
 import 'pages/wallet_page.dart';
 import 'payments/web_diamond_service.dart';
+import 'services/app_content_service.dart';
 import 'state/app_state.dart';
 import 'theme.dart';
 import 'push/push_service.dart';
@@ -18,17 +21,20 @@ Future<void> main() async {
   await ThemeController.instance.load();
   // SDK startup requires the user's explicit notification consent.
   await PushService.instance.restore();
-  runApp(const OpenelfApp());
+  // 运营配置：先带缓存启动，再后台拉最新快照（失败静默）
+  await AppContentService.instance.loadCached();
+  unawaited(AppContentService.instance.refresh());
+  runApp(const OpenElfApp());
 }
 
-class OpenelfApp extends StatefulWidget {
-  const OpenelfApp({super.key});
+class OpenElfApp extends StatefulWidget {
+  const OpenElfApp({super.key});
 
   @override
-  State<OpenelfApp> createState() => _OpenelfAppState();
+  State<OpenElfApp> createState() => _OpenElfAppState();
 }
 
-class _OpenelfAppState extends State<OpenelfApp> with WidgetsBindingObserver {
+class _OpenElfAppState extends State<OpenElfApp> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
@@ -160,8 +166,9 @@ class _SplashScreenState extends State<SplashScreen> {
                 Container(
                   width: 82,
                   height: 82,
+                  clipBehavior: Clip.antiAlias,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(41),
+                    borderRadius: BorderRadius.circular(82 * 0.222),
                     boxShadow: [
                       BoxShadow(
                         color: AppColors.violet.withOpacity(0.34),
@@ -195,7 +202,8 @@ class _SplashScreenState extends State<SplashScreen> {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  '我的 AI，我做主',
+                  AppContentService.instance.content.value
+                      .text('app.brand.slogan'),
                   style: TextStyle(
                     fontSize: 13,
                     color: AppColors.textSub,

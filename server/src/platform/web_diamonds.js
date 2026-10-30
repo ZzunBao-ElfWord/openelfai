@@ -25,7 +25,7 @@ function webOrderStore(store, prefix = 'web2_') {
 }
 
 function createWebDiamondServices({ db, store = createPaymentStore(db), settings, gateway, now, prefix = 'web2_',
-    realname, identityPolicy, payout, payoutQuery }) {
+    realname, identityPolicy, payout, payoutQuery, compliance }) {
   const commerceSettings = { enabled: true, sandboxOnly: false, allowSandbox: false };
   const webGateway = gateway && typeof gateway.pagePay === 'function' ? {
     signOrder(order) {
@@ -40,14 +40,14 @@ function createWebDiamondServices({ db, store = createPaymentStore(db), settings
   const payment = createAlipayService({ store: webOrderStore(store, prefix), settings,
     commerceSettings, gateway: webGateway, now });
   const commerce = createCommerceService({ store, settings: commerceSettings,
-    realname, identityPolicy, payout, payoutQuery });
+    realname, identityPolicy, payout, payoutQuery, compliance });
   return { payment, commerce };
 }
 
 function registerWebDiamonds(app, { db, authenticate, settings, gateway, store = createPaymentStore(db), legacy,
-    realname, identityPolicy, payout, payoutQuery }) {
+    realname, identityPolicy, payout, payoutQuery, compliance }) {
   const { payment, commerce } = createWebDiamondServices({ db, store, settings, gateway,
-    realname, identityPolicy, payout, payoutQuery });
+    realname, identityPolicy, payout, payoutQuery, compliance });
   const old = legacy?.settings?.enabled ? createWebDiamondServices({ store, ...legacy, prefix: 'web_' }) : null;
   async function owned(user, id) {
     if (!/^OE[a-f0-9]{32}$/.test(id || '')) throw fail(400, 'INVALID_ORDER', '订单编号无效');

@@ -19,6 +19,10 @@ function clean(value, maxLength = 8192) {
   return result.length <= maxLength ? result : '';
 }
 
+function webCaptchaEnforced(settings) {
+  return (settings?.webMode || 'off') === 'enforce';
+}
+
 function createCaptchaVerifier(settings, options = {}) {
   const fetchImpl = options.fetchImpl || globalThis.fetch;
 
@@ -27,6 +31,8 @@ function createCaptchaVerifier(settings, options = {}) {
       enabled: false,
       async verify(payload) {
         if (clean(payload?.platform, 16).toLowerCase() === 'web') {
+          // 网页端未启用图形验证时不做拦截，安全性由手机号/IP 频控兜底。
+          if (!webCaptchaEnforced(settings)) return { passed: true, skipped: 'web_captcha_off' };
           throw new CaptchaError(503, 'CAPTCHA_UNAVAILABLE', '网页图形验证尚未启用');
         }
         return { passed: true, disabled: true };
@@ -52,6 +58,10 @@ function createCaptchaVerifier(settings, options = {}) {
       const platform = clean(payload?.platform, 16).toLowerCase();
       if (!['android', 'ios', 'web'].includes(platform)) {
         throw new CaptchaError(400, 'INVALID_CAPTCHA_PLATFORM', '图形验证平台不正确');
+      }
+      // 网页端在 webMode!=enforce 时只做频控，不要求阿里云 H5 证明。
+      if (platform === 'web' && !webCaptchaEnforced(settings)) {
+        return { passed: true, skipped: 'web_captcha_off' };
       }
       const scheme = settings.schemes[platform];
       if (!scheme?.appId || !scheme?.appKey) {

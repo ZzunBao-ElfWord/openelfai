@@ -40,8 +40,7 @@ class _IdentityVerifyPageState extends State<IdentityVerifyPage> {
   }
 
   void _toast(String text) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(text)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
   Future<void> _pick(bool front) async {
@@ -168,9 +167,8 @@ class _IdentityVerifyPageState extends State<IdentityVerifyPage> {
                   Expanded(
                     child: SingleChildScrollView(
                       padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
-                      child: verified
-                          ? _verifiedCard(identity!)
-                          : _form(identity),
+                      child:
+                          verified ? _verifiedCard(identity!) : _form(identity),
                     ),
                   ),
                   if (!verified) _footer(identity),
@@ -265,8 +263,7 @@ class _IdentityVerifyPageState extends State<IdentityVerifyPage> {
               const SizedBox(height: 10),
               Text(
                   '核验时间 ${_formatTime(identity.verifiedAt)} · ${_providerLabel(identity.provider)}',
-                  style:
-                      TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
+                  style: TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
             ],
           ),
         ),
@@ -300,9 +297,7 @@ class _IdentityVerifyPageState extends State<IdentityVerifyPage> {
                 child: Text(
                   '上传身份证完成实名核验后，才能使用「身份证授权」这条线创建以你本人为原型的 AI。我们不提供任意照片上传。',
                   style: TextStyle(
-                      fontSize: 11,
-                      height: 1.6,
-                      color: AppColors.textSub),
+                      fontSize: 11, height: 1.6, color: AppColors.textSub),
                 ),
               ),
             ],
@@ -367,7 +362,7 @@ class _IdentityVerifyPageState extends State<IdentityVerifyPage> {
               child: Padding(
                 padding: const EdgeInsets.only(top: 8, right: 4),
                 child: Text(
-                  '我授权 OpenElf 采集并核验我的身份证信息，并在创建「本人形象」AI 时使用身份证人像面作为形象生成来源。',
+                  '我单独同意 OpenElf 采集我的身份证照片、姓名与证件号码等敏感个人信息，并委托阿里云完成 OCR 识别与公安库二要素核验；核验后仅保存脱敏结果，完整信息不落库。我同时授权在创建「本人形象」AI 时使用身份证人像面作为形象生成来源。',
                   style: TextStyle(
                       fontSize: 10.5, height: 1.55, color: AppColors.textSub),
                 ),
@@ -378,7 +373,8 @@ class _IdentityVerifyPageState extends State<IdentityVerifyPage> {
         const SizedBox(height: 10),
         Text(
           '核验由阿里云实人认证在服务端完成：先读取证件正反面信息，再与公安权威源比对，仅保存脱敏结果。',
-          style: TextStyle(fontSize: 10, height: 1.5, color: AppColors.textMuted),
+          style:
+              TextStyle(fontSize: 10, height: 1.5, color: AppColors.textMuted),
         ),
       ],
     );
@@ -409,12 +405,12 @@ class _IdentityVerifyPageState extends State<IdentityVerifyPage> {
                       size: 22, color: AppColors.textMuted),
                   const SizedBox(height: 6),
                   Text(label,
-                      style: TextStyle(
-                          fontSize: 11.5, color: AppColors.textSub)),
+                      style:
+                          TextStyle(fontSize: 11.5, color: AppColors.textSub)),
                   const SizedBox(height: 2),
                   Text('点击上传',
-                      style: TextStyle(
-                          fontSize: 10, color: AppColors.textMuted)),
+                      style:
+                          TextStyle(fontSize: 10, color: AppColors.textMuted)),
                 ],
               )
             : Stack(
@@ -499,8 +495,7 @@ class _IdentityVerifyPageState extends State<IdentityVerifyPage> {
           height: 48,
           child: FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor:
-                  enabled ? AppColors.cyan : AppColors.surfaceHigh,
+              backgroundColor: enabled ? AppColors.cyan : AppColors.surfaceHigh,
               foregroundColor:
                   enabled ? AppColors.onBrand : AppColors.textFaint,
               shape: RoundedRectangleBorder(
@@ -508,8 +503,8 @@ class _IdentityVerifyPageState extends State<IdentityVerifyPage> {
             ),
             onPressed: enabled ? _submit : null,
             child: Text(_submitting ? '核验中…' : '提交核验',
-                style: const TextStyle(
-                    fontSize: 14, fontWeight: FontWeight.w700)),
+                style:
+                    const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
           ),
         ),
       ),

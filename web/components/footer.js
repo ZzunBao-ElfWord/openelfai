@@ -27,8 +27,16 @@ export default function Footer() {
               <span>更多</span>
               <Link href="/tools/">全球AI</Link>
               <Link href="/models/">全球大模型</Link>
-              <Link href="/platform/">开放平台</Link>
+              <Link href="/platform/">模型聚合</Link>
+              <Link href="/developers/">开发者</Link>
               <Link href="/download/">下载 App</Link>
+            </div>
+            <div>
+              <span>法务 &amp; 安全</span>
+              <Link href="/privacy/">隐私政策</Link>
+              <Link href="/terms/">用户协议</Link>
+              <Link href="/security/">反馈安全漏洞</Link>
+              <Link href="/transparency/">透明度</Link>
             </div>
           </nav>
         </div>

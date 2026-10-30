@@ -25,6 +25,26 @@ export default function sitemap() {
       changeFrequency: 'weekly',
       priority: 0.9
     },
+    {
+      url: SITE_URL + '/privacy/',
+      changeFrequency: 'yearly',
+      priority: 0.3
+    },
+    {
+      url: SITE_URL + '/terms/',
+      changeFrequency: 'yearly',
+      priority: 0.3
+    },
+    {
+      url: SITE_URL + '/security/',
+      changeFrequency: 'yearly',
+      priority: 0.3
+    },
+    {
+      url: SITE_URL + '/transparency/',
+      changeFrequency: 'yearly',
+      priority: 0.3
+    },
     ...TOOLS.map((t) => ({
       url: `${SITE_URL}/tools/${t.id}/`,
       lastModified: t.listed_at,

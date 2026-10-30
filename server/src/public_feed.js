@@ -4,7 +4,7 @@ const { filterResult, createCommunityService } = require('./community');
 
 // Content is shared across clients. Never infer its environment from StoreKit.
 // This adapter cannot create wallets, settle earnings or execute commerce actions.
-async function publicFeed(store, user, query = {}) {
+async function publicFeed(store, user, query = {}, compliance = null) {
   const readOnly = { transaction: (env, work) => {
     if (env !== 'Production') throw new Error('Public content must use Production');
     return store.transaction('Production', async tx => {
@@ -20,7 +20,7 @@ async function publicFeed(store, user, query = {}) {
       });
     });
   } };
-  const reader = createCommerceService({ store: readOnly,
+  const reader = createCommerceService({ store: readOnly, compliance,
     settings: { enabled: true, sandboxOnly: false, allowSandbox: false } });
   const result = await reader.listFeed(user, { ...query, environment: 'Production' });
   delete result.communityViewer;

@@ -46,6 +46,7 @@ test('HTTP：鉴权、商品、验单、消费、重复请求和退款通知贯�
     bundleId: 'com.ai.openelf', type: 'Consumable', quantity: 1,
     environment: 'Production', appAccountToken: userToken(user.id), signedDate: 1000 };
   const db = { async execute(sql) {
+    if (sql.includes('FROM compliance_blocks')) return [[]];
     if (sql === 'SELECT * FROM refresh_sessions WHERE id = ?') return [[{ user_id: user.id, expires_at: Date.now() + 60000 }]];
     if (sql === 'SELECT * FROM users WHERE id = ?') return [[user]];
     throw new Error('Unexpected SQL in HTTP test');
@@ -92,6 +93,7 @@ test('HTTP：安卓独立钱包、支付宝占位关闭、表单验签、服务�
   const store = memoryStore(); store.addUser(user);
   const headers = { authorization: 'Bearer ' + signAccessToken({ secret: config.jwtSecret, userId: user.id, sessionId: 'session-android', ttlSec: 900 }) };
   const db = { async execute(sql) {
+    if (sql.includes('FROM compliance_blocks')) return [[]];
     if (sql.includes('refresh_sessions')) return [[{ user_id: user.id, expires_at: Date.now() + 60000 }]];
     if (sql.includes('FROM users')) return [[user]];
     throw new Error('Unexpected SQL');

@@ -15,6 +15,8 @@ import 'login_page.dart';
 import 'attention_board_page.dart';
 import 'media_viewer_page.dart';
 import 'post_detail_page.dart';
+import 'upload_video_sheet.dart';
+import 'video_feed_page.dart';
 import 'wallet_page.dart';
 
 /// 世界广场（X For You 布局）：顶栏 tabs + 沉浸式多形态信息流 + 算法排序。
@@ -52,7 +54,8 @@ class _WorldPageState extends State<WorldPage>
   /// 切换 tab 时才向服务端要该榜单，避免一次拉三条流。
   void _onTabChanged() {
     if (_tc.indexIsChanging) return;
-    final sort = switch (_tc.index) { 1 => 'hot', 2 => 'mine', _ => 'recommend' };
+    final sort =
+        switch (_tc.index) { 1 => 'hot', 2 => 'mine', _ => 'recommend' };
     AppState.instance.loadFeed(sort: sort);
   }
 
@@ -69,44 +72,91 @@ class _WorldPageState extends State<WorldPage>
     final state = AppState.instance;
     return Scaffold(
       backgroundColor: AppColors.bg,
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              AppColors.bg.withOpacity(1),
-              AppColors.surfaceAlt,
-            ],
-          ),
-        ),
-        child: SafeArea(
-          bottom: false,
-          child: AnimatedBuilder(
-            animation: state,
-            builder: (context, _) {
-              // 桌面宽屏：头部/标签/信息流整体收窄居中（类似微博网页版）。
-              return WideContent(
-                maxWidth: 760,
-                child: Column(
-                  children: [
-                    _header(state),
-                    _tabs(),
-                    Expanded(
-                      child: TabBarView(
-                        controller: _tc,
-                        children: [
-                          _feed(state, state.feedForYou(), 'recommend'),
-                          _feed(state, state.feedHot(), 'hot'),
-                          _feed(state, state.feedMine(), 'mine'),
-                        ],
-                      ),
-                    ),
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    AppColors.bg.withOpacity(1),
+                    AppColors.surfaceAlt,
                   ],
                 ),
-              );
-            },
+              ),
+              child: SafeArea(
+                bottom: false,
+                child: AnimatedBuilder(
+                  animation: state,
+                  builder: (context, _) {
+                    // 桌面宽屏：头部/标签/信息流整体收窄居中（类似微博网页版）。
+                    return WideContent(
+                      maxWidth: 760,
+                      child: Column(
+                        children: [
+                          _header(state),
+                          _tabs(state),
+                          Expanded(
+                            child: TabBarView(
+                              controller: _tc,
+                              children: [
+                                _feed(state, state.feedForYou(), 'recommend'),
+                                _feed(state, state.feedHot(), 'hot'),
+                                _feed(state, state.feedMine(), 'mine'),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
           ),
+          // 右下角悬浮加号：上传 AI 生成的视频内容。
+          Positioned(
+            right: 16,
+            bottom: 20,
+            child: _uploadVideoButton(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _uploadVideoButton() {
+    return Semantics(
+      label: '上传 AI 生成的视频',
+      button: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          if (!checkLoginOrPrompt(context)) return;
+          showModalBottomSheet(
+            context: context,
+            isScrollControlled: true,
+            backgroundColor: Colors.transparent,
+            builder: (_) => const UploadVideoSheet(),
+          );
+        },
+        child: Container(
+          width: 50,
+          height: 50,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: AppColors.brandGradient,
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.violet.withOpacity(0.45),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: const Icon(Icons.add, size: 26, color: Colors.white),
         ),
       ),
     );
@@ -144,7 +194,8 @@ class _WorldPageState extends State<WorldPage>
               ),
               child: Padding(
                 padding: EdgeInsets.only(right: 10, top: 2, bottom: 2),
-                child: Icon(Icons.leaderboard_outlined, size: 17, color: AppColors.textMuted),
+                child: Icon(Icons.leaderboard_outlined,
+                    size: 17, color: AppColors.textMuted),
               ),
             ),
           ),
@@ -155,8 +206,7 @@ class _WorldPageState extends State<WorldPage>
               const SizedBox(width: 4),
               Text(
                 _fmt(WorldData.watchers),
-                style:
-                    TextStyle(fontSize: 11, color: AppColors.textMuted),
+                style: TextStyle(fontSize: 11, color: AppColors.textMuted),
               ),
             ],
           ),
@@ -165,7 +215,7 @@ class _WorldPageState extends State<WorldPage>
     );
   }
 
-  Widget _tabs() {
+  Widget _tabs(AppState state) {
     return TabBar(
       controller: _tc,
       isScrollable: false,
@@ -177,10 +227,10 @@ class _WorldPageState extends State<WorldPage>
       indicatorSize: TabBarIndicatorSize.label,
       indicatorPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
       dividerColor: AppColors.strokeSoft,
-      tabs: const [
-        Tab(text: '为你推荐'),
-        Tab(text: '热门'),
-        Tab(text: '我的 AI'),
+      tabs: [
+        Tab(text: state.personalizedRecommendation ? '为你推荐' : '最新'),
+        const Tab(text: '热门'),
+        const Tab(text: '我的 AI'),
       ],
     );
   }
@@ -190,12 +240,16 @@ class _WorldPageState extends State<WorldPage>
     if (posts.isEmpty) {
       return Center(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text(loading ? '正在加载公共内容…' :
-            state.feedError('world', sort: sort) ?? '暂无可展示的公开内容',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
-          if (!loading) TextButton(onPressed: () =>
-            state.loadFeed(sort: sort, reset: true), child: const Text('重新加载')),
+          Text(
+              loading
+                  ? '正在加载公共内容…'
+                  : state.feedError('world', sort: sort) ?? '暂无可展示的公开内容',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
+          if (!loading)
+            TextButton(
+                onPressed: () => state.loadFeed(sort: sort, reset: true),
+                child: const Text('重新加载')),
         ]),
       );
     }
@@ -259,8 +313,16 @@ class _WorldPageState extends State<WorldPage>
     state.watch(p.id);
     switch (p.kind) {
       case 'video':
+        // 从世界流点视频直接进入竖屏刷视频模式，从这条开始上下滑。
         Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => VideoPlayerPage(post: p, elf: elf)),
+          MaterialPageRoute(
+            builder: (_) => VideoFeedPage(
+              seedPosts:
+                  state.posts.where((item) => item.kind == 'video').toList(),
+              startPostId: p.id,
+              showBack: true,
+            ),
+          ),
         );
         break;
       case 'image':
@@ -316,7 +378,8 @@ class _WorldPageState extends State<WorldPage>
                         const SizedBox(width: 4),
                         Text(
                           elf.serial,
-                          style: TextStyle(fontSize: 10, color: AppColors.textMuted),
+                          style: TextStyle(
+                              fontSize: 10, color: AppColors.textMuted),
                         ),
                         if (elf.isOfficial) ...[
                           const SizedBox(width: 4),
@@ -329,15 +392,30 @@ class _WorldPageState extends State<WorldPage>
                             ),
                             child: Text(
                               '官方',
-                              style: TextStyle(
-                                  fontSize: 9, color: AppColors.cyan),
+                              style:
+                                  TextStyle(fontSize: 9, color: AppColors.cyan),
                             ),
                           ),
                         ],
+                        const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 4, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceAlt,
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                          child: Text(
+                            'AI 生成',
+                            style: TextStyle(
+                                fontSize: 9, color: AppColors.textMuted),
+                          ),
+                        ),
                         const Spacer(),
                         Text(
                           p.timeAgo,
-                          style: TextStyle(fontSize: 10, color: AppColors.textMuted),
+                          style: TextStyle(
+                              fontSize: 10, color: AppColors.textMuted),
                         ),
                         const SizedBox(width: 2),
                         _reportIcon(
@@ -369,7 +447,9 @@ class _WorldPageState extends State<WorldPage>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (p.isReply) ...[
-                    Text('↩ 回复 某条内容', style: TextStyle(fontSize: 10, color: AppColors.textFaint)),
+                    Text('↩ 回复 某条内容',
+                        style: TextStyle(
+                            fontSize: 10, color: AppColors.textFaint)),
                     const SizedBox(height: 4),
                   ],
                   _renderContent(p),
@@ -392,8 +472,8 @@ class _WorldPageState extends State<WorldPage>
           children: [
             Text(
               p.body,
-              style: TextStyle(
-                  fontSize: 14, color: AppColors.text, height: 1.6),
+              style:
+                  TextStyle(fontSize: 14, color: AppColors.text, height: 1.6),
             ),
             const SizedBox(height: 8),
             ClipRRect(
@@ -447,33 +527,44 @@ class _WorldPageState extends State<WorldPage>
           children: [
             Text(
               p.body,
-              style: TextStyle(
-                  fontSize: 14, color: AppColors.text, height: 1.6),
+              style:
+                  TextStyle(fontSize: 14, color: AppColors.text, height: 1.6),
             ),
             const SizedBox(height: 8),
-            Container(
-              height: 200,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: AppColors.surfaceAlt,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              alignment: Alignment.center,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      shape: BoxShape.circle,
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: SizedBox(
+                height: 200,
+                width: double.infinity,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Container(color: AppColors.surfaceAlt),
+                    // 封面由服务端从首帧抽帧；老帖没有封面时保留纯色底。
+                    if (p.coverUrl != null && p.coverUrl!.isNotEmpty)
+                      Image.network(
+                        p.coverUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          color: AppColors.surfaceAlt,
+                        ),
+                      ),
+                    Center(
+                      child: Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.35),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white70, width: 1),
+                        ),
+                        alignment: Alignment.center,
+                        child: const Icon(Icons.play_arrow,
+                            color: Colors.white, size: 26),
+                      ),
                     ),
-                    alignment: Alignment.center,
-                    child: const Icon(Icons.play_arrow,
-                        color: Colors.white, size: 24),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ],
@@ -484,8 +575,8 @@ class _WorldPageState extends State<WorldPage>
           children: [
             Text(
               p.body,
-              style: TextStyle(
-                  fontSize: 14, color: AppColors.text, height: 1.6),
+              style:
+                  TextStyle(fontSize: 14, color: AppColors.text, height: 1.6),
             ),
             const SizedBox(height: 8),
             AudioPlayerCard(post: p),
@@ -523,15 +614,14 @@ class _WorldPageState extends State<WorldPage>
           ),
           child: Text(
             p.body,
-            style: TextStyle(
-                fontSize: 13, color: AppColors.textSub, height: 1.6),
+            style:
+                TextStyle(fontSize: 13, color: AppColors.textSub, height: 1.6),
           ),
         );
       default: // text
         return Text(
           p.body,
-          style: TextStyle(
-              fontSize: 14, color: AppColors.text, height: 1.65),
+          style: TextStyle(fontSize: 14, color: AppColors.text, height: 1.65),
         );
     }
   }
@@ -563,117 +653,129 @@ class _WorldPageState extends State<WorldPage>
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-        // 点赞（+1 回声/注视，再点取消回滚）
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () {
-            if (checkLoginOrPrompt(context)) state.toggleLike(p.id);
-          },
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Row(
-              children: [
-                Icon(
-                  liked ? Icons.favorite : Icons.favorite_border,
-                  size: 14,
-                  color: liked ? AppColors.cyan : AppColors.textMuted,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  '${p.likes}',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: liked ? AppColors.cyan : AppColors.textMuted,
+                // 点赞（+1 回声/注视，再点取消回滚）
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    if (checkLoginOrPrompt(context)) state.toggleLike(p.id);
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        Icon(
+                          liked ? Icons.favorite : Icons.favorite_border,
+                          size: 14,
+                          color: liked ? AppColors.cyan : AppColors.textMuted,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${p.likes}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: liked ? AppColors.cyan : AppColors.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(width: 16),
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () {
-            if (checkLoginOrPrompt(context)) _showCommentsSheet(state, p);
-          },
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Row(
-              children: [
-                Icon(Icons.chat_bubble_outline,
-                    size: 14, color: AppColors.textMuted),
-                const SizedBox(width: 4),
-                Text(
-                  '${p.replies}',
-                  style:
-                      TextStyle(fontSize: 11, color: AppColors.textMuted),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(width: 16),
-        // 收藏（+3 回声/注视，再点取消回滚）
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () {
-            if (checkLoginOrPrompt(context)) state.toggleCollect(p.id);
-          },
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Row(
-              children: [
-                Icon(
-                  collected ? Icons.bookmark : Icons.bookmark_border,
-                  size: 14,
-                  color: collected ? AppColors.violetSoft : AppColors.textMuted,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  '${p.collects}',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: collected ? AppColors.violetSoft : AppColors.textMuted,
+                const SizedBox(width: 16),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    if (checkLoginOrPrompt(context))
+                      _showCommentsSheet(state, p);
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        Icon(Icons.chat_bubble_outline,
+                            size: 14, color: AppColors.textMuted),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${p.replies}',
+                          style: TextStyle(
+                              fontSize: 11, color: AppColors.textMuted),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Icon(Icons.visibility_outlined, size: 14, color: AppColors.cyan),
-        const SizedBox(width: 4),
-        Text(
-          '${_fmt(p.views)}',
-          style: TextStyle(fontSize: 11, color: AppColors.cyan),
-        ),
-        const SizedBox(width: 10),
-        if (p.dwell > 0)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-            decoration: BoxDecoration(
-              color: AppColors.cyan.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(3),
-            ),
-            child: Text(
-              '均停 ${p.dwell}s',
-              style: TextStyle(fontSize: 9.5, color: AppColors.cyan),
-            ),
-          ),
-        const SizedBox(width: 12),
-        // 分享（v1.3：分享卡片 + 落地页引流，分享行为本身不计分）
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => ShareHelper.shareElf(
-            context,
-            elf,
-            excerpt: p.body.length > 40 ? '${p.body.substring(0, 40)}…' : p.body,
-          ),
-          child: Padding(
-            padding: EdgeInsets.symmetric(vertical: 4),
-            child: Icon(Icons.ios_share, size: 14, color: AppColors.textMuted, semanticLabel: '分享'),
-          ),
-        ),
+                const SizedBox(width: 16),
+                // 收藏（+3 回声/注视，再点取消回滚）
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    if (checkLoginOrPrompt(context)) state.toggleCollect(p.id);
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        Icon(
+                          collected ? Icons.bookmark : Icons.bookmark_border,
+                          size: 14,
+                          color: collected
+                              ? AppColors.violetSoft
+                              : AppColors.textMuted,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${p.collects}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: collected
+                                ? AppColors.violetSoft
+                                : AppColors.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Icon(Icons.visibility_outlined,
+                    size: 14, color: AppColors.cyan),
+                const SizedBox(width: 4),
+                Text(
+                  '${_fmt(p.views)}',
+                  style: TextStyle(fontSize: 11, color: AppColors.cyan),
+                ),
+                const SizedBox(width: 10),
+                if (p.dwell > 0)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppColors.cyan.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                    child: Text(
+                      '均停 ${p.dwell}s',
+                      style: TextStyle(fontSize: 9.5, color: AppColors.cyan),
+                    ),
+                  ),
+                const SizedBox(width: 12),
+                // 分享（v1.3：分享卡片 + 落地页引流，分享行为本身不计分）
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => ShareHelper.shareElf(
+                    context,
+                    elf,
+                    excerpt: p.body.length > 40
+                        ? '${p.body.substring(0, 40)}…'
+                        : p.body,
+                  ),
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 4),
+                    child: Icon(Icons.ios_share,
+                        size: 14,
+                        color: AppColors.textMuted,
+                        semanticLabel: '分享'),
+                  ),
+                ),
               ],
             ),
           ),
@@ -1064,23 +1166,28 @@ class _WorldPageState extends State<WorldPage>
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(4),
-          child: Icon(Icons.flag_outlined,
-              size: 14, color: AppColors.textFaint),
+          child:
+              Icon(Icons.flag_outlined, size: 14, color: AppColors.textFaint),
         ),
       ),
     );
   }
 
   void _showReportPostSheet(AppState state, ElfPost p) {
-    ContentSafety.show(context, targetKind: 'post', targetId: p.id,
-      elfId: p.elfId, ownerId: state.elf(p.elfId).ownerId);
+    ContentSafety.show(context,
+        targetKind: 'post',
+        targetId: p.id,
+        elfId: p.elfId,
+        ownerId: state.elf(p.elfId).ownerId);
   }
 
   void _showReportCommentSheet(AppState state, PostComment c) {
-    ContentSafety.show(context, targetKind: 'comment', targetId: c.id,
-      elfId: c.authorElfId, ownerId: c.userId);
+    ContentSafety.show(context,
+        targetKind: 'comment',
+        targetId: c.id,
+        elfId: c.authorElfId,
+        ownerId: c.userId);
   }
-
 
   static String _fmt(int n) {
     if (n >= 10000) return '${(n / 10000).toStringAsFixed(1)}w';

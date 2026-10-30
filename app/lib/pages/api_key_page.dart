@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:math';
 
-import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../payments/alipay_service.dart';
@@ -297,7 +297,7 @@ class _ApiKeyPageState extends State<ApiKeyPage> {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              '这把 Key 已自动分配给当前账号，App 内 AI 对话使用它；也可以复制到自己的工具里调用 openelf 的 API。\n\n该余额同时用于 App 内 AI 对话与开放平台 API 调用。',
+              '这把 Key 已自动分配给当前账号，App 内 AI 对话使用它；也可以复制到自己的工具里调用 OpenElf 的 API。\n\n该余额同时用于 App 内 AI 对话与开放平台 API 调用。',
               style: TextStyle(
                 fontSize: 11.5,
                 color: AppColors.textSub,

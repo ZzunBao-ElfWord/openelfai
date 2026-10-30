@@ -32,6 +32,29 @@ class CommerceRepository {
     return _auth.authenticatedRequest('${CommerceConfig.chatPath}?$query');
   }
 
+  /// 上传 AI 生成视频：原始 MP4 字节走 body，AI 归属与文案走 query。
+  Future<Map<String, dynamic>> uploadVideo(
+    String userId,
+    String mode, {
+    required String elfId,
+    required String caption,
+    required List<int> bytes,
+  }) async {
+    if ((await _auth.currentUser)?.id != userId) {
+      throw const AuthException('ACCOUNT_CHANGED', '账号已切换，请重新上传');
+    }
+    final query = Uri(queryParameters: {
+      'environment': mode,
+      'elfId': elfId,
+      'caption': caption,
+      'aiGenerated': 'true',
+    }).query;
+    return _auth.authenticatedUpload(
+      '${ApiConfig.videoUploadPath}?$query',
+      bytes: bytes,
+    );
+  }
+
   /// 设备标识由登录模块统一生成并持久化，回流去重按（设备 + AI）在服务端计算。
   Future<String> deviceId() => _auth.deviceId();
 
@@ -52,7 +75,10 @@ class CommerceRepository {
 
   /// 信息流分页：排序、分页、去重由服务端决定，客户端只按页追加。
   Future<Map<String, dynamic>> feed(String userId, String mode,
-      {required String channel, String sort = 'recommend', int page = 0, int size = 20}) async {
+      {required String channel,
+      String sort = 'recommend',
+      int page = 0,
+      int size = 20}) async {
     if ((await _auth.currentUser)?.id != userId) {
       throw const AuthException('ACCOUNT_CHANGED', '账号已切换，请重新加载信息流');
     }
@@ -162,7 +188,8 @@ class CommerceRepository {
         'signature': signature,
         'body': {...content, 'requestId': id}
       };
-      if (!await prefs.setString(_withdrawKey(userId, mode), jsonEncode(record))) {
+      if (!await prefs.setString(
+          _withdrawKey(userId, mode), jsonEncode(record))) {
         throw const AuthException('STORAGE_ERROR', '无法保存提现编号，请稍后重试');
       }
     }

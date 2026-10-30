@@ -63,6 +63,18 @@ test('未结算余额、收益、债务或不确定订单均拒绝注销且回�
   }
 });
 
+test('new compliance deletion entry reuses transactional checks; cleanup errors roll back', async () => {
+  const { createComplianceService } = require('../src/compliance');
+  const funded = fixture({ diamonds: 10 });
+  const service = createComplianceService({ db: funded.db, store: {} });
+  await assert.rejects(service.deleteAccount({ id: 'old' }), { code: 'ACCOUNT_UNSETTLED' });
+  assert.ok(!funded.calls.some(([s]) => s.startsWith('UPDATE users')));
+  const broken = fixture({ breakAt: 'DELETE FROM compliance_blocks' });
+  await assert.rejects(deleteAccount(broken.db, 'old'));
+  assert.ok(broken.calls.some(([s]) => s === 'rollback'));
+  assert.ok(!broken.calls.some(([s]) => s === 'commit'));
+});
+
 test('zero balances with terminal failed withdrawal permit deletion; uncertain transfers remain blocked', async () => {
   const ended = fixture({ pending: [{ kind: 'withdrawal', state: 'failed' }] });
   assert.deepEqual(await deleteAccount(ended.db, 'old'), { deleted: true });

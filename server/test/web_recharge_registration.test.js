@@ -50,6 +50,7 @@ test('网页恢复复用共享安全账本，模拟付款只入钻石一次并�
   const calls = [];
   const db = { async execute(sql) {
     calls.push(sql);
+    if (sql.includes('FROM compliance_blocks')) return [[]];
     if (sql === 'SELECT * FROM refresh_sessions WHERE id = ?') return [[{ user_id: user.id, expires_at: Date.now() + 60000 }]];
     if (sql === 'SELECT * FROM users WHERE id = ?') return [[user]];
     throw Error('Unexpected SQL: no real database or platform balance writes allowed');

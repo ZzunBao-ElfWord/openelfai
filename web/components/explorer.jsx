@@ -1,6 +1,6 @@
 'use client';
 
-/* Openelf 开放精灵 · 列表页探索器（客户端组件）
+/* OpenElf 开放精灵 · 列表页探索器（客户端组件）
  * 保留原版交互：分类 / 地区 / 关键词三条件可叠加筛选，chip 显示动态计数，
  * 搜索输入 350ms 防抖后提交；筛选状态存 URL query（唯一事实源）：
  *   - 变更筛选/搜索 → history.replaceState 写回 query，不产生多余历史记录；

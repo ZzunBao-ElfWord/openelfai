@@ -4,14 +4,14 @@ import { TOOLS } from '../../lib/tools';
 import { SITE_URL } from '../../lib/site';
 
 export const metadata = {
-  title: 'AI 应用图鉴 · 全球 AI 工具应用',
+  title: 'AI 应用图鉴 · ChatGPT、Claude、豆包、Kimi 官网入口',
   description:
-    '浏览 Openelf 开放精灵收录的 AI 工具应用：支持按对话助手、图像生成、音视频、编程开发、办公效率、智能体与搜索六大分类与国内 / 海外地区筛选，并可关键词检索。大模型厂商与开放平台另见大模型图鉴。',
+    '收录 117 款 AI 工具应用：按对话助手、图像生成、音视频、编程开发、办公效率、智能体与搜索六大分类，国内 / 海外分列，提供官方下载与官网直达入口；大模型厂商与开放平台另见大模型图鉴。',
   alternates: { canonical: '/tools/' },
   openGraph: {
-    title: 'AI 应用图鉴 · 全球 AI 工具应用 | 开放精灵 Openelf',
+    title: 'AI 应用图鉴 · ChatGPT、Claude、Gemini、豆包、Kimi 官网与下载入口 | 开放精灵 OpenElf',
     description:
-      '浏览开放精灵收录的 AI 工具应用：六大门类 × 国内 / 海外地区筛选与关键词检索。',
+      '117 款 AI 工具应用，六大分类 × 国内 / 海外筛选，提供官方下载与官网入口。',
     url: '/tools/'
   }
 };
@@ -22,7 +22,7 @@ export default function ToolsPage() {
     '@type': 'CollectionPage',
     name: 'AI 应用图鉴 · 全部应用',
     description:
-      'Openelf 开放精灵收录的 AI 工具应用，支持六大分类与国内 / 海外地区筛选及关键词检索。',
+      'OpenElf 开放精灵收录的 AI 工具应用，支持六大分类与国内 / 海外地区筛选及关键词检索。',
     url: SITE_URL + '/tools/',
     mainEntity: {
       '@type': 'ItemList',

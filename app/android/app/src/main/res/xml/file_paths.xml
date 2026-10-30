@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- 站外分发临时卡片：写入 cacheDir/stage_share，分享后由系统回收 -->
+    <cache-path name="stage_share" path="stage_share/" />
+</paths>

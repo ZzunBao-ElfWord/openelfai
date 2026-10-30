@@ -41,6 +41,12 @@ func main() {
 
 	bootstrapAdmin(ctx, cfg, db, log)
 
+	seedCtx, seedCancel := context.WithTimeout(ctx, 10*time.Second)
+	if err := handler.SeedAppContentDefaults(seedCtx, db); err != nil {
+		log.Warn("运营配置默认值写入失败，配置页可能为空", "error", err)
+	}
+	seedCancel()
+
 	deps := handler.Deps{
 		Cfg:    cfg,
 		Log:    log,

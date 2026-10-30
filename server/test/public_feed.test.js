@@ -4,6 +4,14 @@ const assert = require('node:assert/strict');
 const { memoryStore } = require('./helpers/payment_memory');
 const { publicFeed } = require('../src/public_feed');
 const user = { id: 'u_reader' };
+test('new compliance blocks also apply to cross-platform public content', async () => {
+  const store = await fixture();
+  const before = store.inspect();
+  const compliance = { blockedSets: async () => ({ elves: new Set(['e_public']), users: new Set() }) };
+  const result = await publicFeed(store, user, {}, compliance);
+  assert.deepEqual(result.posts, []);
+  assert.deepEqual(store.inspect(), before);
+});
 async function fixture() {
   const store = memoryStore(); store.addUser(user);
   await store.transaction('Production', async tx => {

@@ -289,6 +289,21 @@ class ThemeController extends ChangeNotifier {
   /// 系统明暗变化（跟随系统时）由根节点调用。
   void applySystemBrightness() => _apply();
 
+  /// 运营配置的默认外观：仅在用户从未手动选择过外观时生效。
+  Future<void> applyRemoteDefault(String name) async {
+    if (name != 'light' && name != 'dark') return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getString(_key) != null) return;
+    } catch (_) {
+      return;
+    }
+    final mode = name == 'dark' ? ThemeMode.dark : ThemeMode.light;
+    if (_mode == mode) return;
+    _mode = mode;
+    _apply();
+  }
+
   /// 落色板并通知重建。
   ///
   /// 页面里的颜色都来自 [AppColors] 静态门面，不依赖 `Theme.of(context)`，
@@ -377,17 +392,27 @@ class AppTheme {
         foregroundColor: p.text,
       ),
       textTheme: base.textTheme.copyWith(
-        headlineLarge: base.textTheme.headlineLarge?.copyWith(fontSize: 28, fontWeight: FontWeight.w700, height: 1.25),
-        headlineMedium: base.textTheme.headlineMedium?.copyWith(fontSize: 22, fontWeight: FontWeight.w700, height: 1.3),
-        headlineSmall: base.textTheme.headlineSmall?.copyWith(fontSize: 18, fontWeight: FontWeight.w600, height: 1.35),
-        titleLarge: base.textTheme.titleLarge?.copyWith(fontSize: 16, fontWeight: FontWeight.w600),
-        titleMedium: base.textTheme.titleMedium?.copyWith(fontSize: 14, fontWeight: FontWeight.w600),
-        bodyLarge: base.textTheme.bodyLarge?.copyWith(fontSize: 15, height: 1.6),
-        bodyMedium: base.textTheme.bodyMedium?.copyWith(fontSize: 13.5, height: 1.6),
-        bodySmall: base.textTheme.bodySmall?.copyWith(fontSize: 12, height: 1.55),
-        labelSmall: base.textTheme.labelSmall?.copyWith(fontSize: 10.5, letterSpacing: 0.6),
+        headlineLarge: base.textTheme.headlineLarge
+            ?.copyWith(fontSize: 28, fontWeight: FontWeight.w700, height: 1.25),
+        headlineMedium: base.textTheme.headlineMedium
+            ?.copyWith(fontSize: 22, fontWeight: FontWeight.w700, height: 1.3),
+        headlineSmall: base.textTheme.headlineSmall
+            ?.copyWith(fontSize: 18, fontWeight: FontWeight.w600, height: 1.35),
+        titleLarge: base.textTheme.titleLarge
+            ?.copyWith(fontSize: 16, fontWeight: FontWeight.w600),
+        titleMedium: base.textTheme.titleMedium
+            ?.copyWith(fontSize: 14, fontWeight: FontWeight.w600),
+        bodyLarge:
+            base.textTheme.bodyLarge?.copyWith(fontSize: 15, height: 1.6),
+        bodyMedium:
+            base.textTheme.bodyMedium?.copyWith(fontSize: 13.5, height: 1.6),
+        bodySmall:
+            base.textTheme.bodySmall?.copyWith(fontSize: 12, height: 1.55),
+        labelSmall: base.textTheme.labelSmall
+            ?.copyWith(fontSize: 10.5, letterSpacing: 0.6),
       ),
-      dividerTheme: DividerThemeData(thickness: 1, space: 1, color: p.strokeSoft),
+      dividerTheme:
+          DividerThemeData(thickness: 1, space: 1, color: p.strokeSoft),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

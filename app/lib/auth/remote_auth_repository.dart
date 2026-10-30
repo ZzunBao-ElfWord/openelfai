@@ -242,6 +242,69 @@ class RemoteAuthRepository implements AuthRepository {
     }
   }
 
+  /// 原始二进制上传（视频等大文件）：与 JSON 请求同样保留一次续期重试。
+  Future<Map<String, dynamic>> authenticatedUpload(
+    String path, {
+    required List<int> bytes,
+    String contentType = 'application/octet-stream',
+    Duration timeout = const Duration(minutes: 3),
+  }) async {
+    Future<Map<String, dynamic>> send() async {
+      final token = await _secure.read(key: _kAccessToken);
+      if (token == null) {
+        throw const AuthException('UNAUTHORIZED', '请先登录');
+      }
+      return _postBytes(
+        path,
+        bytes,
+        contentType: contentType,
+        accessToken: token,
+        timeout: timeout,
+      );
+    }
+
+    try {
+      return await send();
+    } on AuthException catch (error) {
+      if (!_isUnauthorized(error.code) || !await _refreshSession()) rethrow;
+      return send();
+    }
+  }
+
+  Future<Map<String, dynamic>> _postBytes(
+    String path,
+    List<int> bytes, {
+    required String contentType,
+    String? accessToken,
+    required Duration timeout,
+  }) async {
+    final uri = Uri.parse('${ApiConfig.baseUrl}$path');
+    http.Response response;
+
+    try {
+      response = await _http
+          .post(
+            uri,
+            headers: {
+              ...ApiConfig.jsonHeaders,
+              'Content-Type': contentType,
+              if (accessToken != null && accessToken.isNotEmpty)
+                'Authorization': 'Bearer $accessToken',
+            },
+            body: bytes,
+          )
+          .timeout(timeout);
+    } on TimeoutException {
+      throw const AuthException('NETWORK_ERROR', '上传超时，请检查网络后重试');
+    } on http.ClientException {
+      throw const AuthException('NETWORK_ERROR', '网络连接失败，请检查网络');
+    } catch (_) {
+      throw const AuthException('NETWORK_ERROR', '网络连接失败，请检查网络');
+    }
+
+    return _decode(response);
+  }
+
   Future<Map<String, dynamic>> _get(String path, {String? accessToken}) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}$path');
     http.Response response;

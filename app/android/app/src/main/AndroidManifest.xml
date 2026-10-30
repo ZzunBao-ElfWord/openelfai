@@ -35,6 +35,16 @@
                 <data android:scheme="https" android:host="openelfai.com" android:pathPrefix="/e"/>
             </intent-filter>
         </activity>
+        <!-- 站外分发：分享卡片通过 FileProvider 以 content:// 交给第三方 App -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.openelf.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
@@ -49,6 +59,11 @@
     <queries>
         <package android:name="com.eg.android.AlipayGphone" />
         <package android:name="com.eg.android.AlipayGphoneRC" />
+        <!-- 站外分发：定向分享到已绑定的第三方 App -->
+        <package android:name="com.ss.android.ugc.aweme" />
+        <package android:name="com.smile.gifmaker" />
+        <package android:name="com.tencent.mm" />
+        <package android:name="tv.danmaku.bili" />
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>

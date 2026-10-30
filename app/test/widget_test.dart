@@ -127,7 +127,7 @@ void main() {
         .setMockMethodCallHandler(
             const MethodChannel('plugins.it_nomads.com/flutter_secure_storage'),
             (_) async => null);
-    await tester.pumpWidget(const OpenelfApp());
+    await tester.pumpWidget(const OpenElfApp());
 
     expect(find.text('OpenElf'), findsOneWidget);
 
@@ -337,8 +337,7 @@ void main() {
 
     // 第 1 步：文字描述形象
     expect(find.text('输入你脑海中的形象'), findsOneWidget);
-    await tester.enterText(
-        find.byType(TextField).first, '一个安静的短发女孩，黄昏的天台');
+    await tester.enterText(find.byType(TextField).first, '一个安静的短发女孩，黄昏的天台');
     await tester.pump();
 
     await tester.tap(find.text('下一步 · 定人格'));

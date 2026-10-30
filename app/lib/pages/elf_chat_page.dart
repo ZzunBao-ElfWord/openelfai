@@ -66,7 +66,10 @@ class _ElfChatPageState extends State<ElfChatPage> {
 
   Future<void> _send() async {
     if (_sending) return;
-    if (_state.isElfBlocked(widget.elfId)) { _toast('此AI已被屏蔽，请先在设置中解除屏蔽'); return; }
+    if (_state.isElfBlocked(widget.elfId)) {
+      _toast('此AI已被屏蔽，请先在设置中解除屏蔽');
+      return;
+    }
     final text = _input.text.trim();
     if (text.isEmpty) return;
     // 游客（Web 免登录体验）：发消息前先提醒登录
@@ -99,9 +102,10 @@ class _ElfChatPageState extends State<ElfChatPage> {
   @override
   Widget build(BuildContext context) {
     final elf = _state.elf(widget.elfId);
-    if (_state.isElfBlocked(elf.id)) return Scaffold(
-      appBar: AppBar(title: const Text('已屏蔽此AI')),
-      body: const Center(child: Text('不再展示该AI的内容。可在设置→内容安全与反馈中解除屏蔽。')));
+    if (_state.isElfBlocked(elf.id))
+      return Scaffold(
+          appBar: AppBar(title: const Text('已屏蔽此AI')),
+          body: const Center(child: Text('不再展示该AI的内容。可在设置→内容安全与反馈中解除屏蔽。')));
     final msgs = _state.chatOf(widget.elfId);
 
     return Scaffold(
@@ -192,7 +196,19 @@ class _ElfChatPageState extends State<ElfChatPage> {
                   size: 19,
                   onTap: () => _openProfile(elf),
                 )
-              : _followChip(elf),
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _followChip(elf),
+                    const SizedBox(width: 4),
+                    _circleButton(
+                      icon: Icons.flag_outlined,
+                      semantic: '举报或拉黑这只 AI',
+                      size: 16,
+                      onTap: () => _openSafetySheet(elf),
+                    ),
+                  ],
+                ),
         ],
       ),
     );
@@ -222,6 +238,91 @@ class _ElfChatPageState extends State<ElfChatPage> {
             fontSize: 11,
             fontWeight: FontWeight.w700,
             color: followed ? AppColors.textMuted : AppColors.onBrand,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 举报与拉黑：App Store 要求 UGC 场景提供举报与屏蔽能力。
+  void _openSafetySheet(Elf elf) {
+    const reasons = <String, String>{
+      '色情低俗': 'porn',
+      '暴力血腥': 'violence',
+      '涉及未成年人': 'minors',
+      '骚扰辱骂': 'harassment',
+      '诈骗或虚假信息': 'fraud',
+      '侵犯隐私': 'privacy',
+      '其他违规': 'other',
+    };
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('这只 AI 有什么问题？',
+                  style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.text)),
+              const SizedBox(height: 4),
+              Text('举报后我们会尽快审核，你也可以直接拉黑。',
+                  style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+              const SizedBox(height: 10),
+              ...reasons.entries.map((entry) => InkWell(
+                    onTap: () async {
+                      Navigator.of(ctx).pop();
+                      final error = await _state.submitReport(
+                        targetType: 'elf',
+                        targetId: elf.id,
+                        reason: entry.value,
+                        detail: entry.key,
+                      );
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(error ?? '已收到举报，我们会尽快处理')),
+                      );
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 11),
+                      child: Text(entry.key,
+                          style: TextStyle(
+                              fontSize: 13, color: AppColors.textSub)),
+                    ),
+                  )),
+              Divider(height: 18, color: AppColors.strokeSoft),
+              InkWell(
+                onTap: () async {
+                  Navigator.of(ctx).pop();
+                  final error = await _state.blockElf(elf.id);
+                  if (!mounted) return;
+                  if (error == null) Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(error ?? '已拉黑这只 AI')),
+                  );
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Row(
+                    children: [
+                      Icon(Icons.block, size: 15, color: AppColors.warn),
+                      const SizedBox(width: 6),
+                      Text('拉黑这只 AI',
+                          style:
+                              TextStyle(fontSize: 13, color: AppColors.warn)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -267,41 +368,108 @@ class _ElfChatPageState extends State<ElfChatPage> {
       child: Align(
         alignment: fromElf ? Alignment.centerLeft : Alignment.centerRight,
         child: LayoutBuilder(
-          builder: (context, c) => Container(
-            constraints: BoxConstraints(maxWidth: c.maxWidth * 0.78),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: fromElf ? AppColors.surfaceAlt : userBubble,
-              borderRadius: const BorderRadius.all(Radius.circular(18)),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text.rich(
-                  TextSpan(children: _spans(msg.text)),
-                  style: TextStyle(
-                    fontSize: 15,
-                    height: 1.55,
-                    color: AppColors.text,
-                  ),
-                ),
-                if (_needsTopUp(msg))
-                  TextButton(
-                    onPressed: _openApiKey,
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppColors.brand,
-                      minimumSize: const Size(0, 26),
-                      padding: EdgeInsets.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      textStyle: const TextStyle(
-                          fontSize: 12.5, fontWeight: FontWeight.w600),
+          builder: (context, c) => GestureDetector(
+            onLongPress: fromElf ? () => _reportChatMessage(msg) : null,
+            child: Container(
+              constraints: BoxConstraints(maxWidth: c.maxWidth * 0.78),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: fromElf ? AppColors.surfaceAlt : userBubble,
+                borderRadius: const BorderRadius.all(Radius.circular(18)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text.rich(
+                    TextSpan(children: _spans(msg.text)),
+                    style: TextStyle(
+                      fontSize: 15,
+                      height: 1.55,
+                      color: AppColors.text,
                     ),
-                    child: Text(
-                        PaymentFeatures.apiTopupEnabled ? '去充值' : '查看 API 账户'),
                   ),
-              ],
+                  if (_needsTopUp(msg))
+                    TextButton(
+                      onPressed: _openApiKey,
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.brand,
+                        minimumSize: const Size(0, 26),
+                        padding: EdgeInsets.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        textStyle: const TextStyle(
+                            fontSize: 12.5, fontWeight: FontWeight.w600),
+                      ),
+                      child: Text(PaymentFeatures.apiTopupEnabled
+                          ? '去充值'
+                          : '查看 API 账户'),
+                    ),
+                ],
+              ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 长按 AI 回复可单独举报该条对话内容。
+  void _reportChatMessage(ChatMsg msg) {
+    const reasons = <String, String>{
+      '色情低俗': 'porn',
+      '暴力血腥': 'violence',
+      '涉及未成年人': 'minors',
+      '涉政敏感': 'politics',
+      '违法信息': 'illegal',
+      '骚扰辱骂': 'harassment',
+      '诈骗或虚假信息': 'fraud',
+      '侵犯隐私': 'privacy',
+      '其他违规': 'other',
+    };
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('举报这条 AI 回复',
+                  style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.text)),
+              const SizedBox(height: 10),
+              ...reasons.entries.map((entry) => InkWell(
+                    onTap: () async {
+                      Navigator.of(ctx).pop();
+                      final targetId = 'chat_${widget.elfId}_'
+                          '${msg.id ?? msg.time.hashCode.abs()}';
+                      final error = await _state.submitReport(
+                        targetType: 'chat',
+                        targetId: targetId,
+                        reason: entry.value,
+                        detail:
+                            '${entry.key}｜${msg.text.length > 200 ? msg.text.substring(0, 200) : msg.text}',
+                      );
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(error ?? '已收到举报，我们会尽快处理')),
+                      );
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 11),
+                      child: Text(entry.key,
+                          style: TextStyle(
+                              fontSize: 13, color: AppColors.textSub)),
+                    ),
+                  )),
+            ],
           ),
         ),
       ),
@@ -398,7 +566,7 @@ class _ElfChatPageState extends State<ElfChatPage> {
           const Spacer(),
           _metric(Icons.ios_share, '分享', onTap: () => _share(elf)),
           const SizedBox(width: 14),
-          _metric(Icons.schedule, '历史', onTap: () => _toast('历史即将开放')),
+          _metric(Icons.schedule, '历史'),
         ],
       ),
     );
@@ -463,11 +631,6 @@ class _ElfChatPageState extends State<ElfChatPage> {
                           horizontal: 6, vertical: 10),
                     ),
                   ),
-                ),
-                _barIcon(
-                  icon: Icons.mic_none,
-                  semantic: '语音输入',
-                  onTap: () => _toast('语音输入即将开放'),
                 ),
               ],
             ),
@@ -536,9 +699,17 @@ class _ElfChatPageState extends State<ElfChatPage> {
                 _share(elf);
               },
             ),
-            ListTile(leading: const Icon(Icons.flag_outlined), title: const Text('举报与屏蔽'),
-              onTap: () { Navigator.of(ctx).pop(); ContentSafety.show(context,
-                targetKind: 'elf', targetId: elf.id, elfId: elf.id, ownerId: elf.ownerId); }),
+            ListTile(
+                leading: const Icon(Icons.flag_outlined),
+                title: const Text('举报与屏蔽'),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  ContentSafety.show(context,
+                      targetKind: 'elf',
+                      targetId: elf.id,
+                      elfId: elf.id,
+                      ownerId: elf.ownerId);
+                }),
             if (elf.isMine)
               ListTile(
                 leading: const Icon(Icons.tune_rounded),
@@ -553,7 +724,7 @@ class _ElfChatPageState extends State<ElfChatPage> {
               title: const Text('历史对话'),
               onTap: () {
                 Navigator.of(ctx).pop();
-                _toast('历史即将开放');
+                _toast('暂无法查看历史消息');
               },
             ),
           ],

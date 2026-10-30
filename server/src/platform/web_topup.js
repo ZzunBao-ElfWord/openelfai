@@ -4,7 +4,7 @@ const { createTopupService } = require('./web_topup_service');
 const { webSettings, legacySettings, NEW_APP_ID, NOTIFY_URL, RETURN_URL } = require('./web_apps');
 function failure(code, message, statusCode = 400) { return Object.assign(Error(message), { code, statusCode }); }
 function registerWebTopup(app, { db, authenticate, settings = webSettings(), gateway, service,
-    legacy = { settings: legacySettings() }, store, realname, identityPolicy, payout, payoutQuery } = {}) {
+    legacy = { settings: legacySettings() }, store, realname, identityPolicy, payout, payoutQuery, compliance } = {}) {
   function context(s, gateway, service) {
     const g = gateway === undefined ? createQrPageGateway(s) : gateway;
     return { settings: s, gateway: g, service: service || createTopupService({ db, settings: s, gateway: g, notifyUrl: NOTIFY_URL, returnUrl: RETURN_URL }) };
@@ -55,7 +55,7 @@ function registerWebTopup(app, { db, authenticate, settings = webSettings(), gat
     } catch (_) { return reply.code(400).type('text/plain').send('failure'); }
   });
   require('./web_diamonds').registerWebDiamonds(app, { db, authenticate, settings, gateway: active.gateway,
-    store, realname, identityPolicy, payout, payoutQuery,
+    store, realname, identityPolicy, payout, payoutQuery, compliance,
     legacy: old ? { settings: old.settings, gateway: old.gateway } : null });
 }
 module.exports = { registerWebTopup, webSettings, WEB_APP_ID: NEW_APP_ID, NOTIFY_URL, RETURN_URL };

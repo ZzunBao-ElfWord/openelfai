@@ -2,8 +2,17 @@
 
 function publicWebCaptcha(settings) {
   const scheme = settings?.schemes?.web;
-  const enabled = Boolean(settings?.enabled && scheme?.appId && scheme?.appKey);
-  return { enabled, appId: enabled ? scheme.appId : null, platform: 'web', provider: 'aliyun-pnvs' };
+  const mode = settings?.webMode || 'off';
+  const configured = Boolean(settings?.enabled && scheme?.appId && scheme?.appKey);
+  // 只有显式开启 enforce 时才要求网页端渲染图形验证控件。
+  const enabled = configured && mode === 'enforce';
+  return {
+    enabled,
+    mode,
+    appId: enabled ? scheme.appId : null,
+    platform: 'web',
+    provider: 'aliyun-pnvs',
+  };
 }
 
 function registerWebCaptcha(app, { settings, verifier }) {

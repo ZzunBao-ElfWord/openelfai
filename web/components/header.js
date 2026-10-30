@@ -11,6 +11,7 @@ export default function Header() {
   const onTools = pathname === '/tools' || pathname.startsWith('/tools/');
   const onModels = pathname === '/models' || pathname.startsWith('/models/');
   const onPlatform = pathname === '/platform' || pathname.startsWith('/platform/');
+  const onDevelopers = pathname === '/developers' || pathname.startsWith('/developers/');
   const [open, setOpen] = useState(false);
 
   /* 路由变化后收起移动端菜单 */
@@ -54,7 +55,13 @@ export default function Header() {
             className={onPlatform ? 'nav-link nav-link--active' : 'nav-link'}
             href="/platform/"
           >
-            开放平台
+            模型聚合
+          </Link>
+          <Link
+            className={onDevelopers ? 'nav-link nav-link--active' : 'nav-link'}
+            href="/developers/"
+          >
+            开发者
           </Link>
         </nav>
 
@@ -108,7 +115,13 @@ export default function Header() {
             className={onPlatform ? 'mobile-nav-link is-active' : 'mobile-nav-link'}
             href="/platform/"
           >
-            开放平台
+            模型聚合
+          </Link>
+          <Link
+            className={onDevelopers ? 'mobile-nav-link is-active' : 'mobile-nav-link'}
+            href="/developers/"
+          >
+            开发者
           </Link>
         </nav>
       ) : null}

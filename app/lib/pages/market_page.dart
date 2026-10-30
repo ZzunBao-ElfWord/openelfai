@@ -9,8 +9,8 @@ import 'wallet_page.dart';
 
 /// 「发现」页：把市场里的两类东西分开陈列。
 ///
-/// AI 是被铸造的 NFT 智能体，可以在人类之间流转；
-/// AI 技能书是一次性消耗的技能 NFT，喂给 AI 学会后书即销毁、
+/// AI 是被创建的智能体，可以在人类之间流转；
+/// AI 技能书是一次性消耗的技能书，喂给 AI 学会后书即销毁、
 /// 技能永久写进那一只 AI。两者用完全不同的卡片表达。
 class MarketPage extends StatefulWidget {
   /// 内嵌在底栏 tab 中时隐藏返回按钮、标题显示「发现」。
@@ -241,7 +241,8 @@ class _MarketPageState extends State<MarketPage>
         const SizedBox(height: 18),
         Text(
           'AI 智能体只在官方发售后使用钻石购买；持有人之间的 AI 不再买卖，只能免费转赠。',
-          style: TextStyle(fontSize: 10.5, color: AppColors.textFaint, height: 1.6),
+          style: TextStyle(
+              fontSize: 10.5, color: AppColors.textFaint, height: 1.6),
         ),
       ],
     );
@@ -476,8 +477,7 @@ class _MarketPageState extends State<MarketPage>
             style: TextStyle(fontSize: 12, color: AppColors.text),
             decoration: InputDecoration(
               hintText: '例如：能自动剪辑长视频、会用粤语配音……',
-              hintStyle:
-                  TextStyle(fontSize: 11.5, color: AppColors.textFaint),
+              hintStyle: TextStyle(fontSize: 11.5, color: AppColors.textFaint),
               counterStyle:
                   TextStyle(fontSize: 9.5, color: AppColors.textFaint),
               filled: true,
@@ -495,8 +495,8 @@ class _MarketPageState extends State<MarketPage>
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(
-                    color: AppColors.cyan.withValues(alpha: 0.6)),
+                borderSide:
+                    BorderSide(color: AppColors.cyan.withValues(alpha: 0.6)),
               ),
             ),
           ),
@@ -527,8 +527,8 @@ class _MarketPageState extends State<MarketPage>
     }
     _wishCtrl.clear();
     FocusScope.of(context).unfocus();
-    ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('许愿已收到，感谢你的反馈')));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('许愿已收到，感谢你的反馈')));
   }
 
   Widget _fact(String text) {

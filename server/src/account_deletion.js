@@ -56,6 +56,15 @@ async function deleteAccount(db, userId) {
     try { await tx.execute('DELETE FROM identity_verifications WHERE user_id = ?', [userId]); }
     catch (error) { if (error.code !== 'ER_NO_SUCH_TABLE') throw error; }
     await tx.execute('DELETE FROM platform_developers WHERE user_id = ?', [userId]);
+    // Optional on older installations; keep new compliance cleanup inside the
+    // same transaction as financial checks and session revocation.
+    for (const sql of [
+      'DELETE FROM compliance_blocks WHERE user_id = ?',
+      "UPDATE compliance_reports SET state = 'dismissed', note = '举报人已注销账号' WHERE user_id = ? AND state = 'open'",
+    ]) {
+      try { await tx.execute(sql, [userId]); }
+      catch (error) { if (error.code !== 'ER_NO_SUCH_TABLE') throw error; }
+    }
     await tx.execute(`DELETE FROM payment_objects WHERE owner_id = ? AND kind IN (${PERSONAL_KINDS.map(() => '?').join(',')})`, [userId, ...PERSONAL_KINDS]);
     // The push module is optional on older deployments. Do not ignore other errors.
     try { await tx.execute('DELETE FROM push_devices WHERE user_id = ?', [userId]); }

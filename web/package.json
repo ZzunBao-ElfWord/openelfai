@@ -2,7 +2,7 @@
   "name": "openelf-web",
   "version": "1.0.0",
   "private": true,
-  "description": "开放精灵 Openelf · 全球 AI 工具图鉴 Web 版（Next.js 静态生成）",
+  "description": "开放精灵 OpenElf · 全球 AI 工具图鉴 Web 版（Next.js 静态生成）",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

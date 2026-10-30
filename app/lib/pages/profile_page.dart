@@ -123,7 +123,7 @@ class _ProfilePageState extends State<ProfilePage> {
             left: 16,
             top: 24,
             child: Text(
-              'OPENELF',
+              'OpenElf',
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w800,
@@ -373,7 +373,10 @@ class _ProfilePageState extends State<ProfilePage> {
               _miniStat(WorldData.formatYuan(earnings), '累计收益'),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
+          Text('地址为站内资产登记编号，不涉及外部钱包、加密货币或数字代币交易。',
+              style: TextStyle(fontSize: 9.5, color: AppColors.textFaint)),
+          const SizedBox(height: 10),
           Row(
             children: [
               Text('站内账号ID',
@@ -495,8 +498,8 @@ class _ProfilePageState extends State<ProfilePage> {
                     const SizedBox(height: 2),
                     Text(
                       'AI 对话与外部接入凭据',
-                      style: TextStyle(
-                          fontSize: 10.5, color: AppColors.textMuted),
+                      style:
+                          TextStyle(fontSize: 10.5, color: AppColors.textMuted),
                     ),
                   ],
                 ),
@@ -509,7 +512,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // —— 我的 AI：NFT 卡片网格，点卡片进入控制台 ——
+  // —— 我的 AI：智能体卡片网格，点卡片进入控制台 ——
 
   Widget _nftGrid(BuildContext context, AppState state, List<Elf> elves) {
     return LayoutBuilder(
@@ -709,7 +712,7 @@ class _ProfilePageState extends State<ProfilePage> {
             Icon(Icons.add_circle_outline,
                 size: 22, color: AppColors.textMuted),
             const SizedBox(height: 6),
-            Text('创建 AI',
+            Text('创建智能体',
                 style: TextStyle(fontSize: 11.5, color: AppColors.textSub)),
             const SizedBox(height: 2),
             Text('创建新的 AI',

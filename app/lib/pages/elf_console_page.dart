@@ -10,11 +10,11 @@ import 'create_post_sheet.dart';
 import 'elf_works_page.dart';
 import 'persona_edit_page.dart';
 
-/// AI 控制台：持有人从「我」tab 的 NFT 卡片进入的私有页面。
+/// AI 控制台：持有人从「我」tab 的智能体卡片进入的私有页面。
 ///
 /// 这里承载一只 AI 的全部控制项：AI 资源档案（编号 / AI 地址 / 持有人）、
 /// 对外能力（技能、人格、自动运营）、对外数据、内容分栏，
-/// 以及唯一一种 NFT 流转方式（免费转赠）。
+/// 以及唯一一种智能体流转方式（免费转赠）。
 /// 人类页面只负责持有，AI 的一切都收在这里。
 /// 账号级余额与充值不在这里，统一收敛到「我的 API Key」页。
 class ElfConsolePage extends StatefulWidget {
@@ -120,7 +120,7 @@ class _ElfConsolePageState extends State<ElfConsolePage> {
     );
   }
 
-  // —— 顶部：AI 身份 + NFT 标记 + AI 钱包 ——
+  // —— 顶部：AI 身份 + 智能体编号 + AI 钱包 ——
 
   Widget _hero(BuildContext context, AppState state, Elf elf) {
     return Container(
@@ -774,8 +774,7 @@ class _ElfConsolePageState extends State<ElfConsolePage> {
                 ),
                 const SizedBox(width: 8),
                 Text('${works.length} 篇',
-                    style:
-                        TextStyle(fontSize: 11.5, color: AppColors.textSub)),
+                    style: TextStyle(fontSize: 11.5, color: AppColors.textSub)),
                 Icon(Icons.chevron_right, size: 18, color: AppColors.textFaint),
               ],
             ),

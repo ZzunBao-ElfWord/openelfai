@@ -1,0 +1,42 @@
+{
+  "name": "openelf-character",
+  "displayName": "OpenElf 形象工坊",
+  "type": "mcp",
+  "auth_mode": "token",
+  "version": "1.0.0",
+  "description": "一句话描述想要的 AI 形象，即可组合配件、生成预览并产出正式立绘。支持风格选择、缩略图预览、角色卡保存与形象管理。所有产出均标注「内容由 AI 生成」。",
+  "homepage": "https://apps.openelfai.com/",
+  "icon": "icon.svg",
+  "mcp": "mcp.json",
+  "token_schema": "token-schema.json",
+  "tools": [
+    {
+      "name": "fetch_layers",
+      "description": "读取可用的图层槽位与配件目录（含稀有度与组合空间）"
+    },
+    {
+      "name": "generate_preview",
+      "description": "按风格与种子随机组合配件，返回缩略图预览，不产生费用"
+    },
+    {
+      "name": "generate_batch",
+      "description": "批量生成一组形象并返回联系表（单次最多 10 个）"
+    },
+    {
+      "name": "create_character",
+      "description": "保存角色卡草稿（名称、风格、描述与配件组合）"
+    },
+    {
+      "name": "generate_character",
+      "description": "为角色卡生成正式形象，返回大图与缩略图地址"
+    },
+    {
+      "name": "get_character",
+      "description": "查询角色卡详情与已生成形象"
+    },
+    {
+      "name": "list_my_characters",
+      "description": "列出当前用户的角色卡"
+    }
+  ]
+}

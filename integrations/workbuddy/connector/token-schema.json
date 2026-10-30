@@ -1,0 +1,14 @@
+{
+  "title": "OpenElf 形象工坊授权",
+  "description": "使用 OpenElf API Key 连接形象工坊，密钥只保存在本地，不会同步到其他服务。",
+  "fields": [
+    {
+      "name": "api_key",
+      "label": "OpenElf API Key",
+      "type": "password",
+      "required": true,
+      "placeholder": "oe-sk-xxxxxxxxxxxxxxxx",
+      "help": "在 OpenElf 开放平台控制台创建 API Key，复制后粘贴到这里。格式为 oe-sk- 开头；如提示未授权，请检查密钥是否已吊销或额度是否用尽。"
+    }
+  ]
+}

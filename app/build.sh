@@ -1,5 +1,5 @@
 #!/bin/bash
-# Openelf Flutter 构建脚本
+# OpenElf Flutter 构建脚本
 # 用法: ./build.sh [web|apk|all]
 
 set -e
@@ -8,7 +8,7 @@ MODE="${1:-all}"
 SERVER="root@180.184.160.179"
 REMOTE_APP="/var/www/openelf/app"
 
-echo "=== Openelf Flutter Build ==="
+echo "=== OpenElf Flutter Build ==="
 echo "Mode: $MODE"
 
 # 检查 Flutter

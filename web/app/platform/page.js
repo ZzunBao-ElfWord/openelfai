@@ -3,12 +3,12 @@
 import Link from 'next/link';
 
 export const metadata = {
-  title: '开放平台 · 一个接口调用全部模型',
+  title: '模型聚合 · 一个 OpenAI 兼容接口调用 DeepSeek、豆包、通义千问',
   description:
-    'OpenElf 开放平台：OpenAI Chat Completions 兼容接口，一个 API Key 调用 DeepSeek、豆包、通义千问等模型。按 token 计费，余额预充值，无需订阅。',
+    'OpenElf 模型聚合：OpenAI Chat Completions 兼容接口，一个 API Key 调用 DeepSeek、豆包、通义千问等模型。按 token 计费，余额预充值，无需订阅。',
   alternates: { canonical: '/platform/' },
   openGraph: {
-    title: '开放平台 · 一个接口调用全部模型 | 开放精灵 OpenElf',
+    title: '模型聚合 · 一个接口调用全部模型 | 开放精灵 OpenElf',
     description:
       'OpenAI Chat Completions 兼容 · 按 token 计费 · 无需订阅。一个接口，调用 OpenElf 的所有模型。',
     url: '/platform/'
@@ -82,7 +82,7 @@ const STEPS = [
   {
     index: '2',
     title: '充值余额',
-    desc: '在控制台查看余额与账单。当前请联系管理员充值，到账后即可调用。'
+    desc: '在控制台「充值」页选择金额并用支付宝支付，实时到账后即可调用。'
   },
   {
     index: '3',
@@ -119,7 +119,7 @@ export default function PlatformPage() {
   return (
     <div className="page-tools platform-page platform-v2">
       <section className="platform-hero">
-        <p className="sec-eyebrow">OPEN PLATFORM / 开放平台</p>
+        <p className="sec-eyebrow">MODEL HUB / 模型聚合</p>
         <h1 className="platform-title">一个接口，调用 OpenElf 的所有模型</h1>
         <p className="platform-sub">OpenAI Chat Completions 兼容 · 按 token 计费 · 无需订阅</p>
         <div className="platform-hero-actions">
@@ -197,7 +197,7 @@ export default function PlatformPage() {
       <section className="platform-section">
         <div className="sec-head">
           <div>
-            <p className="sec-eyebrow">WHY OPENELF / 平台能力</p>
+            <p className="sec-eyebrow">WHY OpenElf / 平台能力</p>
             <h2 className="sec-title">接入成本，只有两行配置。</h2>
           </div>
         </div>

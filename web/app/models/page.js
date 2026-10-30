@@ -5,14 +5,14 @@ import { MODELS } from '../../lib/tools';
 import { SITE_URL } from '../../lib/site';
 
 export const metadata = {
-  title: '大模型图鉴 · 全球大模型厂商与开放平台',
+  title: '大模型图鉴 · DeepSeek、豆包、通义千问、Kimi 与 OpenAI',
   description:
-    '浏览 Openelf 开放精灵收录的全球大模型厂商与开放平台：按语言大模型、生成模型、平台与托管分类，覆盖国内与海外，提供官方开放平台直达入口。',
+    '收录 39 家大模型厂商与开放平台：语言大模型、生成模型、平台与托管三类，覆盖 DeepSeek、豆包、通义千问、文心一言、腾讯混元、Kimi、智谱 GLM、MiniMax，以及 OpenAI、Anthropic、Google、Meta、xAI、Mistral 等，提供官方开放平台入口。',
   alternates: { canonical: '/models/' },
   openGraph: {
-    title: '大模型图鉴 · 全球大模型厂商与开放平台 | 开放精灵 Openelf',
+    title: '大模型图鉴 · 全球大模型厂商与开放平台 | 开放精灵 OpenElf',
     description:
-      '全球大模型厂商与开放平台清单：语言大模型、生成模型、平台与托管三类，国内 / 海外分列。',
+      '39 家大模型厂商与开放平台：DeepSeek、豆包、通义千问、文心一言、混元、Kimi、智谱 GLM，以及 OpenAI、Anthropic、Google、Meta。',
     url: '/models/'
   }
 };
@@ -23,7 +23,7 @@ export default function ModelsPage() {
     '@type': 'CollectionPage',
     name: '大模型图鉴 · 全球大模型厂商与开放平台',
     description:
-      'Openelf 开放精灵收录的全球大模型厂商与开放平台，按语言大模型、生成模型、平台与托管分类。',
+      'OpenElf 开放精灵收录的全球大模型厂商与开放平台，按语言大模型、生成模型、平台与托管分类。',
     url: SITE_URL + '/models/',
     mainEntity: {
       '@type': 'ItemList',

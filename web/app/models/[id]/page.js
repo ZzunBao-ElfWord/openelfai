@@ -14,7 +14,6 @@ import {
   MODELS,
   MODEL_MAP,
   MODEL_TYPE_MAP,
-  REGION_LABEL,
   formatDate,
   sortTools
 } from '../../../lib/tools';
@@ -39,11 +38,10 @@ export async function generateMetadata({ params }) {
   const model = MODEL_MAP[id];
   if (!model) return {};
   const type = MODEL_TYPE_MAP[model.model_type];
-  const title = `${model.name} — 开放平台与模型介绍`;
-  const description = `${model.short_desc}｜${type ? type.name : '大模型'}·${
-    REGION_LABEL[model.region]
-  }｜开放精灵大模型图鉴提供官方开放平台直达入口。`;
-  const ogTitle = `${model.name} · 开放平台 | ${SITE_NAME}`;
+  const regionText = model.region === 'domestic' ? '国内' : '海外';
+  const title = `${model.name}｜模型能力、API 价格与接入方式（2026）`;
+  const description = `${model.short_desc}｜${type ? type.name : '大模型'}·${regionText}｜开放精灵大模型图鉴提供官方开放平台入口，以及模型、价格与接入信息。`;
+  const ogTitle = `${model.name} · 开放平台与模型介绍 | ${SITE_NAME}`;
   return {
     title,
     description,
@@ -55,7 +53,7 @@ export async function generateMetadata({ params }) {
       '大模型',
       '开放平台',
       '开放精灵',
-      'Openelf'
+      'OpenElf'
     ].filter(Boolean),
     alternates: { canonical: `/models/${model.id}/` },
     openGraph: {
@@ -96,7 +94,7 @@ export default async function ModelDetailPage({ params }) {
     operatingSystem: 'Web',
     keywords: (model.tags || []).join(','),
     datePublished: model.listed_at,
-    publisher: { '@type': 'Organization', name: '开放精灵 Openelf' }
+    publisher: { '@type': 'Organization', name: '开放精灵 OpenElf' }
   };
 
   const breadcrumbJsonLd = {

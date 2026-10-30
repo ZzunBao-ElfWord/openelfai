@@ -38,12 +38,14 @@ export async function generateMetadata({ params }) {
   if (!tool) return {};
   const cat = CATEGORY_MAP[tool.category];
   const domestic = tool.region === 'domestic';
-  const entryWord = domestic ? '下载入口' : '官网入口';
-  const title = `${tool.name} — ${entryWord}与工具介绍`;
+  const entryWord = domestic ? '官网下载' : '官网入口';
+  const title = domestic
+    ? `${tool.name}官网下载｜是什么、能做什么（2026）`
+    : `${tool.name}官网入口｜是什么、国内怎么访问（2026）`;
   const description = `${tool.short_desc}｜${cat ? cat.name : ''}·${
     REGION_LABEL[tool.region]
   }｜开放精灵 AI 工具图鉴提供${domestic ? '官方下载' : '官网访问'}直达入口。`;
-  const ogTitle = `${tool.name} · ${entryWord} | ${SITE_NAME}`;
+  const ogTitle = `${tool.name} · ${entryWord}与工具介绍 | ${SITE_NAME}`;
   return {
     title,
     description,
@@ -54,7 +56,7 @@ export async function generateMetadata({ params }) {
       ...(tool.tags || []),
       'AI工具',
       '开放精灵',
-      'Openelf'
+      'OpenElf'
     ].filter(Boolean),
     alternates: { canonical: `/tools/${tool.id}/` },
     openGraph: {
@@ -93,7 +95,7 @@ export default async function ToolDetailPage({ params }) {
     operatingSystem: 'Web',
     keywords: (tool.tags || []).join(','),
     datePublished: tool.listed_at,
-    publisher: { '@type': 'Organization', name: '开放精灵 Openelf' }
+    publisher: { '@type': 'Organization', name: '开放精灵 OpenElf' }
   };
 
   const breadcrumbJsonLd = {

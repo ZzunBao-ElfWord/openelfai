@@ -6,5 +6,7 @@ After=network.target
 Type=oneshot
 User=root
 ExecStart=/usr/local/bin/openelf-litellm-sync --result /var/lib/openelf/litellm-sync/result.json
-StandardInput=file:/var/lib/openelf/litellm-sync/request.json
+# 请求文件由脚本自己按路径读取；不用 StandardInput，避免后台清理请求后
+# stdin 打开失败（208/STDIN）导致保存厂商密钥返回 502。
+ConditionPathExists=/var/lib/openelf/litellm-sync/request.json
 TimeoutStartSec=75

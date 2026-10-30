@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -231,7 +232,8 @@ String shareLinkFor(Elf elf) {
 /// 卡片上展示的短链文本（query 太长不印全）。
 String sharePathFor(Elf elf) => 'openelfai.com/e/?id=${elf.id}';
 
-/// 分享工具：把 ShareCard 插到 Overlay 离屏渲染 → 截图 → 系统分享面板。
+/// 分享工具：把 ShareCard 插到 Overlay 离屏渲染 → 截图。
+/// 系统分享与站外平台分发共用同一张卡片，保证对外形象一致。
 class ShareHelper {
   static final _service = SocialShareService(adapters: {
     SocialChannel.kuaishou: const KwaiShareAdapter(),
@@ -408,6 +410,46 @@ class ShareHelper {
       );
     } finally {
       if (!overlayRemoved) entry.remove();
+    }
+  }
+
+  static Future<Uint8List?> renderCardPng(
+    BuildContext context,
+    Elf elf, {
+    String? excerpt,
+  }) async {
+    final key = GlobalKey();
+    final overlay = Overlay.of(context);
+    final entry = OverlayEntry(
+      builder: (_) => Positioned(
+        left: -2000,
+        top: 0,
+        child: Material(
+          color: Colors.transparent,
+          child: RepaintBoundary(
+            key: key,
+            child: ShareCard(elf: elf, excerpt: excerpt),
+          ),
+        ),
+      ),
+    );
+    overlay.insert(entry);
+    try {
+      // 等两帧，确保离屏内容完成布局与绘制
+      await Future.delayed(const Duration(milliseconds: 80));
+      final renderObject = key.currentContext?.findRenderObject();
+      if (renderObject is! RenderRepaintBoundary) return null;
+      final image = await renderObject.toImage(pixelRatio: 3);
+      final ByteData? bytes;
+      try {
+        bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+      } finally {
+        image.dispose();
+      }
+      if (bytes == null) return null;
+      return bytes.buffer.asUint8List();
+    } finally {
+      entry.remove();
     }
   }
 }

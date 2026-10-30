@@ -1,4 +1,4 @@
-# Openelf 全球 AI 工具图鉴 · Web 版
+# OpenElf 全球 AI 工具图鉴 · Web 版
 
 基于 **Next.js（App Router）静态生成** 的纯静态站点。构建产物为 `out/` 目录下的纯静态文件，可直接部署到任意对象存储 + CDN（无服务器、无数据库、无登录）。
 

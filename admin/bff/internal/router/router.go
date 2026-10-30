@@ -70,6 +70,13 @@ func New(d handler.Deps) *gin.Engine {
 		authed.GET("/posts", modOnly, d.ListPosts)
 		authed.DELETE("/posts/:id", modOnly, d.DeletePost)
 
+		// 内容审核：举报列表与处置（软删动态/评论）
+		authed.GET("/moderation/reports", modOnly, d.ListModerationReports)
+		authed.POST("/moderation/reports/:id/resolve", modOnly, d.ResolveModerationReport)
+		// 内容审核：UGC 视频人工前审
+		authed.GET("/moderation/pending-media", modOnly, d.ListModerationPendingMedia)
+		authed.POST("/moderation/pending-media/:id/review", modOnly, d.ReviewPendingMedia)
+
 		authed.GET("/catalog", modOnly, d.GetCatalog)
 
 		authed.GET("/platform/models", modOnly, d.ListPlatformModels)
@@ -79,6 +86,19 @@ func New(d handler.Deps) *gin.Engine {
 		authed.GET("/platform/requests", modOnly, d.ListPlatformRequests)
 		authed.GET("/platform/usage", modOnly, d.ListPlatformUsage)
 		authed.GET("/platform/vendors", modOnly, d.ListPlatformVendors)
+
+		// 运营配置：运营可查看/编辑草稿与文案类配置，发布与开关由超管执行
+		authed.GET("/app-content/documents", modOnly, d.ListAppDocuments)
+		authed.GET("/app-content/documents/:id", modOnly, d.GetAppDocument)
+		authed.POST("/app-content/documents", modOnly, d.CreateAppDocument)
+		authed.PUT("/app-content/documents/:id", modOnly, d.UpdateAppDocument)
+		authed.GET("/app-content/configs", modOnly, d.ListAppConfigs)
+		authed.PUT("/app-content/configs/:key", modOnly, d.PutAppConfig)
+
+		// 形象工坊：配件目录与批次列表/详情（只读）
+		authed.GET("/character/parts", modOnly, d.ListCharacterParts)
+		authed.GET("/character/batches", modOnly, d.ListCharacterBatches)
+		authed.GET("/character/batches/:id", modOnly, d.GetCharacterBatch)
 	}
 
 	// 高危操作：仅 super_admin
@@ -100,6 +120,15 @@ func New(d handler.Deps) *gin.Engine {
 		authed.POST("/platform/wallets/:userId/topup", superOnly, d.TopupPlatformWallet)
 		authed.PUT("/platform/vendors/:vendor", superOnly, d.PutPlatformVendorCredential)
 		authed.POST("/platform/vendors/:vendor/test", superOnly, d.TestPlatformVendor)
+
+		// 运营配置：文档发布/下线与功能开关属于高危操作
+		authed.POST("/app-content/documents/:id/publish", superOnly, d.PublishAppDocument)
+		authed.POST("/app-content/documents/:id/archive", superOnly, d.ArchiveAppDocument)
+		authed.PUT("/app-content/configs/:key/switch", superOnly, d.PutAppConfigSwitch)
+
+		// 形象工坊：配件权重覆盖与批量生成（写操作走 openelf-api）
+		authed.PUT("/character/parts/:id", superOnly, d.UpdateCharacterPart)
+		authed.POST("/character/batches", superOnly, d.CreateCharacterBatch)
 
 		authed.GET("/admin-users", superOnly, d.ListAdminUsers)
 		authed.POST("/admin-users", superOnly, d.CreateAdminUser)

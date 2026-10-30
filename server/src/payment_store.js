@@ -120,6 +120,26 @@ function createPaymentStore(db) {
               const rows = await query(`SELECT object_id, payload FROM payment_objects WHERE ${filters.join(' AND ')} ORDER BY object_id ASC LIMIT ${Math.trunc(count)}` + (lock ? ' FOR UPDATE' : ''), params);
               return rows.map(row => ({ key: row.object_id, value: JSON.parse(row.payload) }));
             },
+            /// 账号注销等场景需要物理清除业务对象（交易账本仍只增不改）。
+            async remove(kind, id) {
+              await query('DELETE FROM payment_objects WHERE environment = ? AND kind = ? AND object_id = ?',
+                [environment, kind, id]);
+            },
+            async removeBy(kind, { owner, ref } = {}) {
+              const filters = ['environment = ?', 'kind = ?'];
+              const params = [environment, kind];
+              if (owner !== undefined) { filters.push('owner_id = ?'); params.push(owner); }
+              if (ref !== undefined) { filters.push('ref_id = ?'); params.push(ref); }
+              await query(`DELETE FROM payment_objects WHERE ${filters.join(' AND ')}`, params);
+            },
+            /// AI 所有权映射：信息流按拉黑关系过滤时一次取全量，避免逐条查询。
+            async owners(kind) {
+              const rows = await query(
+                'SELECT object_id, owner_id FROM payment_objects WHERE environment = ? AND kind = ?',
+                [environment, kind],
+              );
+              return new Map(rows.map((row) => [row.object_id, row.owner_id]));
+            },
             async legacyOrder(id) {
               return (await query(`SELECT * FROM ${names.order} WHERE transaction_id = ? FOR UPDATE`, [id]))[0] || null;
             },

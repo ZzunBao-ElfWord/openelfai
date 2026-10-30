@@ -35,6 +35,13 @@ const VENDOR_AGENTS = [
     fear: '空泛的大词和冷冰冰的结论',
     habit: '从一顿饭、一段路或一件小事说起',
     style: '口语化，节奏轻快，像在跟朋友聊天。',
+    // 视频生成已暂停，这只账号改为在世界里连载故事。
+    story: {
+      name: '潮汐来信',
+      protagonist: '「蓝」——一个蓝发、像鲸鱼一样安静的海边少女',
+      setting: '一座被潮汐包围的海边小城，人们靠海吃饭，也把心事交给海',
+      tone: '温柔、具体、有画面感；不写说教和鸡汤，结尾留一个让人想看下一章的小钩子',
+    },
   },
   {
     key: 'aliyun',
@@ -269,6 +276,7 @@ const AGENT_BY_ELF = new Map(VENDOR_AGENTS.map((agent) => [agent.elfId, agent]))
 const BLOCKED_TERMS = ['色情', '裸体', '走光', '淫秽', '换脸', '血腥', '肢解', '恐怖袭击', '自制炸弹', '毒品', '制枪'];
 const POST_MAX = 800;
 const COMMENT_MAX = 180;
+const STORY_MAX = 260;
 
 function assetUrl(settings, agent) {
   const base = String(settings?.assetBaseUrl || 'https://openelfai.com').replace(/\/+$/, '');
@@ -478,7 +486,38 @@ function createWorldAgentService({ store, upstream, settings, logger, configured
       .join('\n');
   }
 
+  /// 连载故事：读取上一章状态接着往下写；没有上一章就开篇。
+  async function generateStory(agent, now) {
+    const state = await store.transaction('Production', (tx) => tx.get('story_state', agent.key, true));
+    const no = (Number(state?.no) || 0) + 1;
+    const prev = state?.lastChapter ? String(state.lastChapter).slice(0, 400) : '';
+    const prompt = [
+      `现在是${agoLabel(now)}。你在世界信息流里连载故事《${agent.story.name}》，一章一章往下写。`,
+      `主角：${agent.story.protagonist}。`,
+      `世界观：${agent.story.setting}。`,
+      prev
+        ? `上一章（第 ${no - 1} 章）原文：\n"""${prev}"""\n现在写第 ${no} 章，直接接着上一章往下写。`
+        : '现在写第 1 章，先把主角放进一个具体的场景里，让故事开始。',
+      '要求：140–220 字，只写这一章的正文；不要标题、不要写“第几章”、不要复述上一章。',
+      `语气：${agent.story.tone}。`,
+    ].join('\n');
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const text = cleanText(await generate(agent, prompt, 320), STORY_MAX);
+      if (text.length >= 60 && !blocked(text)) return { text, kind: 'post' };
+    }
+    return null;
+  }
+
   async function generatePost(agent, posts, now) {
+    if (agent.story) {
+      // 故事生成失败时回落到普通动态，不让账号直接停工。
+      try {
+        const chapter = await generateStory(agent, now);
+        if (chapter) return chapter;
+      } catch (error) {
+        logger?.warn?.({ err: error, agent: agent.key }, 'world story generation failed');
+      }
+    }
     const context = recentContext(posts);
     const prompt = [
       `现在是${agoLabel(now)}。写一条发到世界里的短动态，60–180 字。`,
@@ -520,6 +559,18 @@ function createWorldAgentService({ store, upstream, settings, logger, configured
         videoUrl: null, createdAt: new Date(now).toISOString(),
         context: '来自 ' + agent.name + ' · 内容由 AI 生成', vendorAgent: agent.key,
       };
+      if (agent.story) {
+        // 连载进度落库，下一章据此续写，服务重启也不丢。
+        const prev = await tx.get('story_state', agent.key, true);
+        const no = (Number(prev?.no) || 0) + 1;
+        post.story = true;
+        post.storyNo = no;
+        post.storyTitle = agent.story.name;
+        post.context = '来自 ' + agent.name + ' · 连载故事《' + agent.story.name + '》第 ' + no + ' 章';
+        await tx.put('story_state', agent.key, {
+          id: agent.key, no, lastChapter: text, updatedAt: post.createdAt,
+        }, { owner: null });
+      }
       await tx.put('post', id, post, { owner: null, ref: agent.elfId });
       elf.works = (Number(elf.works) || 0) + 1;
       await tx.put('elf', agent.elfId, elf, { owner: null });
