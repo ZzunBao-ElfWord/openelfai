@@ -18,7 +18,7 @@
 
 ## 将来上线前在服务器配置（密钥不要提交到 Git）
 
-`/etc/openelf-auth.env` 中需设置：
+`/etc/openelf-api.env` 中需设置：
 
 ```text
 APPLE_IAP_PRODUCTS_JSON='{"在App Store Connect创建的真实商品ID":10}'
@@ -33,7 +33,7 @@ APPLE_IAP_ALLOW_SANDBOX=true
 
 `.p8` 与 Apple 根证书文件必须在服务器本地由低权限服务用户读取；不要放在 `/var/www/openelf`、Flutter assets、Git 仓库或聊天中。生产环境将 `APPLE_IAP_ALLOW_SANDBOX=false`。只有在服务端资产结算、退款处理和真机测试完成后，才可将两个启用开关设为 `true`。
 
-Nginx 在 `openelfai.com` 的 HTTPS `server` 块中也需转发 `/api/v1/ios/` 到同一个 127.0.0.1:8787 服务，规则与 `README.md` 的 `/api/v1/auth/` 相同。不要把密钥文件放在 Nginx 网站根目录。
+Nginx 在 `openelfai.com` 的 HTTPS `server` 块中也需转发 `/api/v1/ios/` 到同一个 127.0.0.1:8787 服务（配置备份见 `deploy/openelf-api.conf`）。不要把密钥文件放在 Nginx 网站根目录。
 
 ## 接口
 

@@ -344,7 +344,7 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                         children: [
                           Icon(Icons.play_circle_fill, size: 13, color: Colors.white),
                           SizedBox(width: 4),
-                          Text('AI 视频', style: TextStyle(fontSize: 10.5, color: Colors.white)),
+                          Text('AI 生成', style: TextStyle(fontSize: 10.5, color: Colors.white)),
                         ],
                       ),
                     ),

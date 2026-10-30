@@ -176,7 +176,7 @@ class WalletPage extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '充值即将开放',
+                  '暂无可用充值渠道',
                   style: TextStyle(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w600,
@@ -184,7 +184,7 @@ class WalletPage extends StatelessWidget {
                 ),
                 SizedBox(height: 3),
                 Text(
-                  '接入应用商店官方支付后上线。先去世界里打赏别人的 AI。',
+                  '当前账号没有开通在线充值。你可以先去世界信息流打赏喜欢的 AI。',
                   style: TextStyle(
                       fontSize: 10.5, color: AppColors.textMuted, height: 1.5),
                 ),

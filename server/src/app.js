@@ -10,7 +10,7 @@ const config = require('./config');
 const platformConfig = require('./platform/config');
 const { createPool } = require('./db');
 const { createAppleIapService, createAppleVerifier } = require('./apple_iap');
-const { createPaymentStore } = require('./payment_store');
+const { createPaymentStore, changeBalance } = require('./payment_store');
 const { createCommerceService } = require('./commerce');
 const { createComplianceService, moderateText } = require('./compliance');
 const { createRealnameVerifier } = require('./realname');
@@ -487,6 +487,24 @@ async function buildApp(options = {}) {
     return { user, session };
   }
 
+  /// 审核账号预置钻石：保证审核员可以完整体验打赏、购买与AI对话。
+  /// 只对 REVIEW_LOGIN_ACCOUNTS 白名单内的手机号生效，且按自然日幂等补足。
+  async function seedReviewAccount(userId) {
+    const target = Math.max(0, Math.min(100000, Number(process.env.REVIEW_SEED_DIAMONDS) || 1000));
+    if (target <= 0) return;
+    const day = new Date().toISOString().slice(0, 10);
+    await paymentStore.transaction('Production', async (tx) => {
+      const wallet = await tx.lockWallet(userId);
+      if (wallet.diamonds >= target) return;
+      await changeBalance(tx, userId, wallet, {
+        eventId: `review-seed:${userId}:${day}`,
+        type: 'review_seed',
+        amount: target - wallet.diamonds,
+        note: `审核账号预置 ${target} 钻石`,
+      });
+    });
+  }
+
   async function ensureUser(phone) {
     const nowIso = new Date().toISOString();
     const [rows] = await db.execute('SELECT * FROM users WHERE phone = ?', [phone]);
@@ -595,6 +613,25 @@ async function buildApp(options = {}) {
   app.post('/internal/reports/:id/resolve', { bodyLimit: 8 * 1024 }, async (request) => {
     requireReviewToken(request);
     return compliance.resolveReport(request.params.id, {
+      action: request.body?.action,
+      note: request.body?.note,
+      reviewer: String(request.headers['x-reviewer'] || 'ops').slice(0, 64),
+    });
+  });
+
+  app.get('/internal/media', async (request) => {
+    requireReviewToken(request);
+    return compliance.listPendingMedia({
+      environment: request.query?.environment,
+      page: request.query?.page,
+      size: request.query?.size,
+    });
+  });
+
+  app.post('/internal/media/:id/review', { bodyLimit: 8 * 1024 }, async (request) => {
+    requireReviewToken(request);
+    return compliance.reviewMedia(request.params.id, {
+      environment: request.body?.environment,
       action: request.body?.action,
       note: request.body?.note,
       reviewer: String(request.headers['x-reviewer'] || 'ops').slice(0, 64),
@@ -959,6 +996,7 @@ async function buildApp(options = {}) {
       const reviewCode = config.reviewAccounts.get(phone);
       if (reviewCode && code === reviewCode) {
         const user = await ensureUser(phone);
+        await seedReviewAccount(user.id);
         return reply.send(await issueSession(user, deviceId, request));
       }
 
@@ -1287,6 +1325,15 @@ async function buildApp(options = {}) {
 
   // 开发者生态：入驻、技能草稿、沙箱调试（/api/v1/developer/*）。
   require('./developer/routes').registerDeveloperRoutes(app, { db, authenticate });
+
+  // AI 形象内核：配件目录、角色卡草稿、预览与生成（/api/v1/character/*）。
+  require('./character/routes').registerCharacterRoutes(app, { db, authenticate });
+
+  // 形象运营精修：配件覆盖与批量生成（/internal/ops/character/*，仅运维令牌可访问）。
+  require('./character/ops_routes').registerOpsRoutes(app, { db });
+
+  // MCP 连接器：WorkBuddy 等外部客户端用用户自己的 API Key 调用形象工具（/mcp）。
+  require('./mcp/server').registerMcpRoutes(app, { db });
 
   app.get('/api/v1/platform/console/overview', async (request) => {
     const { user } = await authenticate(request);

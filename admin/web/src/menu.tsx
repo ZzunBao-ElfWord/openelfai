@@ -16,6 +16,7 @@ import PlatformVendors from './pages/PlatformVendors';
 import PlatformDevelopers from './pages/PlatformDevelopers';
 import PlatformRequests from './pages/PlatformRequests';
 import ModerationReports from './pages/ModerationReports';
+import CharacterStudio from './pages/CharacterStudio';
 import WalletAdjust from './pages/WalletAdjust';
 import Audit from './pages/Audit';
 import System from './pages/System';
@@ -122,6 +123,14 @@ export const menuItems: MenuItem[] = [
     glyph: '🚨',
     roles: ['super_admin', 'moderator'],
     element: <ModerationReports />,
+  },
+  {
+    path: '/content/character',
+    group: '内容运营',
+    label: '形象工坊',
+    glyph: '🎨',
+    roles: ['super_admin', 'moderator'],
+    element: <CharacterStudio />,
   },
   {
     path: '/content/legal',

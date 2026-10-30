@@ -73,6 +73,9 @@ func New(d handler.Deps) *gin.Engine {
 		// 内容审核：举报列表与处置（软删动态/评论）
 		authed.GET("/moderation/reports", modOnly, d.ListModerationReports)
 		authed.POST("/moderation/reports/:id/resolve", modOnly, d.ResolveModerationReport)
+		// 内容审核：UGC 视频人工前审
+		authed.GET("/moderation/pending-media", modOnly, d.ListModerationPendingMedia)
+		authed.POST("/moderation/pending-media/:id/review", modOnly, d.ReviewPendingMedia)
 
 		authed.GET("/catalog", modOnly, d.GetCatalog)
 
@@ -91,6 +94,11 @@ func New(d handler.Deps) *gin.Engine {
 		authed.PUT("/app-content/documents/:id", modOnly, d.UpdateAppDocument)
 		authed.GET("/app-content/configs", modOnly, d.ListAppConfigs)
 		authed.PUT("/app-content/configs/:key", modOnly, d.PutAppConfig)
+
+		// 形象工坊：配件目录与批次列表/详情（只读）
+		authed.GET("/character/parts", modOnly, d.ListCharacterParts)
+		authed.GET("/character/batches", modOnly, d.ListCharacterBatches)
+		authed.GET("/character/batches/:id", modOnly, d.GetCharacterBatch)
 	}
 
 	// 高危操作：仅 super_admin
@@ -117,6 +125,10 @@ func New(d handler.Deps) *gin.Engine {
 		authed.POST("/app-content/documents/:id/publish", superOnly, d.PublishAppDocument)
 		authed.POST("/app-content/documents/:id/archive", superOnly, d.ArchiveAppDocument)
 		authed.PUT("/app-content/configs/:key/switch", superOnly, d.PutAppConfigSwitch)
+
+		// 形象工坊：配件权重覆盖与批量生成（写操作走 openelf-api）
+		authed.PUT("/character/parts/:id", superOnly, d.UpdateCharacterPart)
+		authed.POST("/character/batches", superOnly, d.CreateCharacterBatch)
 
 		authed.GET("/admin-users", superOnly, d.ListAdminUsers)
 		authed.POST("/admin-users", superOnly, d.CreateAdminUser)

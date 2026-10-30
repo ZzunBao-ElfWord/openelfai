@@ -17,17 +17,17 @@ Future<void> main() async {
   // 运营配置：先带缓存启动，再后台拉最新快照（失败静默）
   await AppContentService.instance.loadCached();
   unawaited(AppContentService.instance.refresh());
-  runApp(const OpenelfApp());
+  runApp(const OpenElfApp());
 }
 
-class OpenelfApp extends StatefulWidget {
-  const OpenelfApp({super.key});
+class OpenElfApp extends StatefulWidget {
+  const OpenElfApp({super.key});
 
   @override
-  State<OpenelfApp> createState() => _OpenelfAppState();
+  State<OpenElfApp> createState() => _OpenElfAppState();
 }
 
-class _OpenelfAppState extends State<OpenelfApp> with WidgetsBindingObserver {
+class _OpenElfAppState extends State<OpenElfApp> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
@@ -153,8 +153,9 @@ class _SplashScreenState extends State<SplashScreen> {
                 Container(
                   width: 82,
                   height: 82,
+                  clipBehavior: Clip.antiAlias,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(41),
+                    borderRadius: BorderRadius.circular(82 * 0.222),
                     boxShadow: [
                       BoxShadow(
                         color: AppColors.violet.withOpacity(0.34),

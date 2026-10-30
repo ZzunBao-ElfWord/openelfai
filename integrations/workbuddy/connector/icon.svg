@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="OpenElf 形象工坊">
+  <defs>
+    <linearGradient id="stroke" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#60a5fa"/>
+      <stop offset="1" stop-color="#1d4ed8"/>
+    </linearGradient>
+    <linearGradient id="spark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#93c5fd"/>
+      <stop offset="1" stop-color="#3b82f6"/>
+    </linearGradient>
+  </defs>
+  <rect x="64" y="64" width="384" height="384" rx="96" fill="none" stroke="url(#stroke)" stroke-width="10"/>
+  <path d="M168 208 L128 176 L148 232 Z" fill="none" stroke="url(#stroke)" stroke-width="10" stroke-linejoin="round"/>
+  <path d="M344 208 L384 176 L364 232 Z" fill="none" stroke="url(#stroke)" stroke-width="10" stroke-linejoin="round"/>
+  <circle cx="256" cy="214" r="82" fill="none" stroke="url(#stroke)" stroke-width="10"/>
+  <path d="M190 214 H322" fill="none" stroke="url(#stroke)" stroke-width="10" stroke-linecap="round"/>
+  <path d="M164 424 C164 352 206 314 256 314 C306 314 348 352 348 424" fill="none" stroke="url(#stroke)" stroke-width="10" stroke-linecap="round"/>
+  <path d="M128 128 V104 H152" fill="none" stroke="url(#spark)" stroke-width="8" stroke-linecap="round"/>
+  <path d="M384 128 V104 H360" fill="none" stroke="url(#spark)" stroke-width="8" stroke-linecap="round"/>
+  <path d="M128 384 V408 H152" fill="none" stroke="url(#spark)" stroke-width="8" stroke-linecap="round"/>
+  <path d="M384 384 V408 H360" fill="none" stroke="url(#spark)" stroke-width="8" stroke-linecap="round"/>
+  <path d="M392 196 L400 216 L420 224 L400 232 L392 252 L384 232 L364 224 L384 216 Z" fill="url(#spark)"/>
+</svg>

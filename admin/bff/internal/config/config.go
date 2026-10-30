@@ -21,6 +21,9 @@ type Config struct {
 	NodeAPIHealthURL  string
 	SecretsKey        string // 上游厂商密钥加密密钥（base64 编码的 32 字节 AES-256 密钥）
 	AssetsDir         string // 运营素材落盘目录（官方 AI 形象/栏目封面）
+	OpsAPIBaseURL     string // 形象工坊内部运营接口地址（openelf-api /internal/ops/character）
+	OpsToken          string // 内部运营接口令牌（请求头 x-ops-token）；为空时形象工坊整体不可用
+	OpsAssetBaseURL   string // 形象图片外链前缀，默认与 OpsAPIBaseURL 相同
 }
 
 func env(key, def string) string {
@@ -54,6 +57,10 @@ func Load() *Config {
 		}
 	}
 
+	// 形象工坊：内部运营接口与素材外链前缀；素材默认与接口同源
+	opsAPIBaseURL := strings.TrimRight(env("OPS_API_BASE_URL", "http://127.0.0.1:8787"), "/")
+	opsAssetBaseURL := strings.TrimRight(env("OPS_ASSET_BASE_URL", opsAPIBaseURL), "/")
+
 	return &Config{
 		Port:              env("PORT", "8094"),
 		ListenHost:        env("LISTEN_HOST", "127.0.0.1"),
@@ -67,5 +74,8 @@ func Load() *Config {
 		NodeAPIHealthURL:  env("NODE_API_HEALTH_URL", "http://127.0.0.1:8787/api/v1/health"),
 		SecretsKey:        os.Getenv("SECRETS_KEY"),
 		AssetsDir:         env("ASSETS_DIR", "/var/lib/openelf-admin/assets"),
+		OpsAPIBaseURL:     opsAPIBaseURL,
+		OpsToken:          strings.TrimSpace(os.Getenv("OPS_TOKEN")),
+		OpsAssetBaseURL:   opsAssetBaseURL,
 	}
 }

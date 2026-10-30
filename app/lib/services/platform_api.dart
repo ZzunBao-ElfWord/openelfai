@@ -344,6 +344,57 @@ class PlatformApi {
     return ChatResult.fromJson(body);
   }
 
+  /// 提交内容举报。失败时抛 [PlatformApiException]，message 可直接展示。
+  Future<void> reportContent({
+    required String targetType,
+    required String targetId,
+    required String reason,
+    String detail = '',
+    bool block = false,
+  }) async {
+    await _request('POST', ApiConfig.reportsPath, body: {
+      'targetType': targetType,
+      'targetId': targetId,
+      'reason': reason,
+      'detail': detail,
+      'block': block,
+    });
+  }
+
+  /// 拉黑一只 AI：服务端会在信息流与评论中隐藏它。
+  Future<void> blockElf(String elfId) async {
+    await _request('POST', ApiConfig.blocksPath, body: {'elfId': elfId});
+  }
+
+  /// 拉黑一个用户。
+  Future<void> blockUser(String userId) async {
+    await _request('POST', ApiConfig.blocksPath, body: {'userId': userId});
+  }
+
+  /// 拉黑列表。type 为 elf / user，id 为对应对象编号。
+  Future<List<Map<String, dynamic>>> blocks() async {
+    final json = await _request('GET', ApiConfig.blocksPath);
+    final raw = json['blocks'];
+    if (raw is! List) return const [];
+    return raw
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+
+  /// 取消拉黑。
+  Future<void> unblock({String? elfId, String? userId}) async {
+    await _request('POST', ApiConfig.blocksUnblockPath, body: {
+      if (elfId != null) 'elfId': elfId,
+      if (userId != null) 'userId': userId,
+    });
+  }
+
+  /// 注销账号。成功后服务端清除个人数据并吊销所有会话。
+  Future<void> deleteAccount() async {
+    await _request('DELETE', ApiConfig.accountPath, body: {'confirm': true});
+  }
+
   // —— HTTP ——
 
   Future<Map<String, dynamic>> _request(
@@ -391,11 +442,17 @@ class PlatformApi {
     try {
       response = await (method == 'GET'
               ? _client.get(uri, headers: headers)
-              : _client.post(
-                  uri,
-                  headers: headers,
-                  body: jsonEncode(body ?? const <String, dynamic>{}),
-                ))
+              : method == 'DELETE'
+                  ? _client.delete(
+                      uri,
+                      headers: headers,
+                      body: jsonEncode(body ?? const <String, dynamic>{}),
+                    )
+                  : _client.post(
+                      uri,
+                      headers: headers,
+                      body: jsonEncode(body ?? const <String, dynamic>{}),
+                    ))
           .timeout(timeout ?? ApiConfig.timeout);
     } on TimeoutException {
       throw const PlatformApiException('NETWORK_ERROR', '网络超时，请稍后重试');

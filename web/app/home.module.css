@@ -54,6 +54,224 @@
   color: #7c8ba3;
 }
 
+.brandBlock {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: rise 0.8s 0.1s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ── 是什么 / 定义段 ──────────────────────────────────── */
+
+.def {
+  padding: 108px 0 100px;
+  border-top: 1px solid var(--h-line-soft);
+}
+
+.defTitle {
+  margin: 0;
+  max-width: 860px;
+  font-family: var(--font-display);
+  font-size: clamp(26px, 3.2vw, 38px);
+  font-weight: 700;
+  line-height: 1.45;
+  letter-spacing: 0.01em;
+  text-wrap: pretty;
+}
+
+.defGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr);
+  gap: 64px;
+  margin-top: 44px;
+  padding-top: 38px;
+  border-top: 1px solid var(--h-line);
+}
+
+.defText p {
+  max-width: 660px;
+  margin: 0 0 16px;
+  font-size: 15px;
+  line-height: 1.9;
+  color: var(--h-ink-2);
+  text-wrap: pretty;
+}
+
+.defText p:last-child {
+  margin-bottom: 0;
+}
+
+.defStats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  border-top: 1px solid var(--h-line);
+  border-left: 1px solid var(--h-line);
+}
+
+.defStat {
+  padding: 20px 18px 22px;
+  border-right: 1px solid var(--h-line);
+  border-bottom: 1px solid var(--h-line);
+}
+
+.defStat dt {
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--h-ink-3);
+}
+
+.defStat dd {
+  margin: 8px 0 0;
+  font-family: var(--font-mono);
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--h-ink);
+}
+
+/* ── 实体墙 ───────────────────────────────────────────── */
+
+.entity {
+  padding: 96px 0 90px;
+  background: #fafbfd;
+  border-top: 1px solid var(--h-line-soft);
+  border-bottom: 1px solid var(--h-line-soft);
+}
+
+.logoGroup + .logoGroup {
+  margin-top: 40px;
+}
+
+.logoGroupHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--h-line);
+}
+
+.logoGroupHead h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.logoGroupHead .moreLink {
+  margin-top: 0;
+}
+
+.logoGrid {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 1px;
+  margin-top: 1px;
+  background: var(--h-line);
+  border: 1px solid var(--h-line);
+  border-top: none;
+}
+
+.logoTile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+  padding: 18px 6px 14px;
+  background: #fff;
+  transition: background-color 0.15s;
+}
+
+.logoTile:hover {
+  background: #f7fafd;
+}
+
+.logoBox {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+}
+
+.logoBox img {
+  max-width: 34px;
+  max-height: 34px;
+  object-fit: contain;
+  filter: grayscale(1) opacity(0.62);
+  transition: filter 0.18s;
+}
+
+.logoTile:hover .logoBox img {
+  filter: grayscale(0) opacity(1);
+}
+
+.logoName {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--h-ink-2);
+  text-align: center;
+}
+
+.moreLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 16px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--h-blue-deep);
+}
+
+.entityNote {
+  margin: 34px 0 0;
+  padding-top: 18px;
+  border-top: 1px solid var(--h-line);
+  font-size: 11px;
+  color: var(--h-ink-3);
+}
+
+/* ── 常见问题 ─────────────────────────────────────────── */
+
+.faq {
+  padding: 104px 0 96px;
+  border-top: 1px solid var(--h-line-soft);
+}
+
+.faqList {
+  margin-top: 36px;
+  border-top: 1px solid var(--h-line);
+}
+
+.faqItem {
+  padding: 22px 0 24px;
+  border-bottom: 1px solid var(--h-line);
+}
+
+.faqQ {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.6;
+  letter-spacing: 0.01em;
+}
+
+.faqA {
+  max-width: 840px;
+  margin: 10px 0 0;
+  font-size: 13.5px;
+  line-height: 1.9;
+  color: var(--h-ink-2);
+  text-wrap: pretty;
+}
+
 /* ── Hero ─────────────────────────────────────────────── */
 
 .hero {
@@ -143,7 +361,6 @@
   line-height: 1;
   letter-spacing: -0.045em;
   color: var(--h-ink);
-  animation: rise 0.8s 0.1s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .cnName {
@@ -153,7 +370,6 @@
   font-weight: 500;
   letter-spacing: 0.5em;
   color: var(--h-ink-3);
-  animation: rise 0.8s 0.14s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .tagline {
@@ -346,16 +562,26 @@
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
 }
 
-.avatarA {
-  background: linear-gradient(140deg, #3b82f6, #1e3a8a);
+.avatarLogo {
+  background: #fff;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
 }
 
-.avatarB {
-  background: linear-gradient(140deg, #0ea5e9, #14532d);
+.avatarLogo img {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
 }
 
-.avatarC {
-  background: linear-gradient(140deg, #64748b, #1e293b);
+.official {
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid rgba(96, 165, 250, 0.42);
+  font-size: 9px;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+  color: #93b8f5;
 }
 
 .postBody {
@@ -408,7 +634,7 @@
 
 .imageCard {
   position: relative;
-  height: 142px;
+  height: 168px;
   margin-top: 12px;
   border-radius: 12px;
   overflow: hidden;
@@ -418,28 +644,12 @@
     linear-gradient(158deg, #12233a 0%, #0b1626 46%, #070d16 100%);
 }
 
-.imageCard::before {
-  content: '';
+.imageCard img {
   position: absolute;
-  left: 50%;
-  bottom: 34%;
-  width: 58px;
-  height: 38px;
-  transform: translateX(-50%);
-  background: #060b12;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-bottom: none;
-}
-
-.imageCard::after {
-  content: '';
-  position: absolute;
-  left: calc(50% + 12px);
-  bottom: calc(34% + 19px);
-  width: 6px;
-  height: 8px;
-  background: #ffd08a;
-  box-shadow: 0 0 20px 7px rgba(255, 190, 90, 0.4);
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .imageTag {
@@ -1000,6 +1210,12 @@
   font-size: 9px;
   font-weight: 700;
   color: #fff;
+  overflow: hidden;
+}
+
+.miniAvatar.avatarLogo img {
+  width: 16px;
+  height: 16px;
 }
 
 .miniText {
@@ -1010,13 +1226,23 @@
 }
 
 .miniImage {
-  height: 88px;
+  position: relative;
+  height: 96px;
   margin-top: 9px;
   border-radius: 9px;
+  overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.06);
   background:
     radial-gradient(circle at 71% 52%, rgba(255, 212, 146, 0.85) 0 2px, rgba(255, 200, 120, 0.14) 3px 12px, transparent 40px),
     linear-gradient(158deg, #12233a 0%, #0b1626 46%, #070d16 100%);
+}
+
+.miniImage img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .miniFoot {
@@ -1069,23 +1295,19 @@
 .videoScene {
   position: absolute;
   inset: 0;
+  overflow: hidden;
   background:
     radial-gradient(circle at 68% 38%, rgba(255, 214, 150, 0.9) 0 2px, rgba(255, 200, 120, 0.12) 3px 24px, transparent 70px),
     linear-gradient(118deg, transparent 42%, rgba(255, 214, 150, 0.14) 46%, transparent 55%),
     radial-gradient(ellipse at 50% 108%, #1e3c54 0%, #0a1420 48%, #04070c 100%);
 }
 
-.beam {
+.videoScene img {
   position: absolute;
-  left: 68%;
-  top: 38%;
-  width: 150%;
-  height: 36%;
-  transform-origin: 0 50%;
-  transform: rotate(-10deg);
-  background: linear-gradient(90deg, rgba(255, 214, 150, 0.13), transparent 58%);
-  filter: blur(7px);
-  opacity: 0.8;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .videoScene::after {
@@ -1441,8 +1663,36 @@
 
   .premise,
   .powers,
-  .own {
+  .own,
+  .def,
+  .entity,
+  .faq {
     padding: 84px 0;
+  }
+
+  .defGrid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 34px;
+    margin-top: 36px;
+    padding-top: 30px;
+  }
+
+  .logoGrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .logoTile {
+    padding: 14px 4px 12px;
+  }
+
+  .logoBox {
+    width: 32px;
+    height: 32px;
+  }
+
+  .logoBox img {
+    max-width: 28px;
+    max-height: 28px;
   }
 
   .steps {
@@ -1593,7 +1843,7 @@
   }
 
   .imageCard {
-    height: 118px;
+    height: 140px;
   }
 
   .powerGrid {
@@ -1673,8 +1923,7 @@
 @media (prefers-reduced-motion: reduce) {
   .notice,
   .heroMark,
-  .wordmark,
-  .cnName,
+  .brandBlock,
   .tagline,
   .sub,
   .actions,

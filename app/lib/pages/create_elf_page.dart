@@ -10,8 +10,8 @@ import 'login_page.dart';
 
 /// UGC AI 创建：形象来源（文字描述 / 身份证本人授权）→ 定人格 → 合规创建。
 ///
-/// 形象生成模型接入前，这里用风格化的程序化头像占位；
-/// 接入后只替换 [_generate] 与结果回填，三步流程与合规闸门不变。
+/// 形象预览采用站内程序化绘制，保证每只 AI 都有可用形象；
+/// 后续接入形象生成模型时只替换 [_generate] 与结果回填，三步流程与合规闸门不变。
 class CreateElfPage extends StatefulWidget {
   const CreateElfPage({super.key});
 
@@ -41,7 +41,6 @@ class _CreateElfPageState extends State<CreateElfPage> {
   final _habitCtrl = TextEditingController();
   String _style = _styles.first;
   bool _generated = false;
-  bool _generating = false;
   bool _submitting = false;
   final List<bool> _accepted = <bool>[];
   int _sampleIndex = 0;
@@ -81,7 +80,7 @@ class _CreateElfPageState extends State<CreateElfPage> {
     return true;
   }
 
-  Future<void> _generate() async {
+  void _generate() {
     if (_promptCtrl.text.trim().isEmpty) {
       _toast('先描述你想要的形象');
       return;
@@ -91,14 +90,7 @@ class _CreateElfPageState extends State<CreateElfPage> {
       _toast(blocked);
       return;
     }
-    setState(() => _generating = true);
-    // TODO(gen): 接入形象生成模型后改为真实请求，返回 avatarUrl 存进 Elf.avatarUrl。
-    await Future.delayed(const Duration(milliseconds: 650));
-    if (!mounted) return;
-    setState(() {
-      _generating = false;
-      _generated = true;
-    });
+    setState(() => _generated = true);
   }
 
   Future<void> _openIdentityVerify() async {
@@ -139,7 +131,7 @@ class _CreateElfPageState extends State<CreateElfPage> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('${elf?.name ?? ''} ${elf?.serial ?? ''} 已归入你的人类地址。',
+            Text('${elf?.name ?? ''} ${elf?.serial ?? ''} 已归入你的账户资产登记。',
                 style: TextStyle(fontSize: 13, color: AppColors.textSub)),
             const SizedBox(height: 8),
             Text('智能体编号',
@@ -160,10 +152,11 @@ class _CreateElfPageState extends State<CreateElfPage> {
                     color: AppColors.cyan,
                     fontFamily: 'monospace')),
             const SizedBox(height: 10),
-            Text(_source == 'idCard' ? '形象来源：本人身份证授权（已实名）。' : '形象来源：文字描述生成。',
+            Text(_source == 'idCard' ? '形象来源：本人身份证授权（已实名）。' : '形象来源：文字描述匹配的站内形象模板。',
                 style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
             const SizedBox(height: 4),
-            Text('形象已加注「AI 生成」标识。今后转赠时，编号、地址与已学技能一起转移。',
+            Text('形象已加注「AI 生成」标识。今后转赠时，编号、地址与已学技能一起转移。'
+                '这里的地址仅为站内资产登记编号，不涉及外部钱包或加密资产。',
                 style: TextStyle(
                     fontSize: 11, color: AppColors.textMuted, height: 1.5)),
           ],
@@ -496,12 +489,10 @@ class _CreateElfPageState extends State<CreateElfPage> {
                   ),
                   const Spacer(),
                   _ghostChip(
-                    icon:
-                        _generating ? Icons.hourglass_top : Icons.auto_awesome,
-                    label:
-                        _generating ? '生成中…' : (_generated ? '重新生成预览' : '生成预览'),
+                    icon: Icons.auto_awesome,
+                    label: _generated ? '重新生成预览' : '生成预览',
                     highlight: true,
-                    onTap: _generating ? () {} : _generate,
+                    onTap: _generate,
                   ),
                 ],
               ),
@@ -813,7 +804,7 @@ class _CreateElfPageState extends State<CreateElfPage> {
           child: Text(
               byIdCard
                   ? '本人形象 · 已实名'
-                  : '$_style · ${_generated ? '已生成' : '文字描述'}',
+                  : '$_style · ${_generated ? '形象预览已就绪' : '文字描述'}',
               style: TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
         ),
         const SizedBox(height: 20),

@@ -5,6 +5,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
+const { moderateText } = require('./compliance');
 
 const execFileAsync = promisify(execFile);
 
@@ -82,6 +83,8 @@ function createWorldUploadService({
     if (text.length > CAPTION_MAX) {
       throw fail(400, 'INVALID_CAPTION', '文案不能超过 ' + CAPTION_MAX + ' 字');
     }
+    const hit = moderateText(text);
+    if (hit) throw fail(400, 'CONTENT_BLOCKED', '包含违规词「' + hit + '」');
     if (!Buffer.isBuffer(buffer) || buffer.length < MIN_BYTES) {
       throw fail(400, 'INVALID_FILE', '请选择有效的视频文件');
     }
@@ -133,12 +136,13 @@ function createWorldUploadService({
           aiGenerated: true,
           uploadedBy: user.id,
         };
-        await tx.put('post', postId, record, { owner: elf.ownerId, ref: elf.id });
+        // UGC 视频先进入人工复核，通过后才出现在世界与视频信息流。
+        await tx.put('post', postId, record, { owner: elf.ownerId, ref: elf.id, state: 'pending_review' });
         elf.works = (Number(elf.works) || 0) + 1;
         await tx.put('elf', elf.id, elf, { owner: elf.ownerId });
         return record;
       });
-      return { post };
+      return { post, reviewState: 'pending_review' };
     } catch (error) {
       // 发布失败（如归属变化）时删掉刚落盘的视频与封面。
       await fs.rm(path.join(mediaDir, file), { force: true }).catch(() => {});

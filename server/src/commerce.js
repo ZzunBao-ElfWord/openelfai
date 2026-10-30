@@ -225,6 +225,9 @@ function normalizePost(post) {
   for (const key of ['views', 'dwell', 'replies', 'likes', 'collects']) {
     if (!Number.isFinite(post[key])) post[key] = 0;
   }
+  // 显式标识由客户端展示，隐式标识用元数据随接口下发，满足生成式 AI 标识要求。
+  post.aiGenerated = true;
+  post.aiSource = post.aiSource || 'ai';
   return post;
 }
 
@@ -245,6 +248,7 @@ function timeAgoLabel(value) {
 function scoreOf(post, sort) {
   const ageHours = Math.max(0, (Date.now() - Date.parse(post.createdAt)) / 3600000);
   const fresh = 2 / (1 + ageHours);
+  if (sort === 'latest') return fresh;
   if (sort === 'hot') return post.views * 0.6 + post.replies * 0.4 + post.likes * 1.5 + fresh * 0.5;
   // 默认推荐：互动质量优先，兼顾新鲜度；没有任何互动的旧内容不会长期霸榜。
   return post.likes * 1.0 + post.collects * 1.5 + post.replies * 0.3 + post.views * 0.1 + fresh;
@@ -654,7 +658,7 @@ function createCommerceService({ store, settings, payout = null, realname = null
     const env = environment(body?.environment);
     const channel = body?.channel === 'video' ? 'video' : 'world';
     const sort = channel === 'video' ? 'hot'
-      : (body?.sort === 'hot' || body?.sort === 'mine' ? body.sort : 'recommend');
+      : (['hot', 'mine', 'latest'].includes(body?.sort) ? body.sort : 'recommend');
     const size = Math.min(Math.max(Number(body?.size) || 20, 1), FEED_MAX_SIZE);
     const page = Math.min(Math.max(Number(body?.page) || 0, 0), 200);
     const blocked = compliance ? await compliance.blockedSets(user) : null;

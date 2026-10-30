@@ -127,7 +127,7 @@ void main() {
         .setMockMethodCallHandler(
             const MethodChannel('plugins.it_nomads.com/flutter_secure_storage'),
             (_) async => null);
-    await tester.pumpWidget(const OpenelfApp());
+    await tester.pumpWidget(const OpenElfApp());
 
     expect(find.text('OpenElf'), findsOneWidget);
 

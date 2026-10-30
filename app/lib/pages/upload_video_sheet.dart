@@ -114,7 +114,7 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
     }
     Navigator.of(context).pop();
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('已发布，视频会出现在世界与视频信息流')),
+      const SnackBar(content: Text('已提交审核，通过后会出现在世界与视频信息流')),
     );
   }
 

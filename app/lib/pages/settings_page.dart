@@ -4,6 +4,8 @@ import '../auth/auth_factory.dart';
 import '../data/world_data.dart';
 import '../models/app_content.dart';
 import '../services/app_content_service.dart';
+import '../services/platform_api.dart';
+import 'blocked_page.dart';
 import '../services/stage_bind_service.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
@@ -84,6 +86,34 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     ),
                     const SizedBox(height: 18),
+                    _section('隐私与推荐'),
+                    SwitchListTile.adaptive(
+                      contentPadding: EdgeInsets.zero,
+                      value: state.personalizedRecommendation,
+                      activeColor: AppColors.cyan,
+                      title: Text('个性化推荐',
+                          style: TextStyle(
+                              fontSize: 13.5, color: AppColors.text)),
+                      subtitle: Text(
+                        state.personalizedRecommendation
+                            ? '已开启：按互动与兴趣排序'
+                            : '已关闭：信息流按发布时间排序',
+                        style: TextStyle(
+                            fontSize: 11, color: AppColors.textMuted),
+                      ),
+                      onChanged: (value) =>
+                          state.setPersonalizedRecommendation(value),
+                    ),
+                    _tile(
+                      icon: Icons.block_outlined,
+                      label: '已拉黑',
+                      subtitle: '管理被拉黑的 AI 与用户，可随时取消',
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                            builder: (_) => const BlockedPage()),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
                     _section('法律与政策'),
                     _tile(
                       icon: Icons.privacy_tip_outlined,
@@ -132,7 +162,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       const SizedBox(height: 8),
                       _dangerTile(
                         icon: Icons.delete_forever_outlined,
-                        label: '删除账号',
+                        label: '注销账号',
                         onTap: () => _confirmDeleteAccount(context),
                       ),
                     ],
@@ -432,7 +462,71 @@ class _SettingsPageState extends State<SettingsPage> {
         Text(content.text('app.about.intro')),
         const SizedBox(height: 6),
         Text(content.text('app.about.copyright')),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(
+            style: TextButton.styleFrom(padding: EdgeInsets.zero),
+            onPressed: () => _openSdkList(ctx),
+            child: Text('第三方 SDK 清单',
+                style: TextStyle(fontSize: 12, color: AppColors.cyan)),
+          ),
+        ),
       ],
+    );
+  }
+
+  /// PIPL 要求的第三方 SDK 目录：说明名称、用途与处理的个人信息类型。
+  void _openSdkList(BuildContext ctx) {
+    const items = <List<String>>[
+      ['shared_preferences', '本地保存主题与浏览偏好', '设备本地偏好，不含身份信息'],
+      ['flutter_secure_storage', '加密保存登录令牌', '登录凭证'],
+      ['in_app_purchase', 'iOS 数字商品内购', '购买凭证与订单号'],
+      ['阿里云验证码', '登录人机校验', '设备与网络信息'],
+      ['阿里云实人认证（服务端）', '创作者实名核验', '姓名、证件号、证件照片（仅传输，核验后脱敏留存）'],
+      ['视频播放 / 音频播放 / 分享组件', '内容播放与站外分享', '播放与分享所需的最少设备信息'],
+      ['相册选择组件', '上传身份证或封面', '你主动选择的图片'],
+    ];
+    showDialog<void>(
+      context: ctx,
+      builder: (dctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: Text('第三方 SDK 清单',
+            style: TextStyle(color: AppColors.text, fontSize: 16)),
+        content: SizedBox(
+          width: 480,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final item in items) ...[
+                  Text(item[0], style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.text)),
+                  Text('用途：${item[1]}',
+                      style: TextStyle(
+                          fontSize: 11, color: AppColors.textSub, height: 1.5)),
+                  Text('处理信息：${item[2]}',
+                      style: TextStyle(
+                          fontSize: 11, color: AppColors.textMuted, height: 1.5)),
+                  const SizedBox(height: 10),
+                ],
+                Text('以上 SDK 仅在对应功能被使用时初始化，不进行个性化广告投放。',
+                    style: TextStyle(
+                        fontSize: 10.5, color: AppColors.textFaint, height: 1.5)),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dctx).pop(),
+            child: Text('关闭', style: TextStyle(color: AppColors.cyan)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -546,7 +640,9 @@ class _SettingsPageState extends State<SettingsPage> {
         title:
             Text('删除账号', style: TextStyle(color: AppColors.warn, fontSize: 16)),
         content: Text(
-          '账号删除后，你的 AI、钻石、收益、打赏记录等所有数据将被永久清除，无法恢复。\n\n确认继续？',
+          '注销后，你的个人资料、AI、作品、评论与聊天记录将被删除，钻石余额会清空，且无法恢复。'
+          '\n\n若仍有待提现收益或提现正在处理中，请先完成提现。'
+          '\n\n确认注销账号？',
           style: TextStyle(
               fontSize: 12.5, color: AppColors.textMuted, height: 1.6),
         ),
@@ -558,19 +654,54 @@ class _SettingsPageState extends State<SettingsPage> {
           TextButton(
             onPressed: () async {
               Navigator.of(dctx).pop();
-              // 服务端 DELETE /auth/account 接口待实现，先本地退出
+              String? failure;
+              try {
+                await PlatformApi.instance.deleteAccount();
+              } on PlatformApiException catch (error) {
+                failure = error.message;
+              } catch (_) {
+                failure = '注销失败，请稍后重试';
+              }
+              if (!ctx.mounted) return;
+              final message = failure;
+              if (message != null) {
+                await showDialog<void>(
+                  context: ctx,
+                  builder: (ec) => AlertDialog(
+                    backgroundColor: AppColors.surface,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                    title: Text('暂时无法注销',
+                        style:
+                            TextStyle(color: AppColors.text, fontSize: 16)),
+                    content: Text(message,
+                        style: TextStyle(
+                            fontSize: 12.5,
+                            color: AppColors.textMuted,
+                            height: 1.6)),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(ec).pop(),
+                        child: Text('知道了',
+                            style: TextStyle(color: AppColors.cyan)),
+                      ),
+                    ],
+                  ),
+                );
+                return;
+              }
               try {
                 await createAuth().logout();
               } catch (_) {
-                // 撤销失败也要清本地登录态
+                // 服务端已吊销会话，本地撤销失败也不阻断退出
               }
               await AppState.instance.onLogout();
               if (!ctx.mounted) return;
               ScaffoldMessenger.of(ctx).showSnackBar(
-                const SnackBar(content: Text('本地已清除，服务端账号删除即将上线')),
+                const SnackBar(content: Text('账号已注销')),
               );
             },
-            child: Text('确认删除', style: TextStyle(color: AppColors.warn)),
+            child: Text('确认注销', style: TextStyle(color: AppColors.warn)),
           ),
         ],
       ),

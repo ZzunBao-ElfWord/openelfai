@@ -3,7 +3,7 @@
 import Link from 'next/link';
 
 export const metadata = {
-  title: '模型聚合 · 一个接口调用全部模型',
+  title: '模型聚合 · 一个 OpenAI 兼容接口调用 DeepSeek、豆包、通义千问',
   description:
     'OpenElf 模型聚合：OpenAI Chat Completions 兼容接口，一个 API Key 调用 DeepSeek、豆包、通义千问等模型。按 token 计费，余额预充值，无需订阅。',
   alternates: { canonical: '/platform/' },
@@ -197,7 +197,7 @@ export default function PlatformPage() {
       <section className="platform-section">
         <div className="sec-head">
           <div>
-            <p className="sec-eyebrow">WHY OPENELF / 平台能力</p>
+            <p className="sec-eyebrow">WHY OpenElf / 平台能力</p>
             <h2 className="sec-title">接入成本，只有两行配置。</h2>
           </div>
         </div>

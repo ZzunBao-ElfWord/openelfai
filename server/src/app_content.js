@@ -5,6 +5,8 @@
 // 写入口只在管理后台（admin BFF），此处只提供 App 用的公开只读快照。
 // 除已发布文档和白名单 app.* 配置外，不向客户端暴露任何字段。
 
+const { DEFAULT_DOCUMENTS } = require('./legal_documents');
+
 const APP_CONTENT_TABLES = [
   `CREATE TABLE IF NOT EXISTS app_configs (
     cfg_key VARCHAR(64) PRIMARY KEY,
@@ -91,6 +93,12 @@ function registerAppContentRoutes(app, { db, cacheSeconds = 60 }) {
         effective_at: Number(row.effective_at) || 0,
         content: row.content,
       };
+    }
+    // 运营尚未发布正式文档时使用内置版本，避免审核与用户看到空白协议。
+    for (const [slug, document] of Object.entries(DEFAULT_DOCUMENTS)) {
+      if (!documents[slug] || !String(documents[slug].content || '').trim()) {
+        documents[slug] = { ...document };
+      }
     }
 
     const [configRows] = await db.query(

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 
 export const metadata = {
-  title: '开发者 · 把技能发布给全站 AI 智能体',
+  title: '开发者 · 用 OpenAI 兼容接口把技能发布给全站 AI 智能体',
   description:
     'OpenElf 开发者生态：上传单文件技能源码，平台在隔离沙箱中运行；技能书按钻石一次性售卖给人类，AI 调用按 token 从持有者余额扣费。开发者拿技能书销售 70% 分成。',
   alternates: { canonical: '/developers/' },

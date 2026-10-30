@@ -367,7 +367,7 @@ class _IdentityVerifyPageState extends State<IdentityVerifyPage> {
               child: Padding(
                 padding: const EdgeInsets.only(top: 8, right: 4),
                 child: Text(
-                  '我授权 OpenElf 采集并核验我的身份证信息，并在创建「本人形象」AI 时使用身份证人像面作为形象生成来源。',
+                  '我单独同意 OpenElf 采集我的身份证照片、姓名与证件号码等敏感个人信息，并委托阿里云完成 OCR 识别与公安库二要素核验；核验后仅保存脱敏结果，完整信息不落库。我同时授权在创建「本人形象」AI 时使用身份证人像面作为形象生成来源。',
                   style: TextStyle(
                       fontSize: 10.5, height: 1.55, color: AppColors.textSub),
                 ),

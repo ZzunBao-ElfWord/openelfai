@@ -4,6 +4,7 @@ const mysql = require('mysql2/promise');
 const { PAYMENT_TABLES } = require('./payment_store');
 const { PLATFORM_TABLES } = require('./platform/tables');
 const { DEV_TABLES } = require('./developer/tables');
+const { CHARACTER_TABLES } = require('./character/tables');
 const { KNOWLEDGE_TABLES } = require('./knowledge');
 const { APP_CONTENT_TABLES } = require('./app_content');
 const { COMPLIANCE_TABLES } = require('./compliance');
@@ -89,6 +90,7 @@ const TABLES = [
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
   ...PLATFORM_TABLES,
   ...DEV_TABLES,
+  ...CHARACTER_TABLES,
   ...KNOWLEDGE_TABLES,
   ...APP_CONTENT_TABLES,
   ...COMPLIANCE_TABLES,

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -260,7 +261,7 @@ class _ApiKeyPageState extends State<ApiKeyPage> {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              '这把 Key 已自动分配给当前账号，App 内 AI 对话使用它；也可以复制到自己的工具里调用 openelf 的 API。\n\n该余额同时用于 App 内 AI 对话与开放平台 API 调用。',
+              '这把 Key 已自动分配给当前账号，App 内 AI 对话使用它；也可以复制到自己的工具里调用 OpenElf 的 API。\n\n该余额同时用于 App 内 AI 对话与开放平台 API 调用。',
               style: TextStyle(
                   fontSize: 11.5, color: AppColors.textSub, height: 1.6),
             ),
@@ -415,9 +416,11 @@ class _ApiKeyPageState extends State<ApiKeyPage> {
             children: [
               Expanded(
                 child: Text(
-                  empty
-                      ? '余额不足时 AI 只会回复固定话术，外部工具调用会返回 402。点击充值，或联系管理员人工充值。'
-                      : '充值到账后可用于 App 内 AI 对话与开放平台 API 调用。',
+                  _alipayAllowed
+                      ? (empty
+                          ? '余额不足时 AI 只会回复固定话术，外部工具调用会返回 402。点击充值，或联系管理员人工充值。'
+                          : '充值到账后可用于 App 内 AI 对话与开放平台 API 调用。')
+                      : '余额不足时 AI 只会回复固定话术，外部工具调用会返回 402。iOS 端暂不支持在线充值 API 余额。',
                   style: TextStyle(
                     fontSize: 10.5,
                     color: empty ? AppColors.danger : AppColors.textMuted,
@@ -426,7 +429,7 @@ class _ApiKeyPageState extends State<ApiKeyPage> {
                 ),
               ),
               const SizedBox(width: 10),
-              _rechargeButton(),
+              if (_alipayAllowed) _rechargeButton(),
             ],
           ),
         ],
@@ -466,7 +469,12 @@ class _ApiKeyPageState extends State<ApiKeyPage> {
     );
   }
 
+  /// iOS 不允许在 App 内使用第三方支付购买数字化额度，改用 App 内购或暂不开放。
+  bool get _alipayAllowed =>
+      kIsWeb || defaultTargetPlatform != TargetPlatform.iOS;
+
   Future<void> _openTopup() async {
+    if (!_alipayAllowed) return;
     final paid = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,

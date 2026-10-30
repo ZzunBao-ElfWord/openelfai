@@ -2,11 +2,15 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   errText,
+  getPendingMedia,
   getReports,
   resolveReport,
+  reviewPendingMedia,
+  type MediaReviewAction,
   type ModerationAction,
   type ModerationReport,
   type ModerationReportFilter,
+  type PendingMedia,
 } from '../api/client';
 import { Badge, Button, Card, EmptyState, PageHeader, Textarea } from '../components/ui/primitives';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
@@ -71,9 +75,23 @@ export default function ModerationReports() {
   const [note, setNote] = useState('');
   const [formError, setFormError] = useState('');
 
+  // UGC 视频前审队列：独立分页，环境沿用上方筛选条件。
+  const [mediaPage, setMediaPage] = useState(1);
+  const [mediaPending, setMediaPending] = useState<{
+    item: PendingMedia;
+    action: MediaReviewAction;
+  } | null>(null);
+  const [mediaNote, setMediaNote] = useState('');
+  const [mediaFormError, setMediaFormError] = useState('');
+
   const { data, isLoading, error } = useQuery({
     queryKey: ['moderation-reports', submitted, page],
     queryFn: () => getReports(submitted, page),
+  });
+
+  const { data: mediaData, isLoading: mediaLoading, error: mediaError } = useQuery({
+    queryKey: ['moderation-pending-media', submitted.environment, mediaPage],
+    queryFn: () => getPendingMedia({ environment: submitted.environment }, mediaPage),
   });
 
   const mutation = useMutation({
@@ -93,6 +111,26 @@ export default function ModerationReports() {
       void queryClient.invalidateQueries({ queryKey: ['moderation-reports'] });
     },
     onError: (err) => setFormError(errText(err, '处置失败')),
+  });
+
+  const mediaMutation = useMutation({
+    mutationFn: () => {
+      if (!mediaPending) {
+        return Promise.reject(new Error('no target'));
+      }
+      return reviewPendingMedia(mediaPending.item.id, {
+        environment: mediaPending.item.environment,
+        action: mediaPending.action,
+        note: mediaNote.trim() || undefined,
+      });
+    },
+    onSuccess: () => {
+      setMediaPending(null);
+      setMediaNote('');
+      setMediaFormError('');
+      void queryClient.invalidateQueries({ queryKey: ['moderation-pending-media'] });
+    },
+    onError: (err) => setMediaFormError(errText(err, '审核失败')),
   });
 
   function openAction(report: ModerationReport, action: ModerationAction) {
@@ -119,6 +157,7 @@ export default function ModerationReports() {
         onSubmit={(e) => {
           e.preventDefault();
           setPage(1);
+          setMediaPage(1);
           setSubmitted({
             state: state || undefined,
             target_type: targetType || undefined,
@@ -177,6 +216,7 @@ export default function ModerationReports() {
             setTargetType('');
             setEnvironment('');
             setPage(1);
+            setMediaPage(1);
             setSubmitted({ state: 'open' });
           }}
         >
@@ -307,6 +347,185 @@ export default function ModerationReports() {
       {data ? (
         <Pagination page={page} total={data.total} pageSize={PAGE_SIZE} onChange={setPage} />
       ) : null}
+
+      <div className="mt-8">
+        <PageHeader
+          title="待审核视频"
+          desc="用户上传的 AI 视频先进入人工前审，通过后才出现在世界与视频信息流；驳回的视频不再展示"
+        />
+        <Card>
+          {mediaError ? (
+            <div className="p-6 text-sm text-red-600">
+              {errText(mediaError, '待审核视频加载失败')}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="th">视频</th>
+                    <th className="th">AI</th>
+                    <th className="th">文案</th>
+                    <th className="th">环境</th>
+                    <th className="th">提交时间</th>
+                    <th className="th text-right">操作</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {mediaLoading ? (
+                    <tr>
+                      <td className="td text-gray-400" colSpan={6}>
+                        加载中…
+                      </td>
+                    </tr>
+                  ) : mediaData && mediaData.items.length > 0 ? (
+                    mediaData.items.map((m) => (
+                      <tr key={m.id}>
+                        <td className="td">
+                          <div className="flex items-center gap-3">
+                            {m.cover_url ? (
+                              <img
+                                src={m.cover_url}
+                                alt="封面"
+                                className="h-16 w-12 rounded object-cover"
+                              />
+                            ) : (
+                              <div className="flex h-16 w-12 items-center justify-center rounded bg-gray-100 text-xs text-gray-400">
+                                无封面
+                              </div>
+                            )}
+                            {m.video_url ? (
+                              <a
+                                className="text-sm text-blue-600 hover:underline"
+                                href={m.video_url}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                播放
+                              </a>
+                            ) : (
+                              <span className="text-xs text-gray-400">无地址</span>
+                            )}
+                          </div>
+                          <div
+                            className="mt-1 max-w-40 truncate font-mono text-xs text-gray-400"
+                            title={m.id}
+                          >
+                            {m.id}
+                          </div>
+                        </td>
+                        <td className="td">
+                          <div className="text-gray-900">{m.elf_name || '—'}</div>
+                          <div
+                            className="max-w-40 truncate font-mono text-xs text-gray-400"
+                            title={m.elf_id}
+                          >
+                            {m.elf_id}
+                          </div>
+                        </td>
+                        <td className="td max-w-64 text-sm text-gray-700">{m.body}</td>
+                        <td className="td">
+                          <Badge tone={m.environment === 'Sandbox' ? 'amber' : 'blue'}>
+                            {m.environment === 'Sandbox' ? '沙箱' : '生产'}
+                          </Badge>
+                        </td>
+                        <td className="td whitespace-nowrap text-xs text-gray-500">
+                          {fmtTime(m.submitted_at)}
+                        </td>
+                        <td className="td">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="secondary"
+                              onClick={() => {
+                                setMediaPending({ item: m, action: 'reject' });
+                                setMediaNote('');
+                                setMediaFormError('');
+                              }}
+                            >
+                              驳回
+                            </Button>
+                            <Button
+                              variant="primary"
+                              onClick={() => {
+                                setMediaPending({ item: m, action: 'approve' });
+                                setMediaNote('');
+                                setMediaFormError('');
+                              }}
+                            >
+                              通过
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={6}>
+                        <EmptyState text="没有待审核的视频" />
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+
+        {mediaData ? (
+          <Pagination
+            page={mediaPage}
+            total={mediaData.total}
+            pageSize={PAGE_SIZE}
+            onChange={setMediaPage}
+          />
+        ) : null}
+      </div>
+
+      <ConfirmDialog
+        open={!!mediaPending}
+        title={mediaPending?.action === 'approve' ? '确认通过该视频？' : '确认驳回该视频？'}
+        description={
+          mediaPending ? (
+            <span>
+              AI：<b>{mediaPending.item.elf_name || mediaPending.item.elf_id}</b>
+              <br />
+              文案：{mediaPending.item.body}
+              <br />
+              {mediaPending.action === 'approve'
+                ? '通过后视频立即进入世界与视频信息流。'
+                : '驳回后视频不会对外展示，用户需重新上传。'}
+              该操作立即生效并记录审计日志。
+            </span>
+          ) : null
+        }
+        confirmText={mediaPending?.action === 'approve' ? '确认通过' : '确认驳回'}
+        danger={mediaPending?.action === 'reject'}
+        loading={mediaMutation.isPending}
+        onCancel={() => {
+          setMediaPending(null);
+          setMediaNote('');
+          setMediaFormError('');
+        }}
+        onConfirm={() => mediaMutation.mutate()}
+      >
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-gray-700">
+            审核备注（可选，最多 500 字）
+          </label>
+          <Textarea
+            className="w-full"
+            maxLength={500}
+            placeholder="填写审核依据或补充说明"
+            value={mediaNote}
+            onChange={(e) => {
+              setMediaNote(e.target.value);
+              setMediaFormError('');
+            }}
+          />
+          <div className="mt-1 text-right text-xs text-gray-400">{mediaNote.length}/500</div>
+          {mediaFormError ? <div className="mt-1 text-sm text-red-600">{mediaFormError}</div> : null}
+        </div>
+      </ConfirmDialog>
 
       <ConfirmDialog
         open={!!pending}

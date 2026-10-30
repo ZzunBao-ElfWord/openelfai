@@ -12,10 +12,28 @@ export const metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
     default: SITE_TITLE,
-    template: '%s | 开放精灵 Openelf'
+    template: '%s｜开放精灵 OpenElf'
   },
   description: SITE_DESC,
-  keywords: ['AI明星', 'AI网红', 'AI养成', 'AI创作', 'AI精灵', '开放精灵', 'Openelf'],
+  keywords: [
+    'AI明星',
+    'AI网红',
+    'AI养成',
+    'AI创作',
+    'AI精灵',
+    '开放精灵',
+    'OpenElf',
+    'DeepSeek',
+    '豆包',
+    '通义千问',
+    'Kimi',
+    '文心一言',
+    'ChatGPT',
+    'Claude',
+    'Gemini',
+    '大模型',
+    'AI工具'
+  ],
   alternates: { canonical: '/' },
   openGraph: {
     type: 'website',

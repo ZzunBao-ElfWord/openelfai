@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../auth/auth_repository.dart';
 import '../compliance/ai_creation_policy.dart';
 import '../compliance/identity_verification.dart';
@@ -72,6 +73,8 @@ class AppState extends ChangeNotifier {
   /// 创作者收益三档与提现规则：全部以服务端快照为准。
   EarningsSummary creatorEarnings = const EarningsSummary();
   final List<WithdrawalRecord> withdrawals = [];
+  /// 个性化推荐开关（合规要求可关闭）。关闭后「推荐」按时间倒序展示。
+  bool personalizedRecommendation = true;
   bool _commerceBusy = false;
   bool _commerceReady = false;
   final Set<String> _remoteElfIds = {};
@@ -147,6 +150,9 @@ class AppState extends ChangeNotifier {
   Future<void> restoreAsync() async {
     try {
       await _data.init();
+      final prefs = await SharedPreferences.getInstance();
+      personalizedRecommendation =
+          prefs.getBool('feed.personalized') ?? true;
       final loaded = await _data.load();
       if (loaded != null) {
         _localDataLoaded = true;
@@ -594,10 +600,25 @@ class AppState extends ChangeNotifier {
 
   /// 服务端分页结果优先；分页还没加载（或本页为空）时，
   /// 用服务端快照里的帖子兜底，避免刚发布的内容在世界里「看不见」。
+  /// 关闭个性化推荐后，「推荐」统一降级为按时间排序。
+  String _effectiveSort(String sort) =>
+      (!personalizedRecommendation && sort == 'recommend') ? 'latest' : sort;
+
+  Future<void> setPersonalizedRecommendation(bool enabled) async {
+    if (personalizedRecommendation == enabled) return;
+    personalizedRecommendation = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('feed.personalized', enabled);
+    _clearFeedCache();
+    notifyListeners();
+    unawaited(loadFeed(reset: true));
+  }
+
   List<ElfPost> _feedOf(String channel, String sort) {
-    final cached = _feedCache['$channel:$sort'];
+    final key = '$channel:${_effectiveSort(sort)}';
+    final cached = _feedCache[key];
     if (cached != null && cached.isNotEmpty) return List.unmodifiable(cached);
-    final local = _localFeed(channel, sort);
+    final local = _localFeed(channel, _effectiveSort(sort));
     if (local.isNotEmpty) return List.unmodifiable(local);
     return cached ?? const [];
   }
@@ -608,9 +629,9 @@ class AppState extends ChangeNotifier {
   List<ElfPost> feedVideo() => _feedOf('video', 'hot');
 
   bool feedLoading(String channel, {String sort = 'recommend'}) =>
-      _feedLoading.contains('$channel:$sort');
+      _feedLoading.contains('$channel:${_effectiveSort(sort)}');
   bool feedHasMore(String channel, {String sort = 'recommend'}) =>
-      _feedHasMore['$channel:$sort'] ?? false;
+      _feedHasMore['$channel:${_effectiveSort(sort)}'] ?? false;
 
   void _clearFeedCache() {
     _feedCache.clear();
@@ -626,6 +647,7 @@ class AppState extends ChangeNotifier {
     if (!CommerceConfig.enabled) return null;
     final user = currentUser;
     if (user == null) return '请先登录';
+    sort = _effectiveSort(sort);
     final key = '$channel:$sort';
     if (_feedLoading.contains(key)) return null;
     if (!reset && !(_feedHasMore[key] ?? true)) return null;
@@ -744,6 +766,7 @@ class AppState extends ChangeNotifier {
       return scored.map((s) => s.post).toList();
     }
     if (sort == 'mine') return myElves.expand((e) => postsOf(e.id)).toList();
+    if (sort == 'latest') return posts.take(20).toList();
     final now = DateTime.now();
     final scored = posts.map((p) {
       final dwellFactor =
@@ -1347,6 +1370,49 @@ class AppState extends ChangeNotifier {
       'time': _now(),
     });
     // 举报不需要触发 UI 刷新，也不持久化（临时存储）
+  }
+
+  /// 服务端举报。返回 null 表示成功，否则返回可直接展示的错误文案。
+  Future<String?> submitReport({
+    required String targetType,
+    required String targetId,
+    required String reason,
+    String detail = '',
+    bool block = false,
+  }) async {
+    try {
+      await PlatformApi.instance.reportContent(
+        targetType: targetType,
+        targetId: targetId,
+        reason: reason,
+        detail: detail,
+        block: block,
+      );
+      reports.add({
+        'targetId': '$targetType:$targetId',
+        'reason': reason,
+        'time': _now(),
+      });
+      return null;
+    } on PlatformApiException catch (error) {
+      return error.message;
+    } catch (_) {
+      return '举报提交失败，请稍后重试';
+    }
+  }
+
+  /// 拉黑一只 AI：服务端立即生效，本地先隐藏它的内容，避免刷新前仍可见。
+  Future<String?> blockElf(String elfId) async {
+    try {
+      await PlatformApi.instance.blockElf(elfId);
+    } on PlatformApiException catch (error) {
+      return error.message;
+    } catch (_) {
+      return '拉黑失败，请稍后重试';
+    }
+    posts = posts.where((post) => post.elfId != elfId).toList();
+    notifyListeners();
+    return null;
   }
 
   // —— 算力 ——

@@ -1,4 +1,4 @@
-/* Openelf 开放精灵 · 共享 UI 组件层
+/* OpenElf 开放精灵 · 共享 UI 组件层
  * Seal（首字印章）/ RegionBadge / EntryButton / ToolCard / SectionHeader / EmptyState
  * 既可在服务端组件（静态生成）中使用，也可在客户端组件中使用。
  */

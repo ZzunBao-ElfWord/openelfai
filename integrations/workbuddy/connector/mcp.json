@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "openelf-character": {
+      "type": "streamableHttp",
+      "url": "https://api.openelfai.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${OPENELF_API_KEY}"
+      }
+    }
+  }
+}

@@ -123,7 +123,7 @@ class _ProfilePageState extends State<ProfilePage> {
             left: 16,
             top: 24,
             child: Text(
-              'OPENELF',
+              'OpenElf',
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w800,
@@ -373,7 +373,10 @@ class _ProfilePageState extends State<ProfilePage> {
               _miniStat(WorldData.formatYuan(earnings), '累计收益'),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
+          Text('地址为站内资产登记编号，不涉及外部钱包、加密货币或数字代币交易。',
+              style: TextStyle(fontSize: 9.5, color: AppColors.textFaint)),
+          const SizedBox(height: 10),
           Row(
             children: [
               Text('人类地址',

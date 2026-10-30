@@ -601,6 +601,45 @@ export function resolveReport(
   return api.post(`/moderation/reports/${id}/resolve`, body);
 }
 
+// ===== 内容审核：UGC 视频人工前审 =====
+
+export type MediaReviewAction = 'approve' | 'reject';
+
+export interface PendingMedia {
+  id: string;
+  environment: string;
+  elf_id: string;
+  elf_name: string;
+  body: string;
+  video_url: string | null;
+  cover_url: string | null;
+  uploaded_by: string;
+  created_at: string;
+  submitted_at: string;
+}
+
+export async function getPendingMedia(
+  f: { environment?: string },
+  page: number,
+): Promise<Page<PendingMedia>> {
+  const { data } = await api.get<Page<PendingMedia>>('/moderation/pending-media', {
+    params: {
+      environment: f.environment || undefined,
+      page,
+      page_size: 20,
+    },
+  });
+  return data;
+}
+
+// 审核上传视频：approve=通过并进入信息流；reject=驳回不再展示
+export function reviewPendingMedia(
+  id: string,
+  body: { environment: string; action: MediaReviewAction; note?: string },
+) {
+  return api.post(`/moderation/pending-media/${id}/review`, body);
+}
+
 // ===== 审计日志 =====
 
 export async function fetchAudit(page: number, f: AuditFilter = {}): Promise<Page<AuditEntry>> {
@@ -899,3 +938,92 @@ export async function testVendorCredential(
   );
   return data;
 }
+
+// ===== 形象工坊 =====
+// 读写都经 BFF 代理到 openelf-api 内部运营接口；imageUrl/thumbUrl/sheetUrl
+// 已由 BFF 拼成绝对地址（OPS_ASSET_BASE_URL），前端直接用作 img src / 下载链接。
+
+export type CharacterRarity = 'common' | 'rare' | 'epic' | 'legendary';
+export type CharacterPartStatus = 'enabled' | 'disabled';
+
+export interface CharacterPart {
+  id: string;
+  name: string;
+  slot: string;
+  weight: number;
+  rarity: CharacterRarity;
+  status: CharacterPartStatus;
+}
+
+export interface CharacterSlot {
+  slot: string;
+  label: string;
+  parts: CharacterPart[];
+}
+
+export interface CharacterSlots {
+  slots: CharacterSlot[];
+  comboSpace: number;
+}
+
+export interface CharacterBatchItem {
+  index: number;
+  seed: number;
+  compositionHash: string;
+  imageUrl?: string;
+  thumbUrl?: string;
+  traits?: Record<string, string>;
+  rarityScore?: number;
+  rarityTier?: string;
+  error?: string;
+}
+
+export interface CharacterBatch {
+  id: string;
+  batchId?: string;
+  name: string;
+  style?: string;
+  count: number;
+  items?: CharacterBatchItem[];
+  sheetUrl: string;
+  createdAt: number | string;
+}
+
+export interface CharacterPartUpdate {
+  weight?: number;
+  rarity?: CharacterRarity;
+  status?: CharacterPartStatus;
+}
+
+export const fetchCharacterSlots = async (): Promise<CharacterSlots> =>
+  (await api.get<CharacterSlots>('/character/parts')).data;
+
+// 单条配件覆盖：仅 super_admin；保存后以刷新目录为准
+export async function updateCharacterPart(id: string, body: CharacterPartUpdate): Promise<void> {
+  await api.put(`/character/parts/${encodeURIComponent(id)}`, body);
+}
+
+// 上游可能返回 { items } 或 { batches }，这里统一成数组
+export async function fetchCharacterBatches(limit = 20): Promise<CharacterBatch[]> {
+  const { data } = await api.get<{ items?: CharacterBatch[]; batches?: CharacterBatch[] }>(
+    '/character/batches',
+    { params: { limit } },
+  );
+  return data.items ?? data.batches ?? [];
+}
+
+// 批量渲染较慢：BFF 侧超时 90 秒，这里放宽到 100 秒
+export async function createCharacterBatch(body: {
+  count: number;
+  style: string;
+  seedStart?: number;
+  name?: string;
+}): Promise<CharacterBatch> {
+  const { data } = await api.post<CharacterBatch>('/character/batches', body, {
+    timeout: 100000,
+  });
+  return data;
+}
+
+export const fetchCharacterBatch = async (id: string): Promise<CharacterBatch> =>
+  (await api.get<CharacterBatch>(`/character/batches/${encodeURIComponent(id)}`)).data;

@@ -7,8 +7,9 @@ const APK_URL =
   process.env.NEXT_PUBLIC_APK_URL || 'https://openelfai.com/app/openelf-mvp.apk';
 
 export const metadata = {
-  title: '下载 App',
-  description: '下载开放精灵 OpenElf：Web 版浏览器打开即用；Android APK 直接安装；iOS 版本灰度测试中，即将上线。',
+  title: 'OpenElf App 下载 · AI 明星养成（Android / iOS）',
+  description:
+    '下载开放精灵 OpenElf：Web 版浏览器打开即用；Android APK 直接安装；iOS 版本灰度测试中。持有一只 AI，给它形象、人设与资源包，让它在大模型驱动下自己创作与上台。',
   alternates: { canonical: '/download/' }
 };
 

@@ -118,4 +118,12 @@ CREATE TABLE IF NOT EXISTS platform_vendor_credentials (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 GRANT SELECT, INSERT, UPDATE ON openelf.platform_vendor_credentials TO 'openelf_admin'@'127.0.0.1';
 
+-- 形象工坊：后台只读。所有写操作（配件权重/稀有度、批量生成）都走 openelf-api
+-- 内部运营接口 /internal/ops/character（x-ops-token 鉴权），后台账号不需要写权限。
+GRANT SELECT ON openelf.character_cards TO 'openelf_admin'@'127.0.0.1';
+GRANT SELECT ON openelf.character_compositions TO 'openelf_admin'@'127.0.0.1';
+GRANT SELECT ON openelf.character_batches TO 'openelf_admin'@'127.0.0.1';
+GRANT SELECT ON openelf.character_runs TO 'openelf_admin'@'127.0.0.1';
+GRANT SELECT ON openelf.character_parts TO 'openelf_admin'@'127.0.0.1';
+
 FLUSH PRIVILEGES;

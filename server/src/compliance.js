@@ -28,7 +28,7 @@ const ZERO_WIDTH_RE = /[\u200b-\u200f\u2028\u2029\ufeff]/g;
 function normalizeForCheck(text) {
   return String(text || '').toLowerCase()
     .replace(ZERO_WIDTH_RE, '')
-    .replace(/[\s,，.。!！?？、;；:：'"“”‘’()（）【】\[\]<>《》/\\|_-]/g, '');
+    .replace(/[\s,，.。!！?？、;；:：'"“”‘’()（）【】\[\]<>《》/\\|_\-*#~·•^+=@$%&]/g, '');
 }
 
 /// 返回命中的违规词，未命中返回 null。
@@ -91,17 +91,20 @@ function readDetail(value) {
 
 /// 举报、拉黑与账号注销：数据独立于交易环境表，跨 iOS / 安卓共享同一份。
 function createComplianceService({ db, store }) {
-  async function targetExists(environment, targetType, targetId) {
+  /// 举报不区分客户端环境：对象可能只存在于 Sandbox 或 Production 之一。
+  async function resolveTargetEnvironment(preferred, targetType, targetId) {
     if (targetType === 'user') {
       const [rows] = await db.execute('SELECT id FROM users WHERE id = ?', [targetId]);
-      return rows.length > 0;
+      return rows.length ? preferred : null;
     }
-    if (targetType === 'chat') return true;
+    if (targetType === 'chat') return preferred;
     const [rows] = await db.execute(
-      'SELECT 1 FROM payment_objects WHERE environment = ? AND kind = ? AND object_id = ? LIMIT 1',
-      [environment, targetType, targetId],
+      'SELECT environment FROM payment_objects WHERE kind = ? AND object_id = ? LIMIT 2',
+      [targetType, targetId],
     );
-    return rows.length > 0;
+    if (!rows.length) return null;
+    const match = rows.find((row) => row.environment === preferred);
+    return match ? preferred : rows[0].environment;
   }
 
   async function submitReport(user, body) {
@@ -111,11 +114,10 @@ function createComplianceService({ db, store }) {
     const reason = String(body?.reason || '').trim();
     if (!REPORT_REASONS.has(reason)) throw fail(400, 'INVALID_REASON', '请选择举报原因');
     const detail = readDetail(body?.detail);
-    const environment = body?.environment === 'Sandbox' ? 'Sandbox' : 'Production';
+    const preferred = body?.environment === 'Sandbox' ? 'Sandbox' : 'Production';
     if (targetType === 'user' && targetId === user.id) throw fail(409, 'SELF_REPORT', '不能举报自己');
-    if (!await targetExists(environment, targetType, targetId)) {
-      throw fail(404, 'TARGET_NOT_FOUND', '举报对象不存在或已删除');
-    }
+    const environment = await resolveTargetEnvironment(preferred, targetType, targetId);
+    if (!environment) throw fail(404, 'TARGET_NOT_FOUND', '举报对象不存在或已删除');
 
     // 同一用户对同一对象、同一原因只保留一条待处理举报，重复提交直接返回原记录。
     const [existing] = await db.execute(
@@ -306,6 +308,63 @@ function createComplianceService({ db, store }) {
     return { id: report.id, state, resolution: action };
   }
 
+  /// 待审核媒体：用户上传的视频先进入 pending_review，人工复核通过后才进入信息流。
+  async function listPendingMedia({ environment = '', page = 0, size = 20 } = {}) {
+    const filters = ["kind = 'post'", "state = 'pending_review'"];
+    const params = [];
+    if (environment === 'Production' || environment === 'Sandbox') {
+      filters.push('environment = ?');
+      params.push(environment);
+    }
+    const where = 'WHERE ' + filters.join(' AND ');
+    const [counts] = await db.execute(`SELECT COUNT(*) AS n FROM payment_objects ${where}`, params);
+    const limit = Math.max(1, Math.min(100, Number(size) || 20));
+    const offset = Math.max(0, Number(page) || 0) * limit;
+    const [rows] = await db.execute(
+      `SELECT environment, object_id, owner_id, payload, updated_at FROM payment_objects
+       ${where} ORDER BY updated_at ASC LIMIT ${limit} OFFSET ${offset}`,
+      params,
+    );
+    return {
+      items: rows.map((row) => {
+        let payload = {};
+        try { payload = JSON.parse(row.payload); } catch (_) { payload = {}; }
+        return {
+          id: row.object_id,
+          environment: row.environment,
+          userId: row.owner_id,
+          elfId: payload.elfId || '',
+          kind: payload.kind || 'post',
+          body: payload.body || '',
+          videoUrl: payload.videoUrl || null,
+          coverUrl: payload.coverUrl || null,
+          context: payload.context || '',
+          createdAt: payload.createdAt || row.updated_at,
+        };
+      }),
+      total: Number(counts[0]?.n || 0),
+      page: Math.max(0, Number(page) || 0),
+      pageSize: limit,
+    };
+  }
+
+  async function reviewMedia(id, { environment = 'Production', action, reviewer = 'admin', note = '' } = {}) {
+    if (!['approve', 'reject'].includes(action)) throw fail(400, 'INVALID_ACTION', '处理动作无效');
+    const env = environment === 'Sandbox' ? 'Sandbox' : 'Production';
+    const [rows] = await db.execute(
+      "SELECT object_id FROM payment_objects WHERE environment = ? AND kind = 'post' AND object_id = ?",
+      [env, id],
+    );
+    if (!rows.length) throw fail(404, 'MEDIA_NOT_FOUND', '内容不存在');
+    const state = action === 'approve' ? '' : 'rejected';
+    await db.execute(
+      'UPDATE payment_objects SET state = ?, updated_at = ? WHERE environment = ? AND kind = ? AND object_id = ?',
+      [state, new Date().toISOString(), env, 'post', id],
+    );
+    // 复核动作由管理后台审计日志记录，这里只回写内容状态。
+    return { id, state: action, reviewer: String(reviewer).slice(0, 64), note: note.slice(0, 500) };
+  }
+
   /// 注销账号：清除个人资料与内容，保留依法必须留存的交易账本。
   async function deleteAccount(user) {
     const purged = { environments: [], objects: 0 };
@@ -336,9 +395,10 @@ function createComplianceService({ db, store }) {
           await tx.remove('elf', elf.id);
         }
 
+        // 交易、收益与提现记录依法留存，不随注销删除；只清除个人内容与关系数据。
         const personalKinds = ['profile', 'book', 'chat', 'follow', 'like', 'collect',
           'watch', 'comment', 'referral', 'notice', 'notice_mark', 'request', 'identity',
-          'identityLock', 'creator_agreement', 'earning', 'withdrawal', 'reconciliation'];
+          'identityLock', 'creator_agreement'];
         for (const kind of personalKinds) {
           await tx.removeBy(kind, { owner: user.id });
         }
@@ -367,7 +427,7 @@ function createComplianceService({ db, store }) {
     await db.execute(
       `UPDATE users SET phone = ?, nickname = '已注销用户', avatar_initial = '注', status = 'deleted'
        WHERE id = ?`,
-      ['deleted_' + user.id, user.id],
+      ['del_' + crypto.createHash('sha256').update(user.id).digest('hex').slice(0, 12), user.id],
     );
     await db.execute(
       'UPDATE refresh_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL',
@@ -379,7 +439,7 @@ function createComplianceService({ db, store }) {
 
   return {
     submitReport, listMine, block, unblock, listBlocks, blockedSets,
-    listReports, resolveReport, deleteAccount,
+    listReports, resolveReport, listPendingMedia, reviewMedia, deleteAccount,
   };
 }
 

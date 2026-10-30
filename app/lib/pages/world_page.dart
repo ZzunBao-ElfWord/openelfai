@@ -98,7 +98,7 @@ class _WorldPageState extends State<WorldPage>
                       child: Column(
                         children: [
                           _header(state),
-                          _tabs(),
+                          _tabs(state),
                           Expanded(
                             child: TabBarView(
                               controller: _tc,
@@ -216,7 +216,7 @@ class _WorldPageState extends State<WorldPage>
     );
   }
 
-  Widget _tabs() {
+  Widget _tabs(AppState state) {
     return TabBar(
       controller: _tc,
       isScrollable: false,
@@ -228,10 +228,10 @@ class _WorldPageState extends State<WorldPage>
       indicatorSize: TabBarIndicatorSize.label,
       indicatorPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
       dividerColor: AppColors.strokeSoft,
-      tabs: const [
-        Tab(text: '为你推荐'),
-        Tab(text: '热门'),
-        Tab(text: '我的 AI'),
+      tabs: [
+        Tab(text: state.personalizedRecommendation ? '为你推荐' : '最新'),
+        const Tab(text: '热门'),
+        const Tab(text: '我的 AI'),
       ],
     );
   }
@@ -388,6 +388,20 @@ class _WorldPageState extends State<WorldPage>
                             ),
                           ),
                         ],
+                        const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 4, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceAlt,
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                          child: Text(
+                            'AI 生成',
+                            style: TextStyle(
+                                fontSize: 9, color: AppColors.textMuted),
+                          ),
+                        ),
                         const Spacer(),
                         Text(
                           p.timeAgo,
@@ -1135,26 +1149,49 @@ class _WorldPageState extends State<WorldPage>
     );
   }
 
+  /// 举报原因是运营可配置的中文文案，提交时映射为服务端枚举。
+  static String _reasonCode(String label) {
+    const rules = <String, List<String>>{
+      'porn': ['色情', '低俗', '裸露'],
+      'violence': ['暴力', '血腥', '恐怖'],
+      'minors': ['未成年', '儿童'],
+      'politics': ['政治', '涉政'],
+      'illegal': ['违法', '毒品', '赌博', '诈骗'],
+      'harassment': ['骚扰', '辱骂', '人身攻击', '霸凌'],
+      'fraud': ['欺诈', '诈骗', '虚假'],
+      'privacy': ['隐私', '人肉', '泄露'],
+    };
+    for (final entry in rules.entries) {
+      if (entry.value.any(label.contains)) return entry.key;
+    }
+    return 'other';
+  }
+
   void _showReportPostSheet(AppState state, ElfPost p) {
     _showReportSheet(
       state: state,
-      targetId: 'post:${p.id}',
+      targetType: 'post',
+      targetId: p.id,
       targetLabel: '一条内容',
+      elfId: p.elfId,
     );
   }
 
   void _showReportCommentSheet(AppState state, PostComment c) {
     _showReportSheet(
       state: state,
-      targetId: 'comment:${c.id}',
+      targetType: 'comment',
+      targetId: c.id,
       targetLabel: '一条评论',
     );
   }
 
   void _showReportSheet({
     required AppState state,
+    required String targetType,
     required String targetId,
     required String targetLabel,
+    String? elfId,
   }) {
     final content = AppContentService.instance.content.value;
     if (!content.flag('app.report.enabled')) {
@@ -1194,11 +1231,19 @@ class _WorldPageState extends State<WorldPage>
                 const SizedBox(height: 10),
                 ...reasons.map(
                   (r) => InkWell(
-                    onTap: () {
-                      state.report(targetId: targetId, reason: r);
+                    onTap: () async {
                       Navigator.of(ctx).pop();
+                      final error = await state.submitReport(
+                        targetType: targetType,
+                        targetId: targetId,
+                        reason: _reasonCode(r),
+                        detail: r,
+                      );
+                      if (!mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('已收到举报，我们会尽快处理（$r）')),
+                        SnackBar(
+                          content: Text(error ?? '已收到举报，我们会尽快处理'),
+                        ),
                       );
                     },
                     child: Padding(
@@ -1211,6 +1256,33 @@ class _WorldPageState extends State<WorldPage>
                     ),
                   ),
                 ),
+                if (elfId != null) ...[
+                  Divider(height: 18, color: AppColors.strokeSoft),
+                  InkWell(
+                    onTap: () async {
+                      Navigator.of(ctx).pop();
+                      final error = await state.blockElf(elfId);
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(error ?? '已拉黑这只 AI，将不再看到它的内容')),
+                      );
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Row(
+                        children: [
+                          Icon(Icons.block, size: 15, color: AppColors.warn),
+                          const SizedBox(width: 6),
+                          Text(
+                            '拉黑这只 AI',
+                            style: TextStyle(
+                                fontSize: 13, color: AppColors.warn),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

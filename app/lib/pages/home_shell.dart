@@ -168,7 +168,7 @@ class _SideRail extends StatelessWidget {
             child: Row(
               children: [
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(32 * 0.222),
                   child: Image.asset('assets/brand/app_icon.png',
                       width: 32, height: 32, fit: BoxFit.cover),
                 ),

@@ -1,6 +1,6 @@
-# Openelf 开放精灵 · Flutter 版
+# OpenElf 开放精灵 · Flutter 版
 
-Openelf AI 应用商店的 Flutter 双端实现，复用 Web 版的 107 款 AI 工具数据与品牌设计风格。
+OpenElf AI 应用商店的 Flutter 双端实现，复用 Web 版的 107 款 AI 工具数据与品牌设计风格。
 
 ## 功能
 
@@ -151,4 +151,4 @@ tools.json 更新后，需要重新构建并部署。数据与代码解耦：
 
 ## 许可证
 
-本项目为 Openelf 开放精灵官方 Flutter 客户端源码。
+本项目为 OpenElf 开放精灵官方 Flutter 客户端源码。

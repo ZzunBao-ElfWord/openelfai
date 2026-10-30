@@ -69,6 +69,8 @@ class _LoginPageState extends State<LoginPage> {
   final _codeCtrl = TextEditingController();
   bool _loading = false;
   bool _sending = false;
+  bool _agreed = false;
+  bool _adult = false;
   int _countdown = 0;
   Timer? _timer;
 
@@ -196,6 +198,18 @@ class _LoginPageState extends State<LoginPage> {
       );
       return;
     }
+    if (!_agreed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请先阅读并同意《用户协议》与《隐私政策》')),
+      );
+      return;
+    }
+    if (!_adult) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('本服务仅向年满 18 周岁的用户开放')),
+      );
+      return;
+    }
     setState(() => _loading = true);
     try {
       final user = await createAuth().loginWithCode(
@@ -222,6 +236,53 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  Widget _policyLink(String label, String slug, String title) {
+    return GestureDetector(
+      onTap: () => _showPolicy(slug, title),
+      child: Text(
+        '《$label》',
+        style: TextStyle(
+          fontSize: 10.5,
+          color: AppColors.cyan,
+          decoration: TextDecoration.underline,
+          decorationColor: AppColors.cyan,
+        ),
+      ),
+    );
+  }
+
+  /// 登录前可查看协议原文，内容由服务端运营配置下发。
+  void _showPolicy(String slug, String title) {
+    final document = AppContentService.instance.content.value.document(slug);
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: Text(title,
+            style: TextStyle(color: AppColors.text, fontSize: 16)),
+        content: SizedBox(
+          width: 520,
+          child: SingleChildScrollView(
+            child: Text(
+              document?.content.trim().isNotEmpty == true
+                  ? document!.content
+                  : '内容加载中，请稍后重试。',
+              style: TextStyle(
+                  fontSize: 12.5, height: 1.7, color: AppColors.textMuted),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text('关闭', style: TextStyle(color: AppColors.cyan)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -243,8 +304,9 @@ class _LoginPageState extends State<LoginPage> {
                 Container(
                   width: 88,
                   height: 88,
+                  clipBehavior: Clip.antiAlias,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(44),
+                    borderRadius: BorderRadius.circular(88 * 0.222),
                     boxShadow: [
                       BoxShadow(
                         color: AppColors.violet.withOpacity(0.34),
@@ -412,10 +474,69 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
-                Text(
-                  '首次登录即视为同意《用户协议》与《隐私政策》',
-                  style: TextStyle(fontSize: 10.5, color: AppColors.textFaint),
+                const SizedBox(height: 12),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: Checkbox(
+                        value: _agreed,
+                        onChanged: (value) =>
+                            setState(() => _agreed = value == true),
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize:
+                            MaterialTapTargetSize.shrinkWrap,
+                        side: BorderSide(color: AppColors.textMuted),
+                        activeColor: AppColors.cyan,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text('我已阅读并同意',
+                              style: TextStyle(
+                                  fontSize: 10.5,
+                                  color: AppColors.textFaint)),
+                          _policyLink('用户协议', 'terms', '用户协议'),
+                          Text('与',
+                              style: TextStyle(
+                                  fontSize: 10.5,
+                                  color: AppColors.textFaint)),
+                          _policyLink('隐私政策', 'privacy', '隐私政策'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: Checkbox(
+                        value: _adult,
+                        onChanged: (value) =>
+                            setState(() => _adult = value == true),
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize:
+                            MaterialTapTargetSize.shrinkWrap,
+                        side: BorderSide(color: AppColors.textMuted),
+                        activeColor: AppColors.cyan,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text('我已年满 18 周岁，并知悉平台含 AI 生成内容',
+                          style: TextStyle(
+                              fontSize: 10.5,
+                              color: AppColors.textFaint)),
+                    ),
+                  ],
                 ),
               ],
             ),
