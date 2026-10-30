@@ -2,7 +2,7 @@
 
 function publicWebCaptcha(settings) {
   const scheme = settings?.schemes?.web;
-  const mode = settings?.webMode || 'off';
+  const mode = (settings?.webMode || 'enforce') === 'off' ? 'off' : 'enforce';
   const configured = Boolean(settings?.enabled && scheme?.appId && scheme?.appKey);
   // 只有显式开启 enforce 时才要求网页端渲染图形验证控件。
   const enabled = configured && mode === 'enforce';

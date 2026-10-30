@@ -75,8 +75,8 @@ module.exports = {
 
   captcha: {
     enabled: bool('ALIYUN_CAPTCHA_ENABLED', false),
-    // 网页端图形验证：off（默认，仅靠手机号/IP 频控）/ enforce（必须带阿里云 H5 证明）。
-    webMode: (process.env.WEB_CAPTCHA_MODE || 'off').trim().toLowerCase(),
+    // Preserve the enabled business flow; omission must never disable H5 checks.
+    webMode: (process.env.WEB_CAPTCHA_MODE || 'enforce').trim().toLowerCase(),
     allowOnError: bool('ALIYUN_CAPTCHA_ALLOW_ON_ERROR', true),
     endpoint: process.env.ALIYUN_CAPTCHA_ENDPOINT || 'https://captcha.alicaptcha.com/validate',
     timeoutMs: Number(process.env.ALIYUN_CAPTCHA_TIMEOUT_MS || 8000),

@@ -20,7 +20,7 @@ function clean(value, maxLength = 8192) {
 }
 
 function webCaptchaEnforced(settings) {
-  return (settings?.webMode || 'off') === 'enforce';
+  return (settings?.webMode || 'enforce') !== 'off';
 }
 
 function createCaptchaVerifier(settings, options = {}) {
