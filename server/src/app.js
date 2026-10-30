@@ -1028,6 +1028,11 @@ async function buildApp(options = {}) {
 
   // —— 平台余额充值（支付宝 App 支付） ——
 
+  require('./platform/web_topup').registerWebTopup(app, { db, authenticate,
+    store: paymentStore, realname, identityPolicy, payout, payoutQuery,
+    settings: options.webTopupSettings, gateway: options.webPaymentGateway,
+    service: options.webTopupService, legacy: options.webLegacy });
+
   app.get('/api/v1/platform/topup/products', async (request) => {
     await authenticate(request);
     return platformTopup.products();

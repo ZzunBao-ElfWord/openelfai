@@ -7,7 +7,7 @@ import 'package:openelf/pages/privacy_policy_page.dart';
 void main() {
   test('原政策条款保留，并增加可选推送SDK披露', () {
     expect(PrivacyPolicy.sourceUrl, 'https://openelfai.com/privacy/');
-    expect(PrivacyPolicy.updatedAt, '2026 年 10 月 29 日');
+    expect(PrivacyPolicy.updatedAt, '2026 年 10 月 30 日');
     expect(PrivacyPolicy.sections.length, 10);
     final text = PrivacyPolicy.sections
         .map((s) => '${s.title}\n${s.paragraphs.join('\n')}')
@@ -21,6 +21,7 @@ void main() {
       '已完成的交易与依法需留存的记录除外',
       '极光推送 SDK',
       '消息通知不是使用登录、浏览等基础功能的必要条件',
+      '链接／海报分享不接入 B站或 WorkBuddy 账号授权',
     ]) {
       expect(text, contains(required));
     }

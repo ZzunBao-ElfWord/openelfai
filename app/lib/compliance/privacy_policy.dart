@@ -1,8 +1,8 @@
-/// Bundled policy plus the optional push-SDK disclosure added on 2026-10-29.
+/// Bundled policy with optional push and user-directed poster-saving disclosures.
 /// Publish corresponding website updates before release; not a legal approval.
 class PrivacyPolicy {
   static const sourceUrl = 'https://openelfai.com/privacy/';
-  static const updatedAt = '2026 年 10 月 29 日';
+  static const updatedAt = '2026 年 10 月 30 日';
   static const introduction = '本政策说明开放精灵（OpenElf）在官网、App 与开放平台中如何处理你的个人信息。'
       '我们遵循最小必要原则，只收集提供服务所必需的信息。';
 
@@ -16,6 +16,7 @@ class PrivacyPolicy {
       '• 设备与日志：IP 地址、浏览器类型、操作系统、访问时间、错误日志与安全审计记录。',
     ]),
     PrivacyPolicySection('信息如何被使用', [
+      '• 你主动复制内容链接、保存分享海报或打开系统分享时，我们仅处理当前所选卡片与摘要。保存海报时，iOS 仅请求添加照片权限；Android 10 及以上仅添加本应用生成的图片，旧版安卓由你选择保存位置，不读取其他照片。链接／海报分享不接入 B站或 WorkBuddy 账号授权，也不会自动发布或投稿。',
       '• 完成注册登录、实名核验与账号安全校验。',
       '• 生成并展示 AI 内容，调用大模型完成对话与创作。',
       '• 进行计费、结算、提现与对账。',

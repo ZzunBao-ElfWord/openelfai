@@ -31,7 +31,7 @@
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>用于选择身份证照片完成实名认证；仅在你选择抖音或快手分享并同意后，保存并读取本次分享卡片。</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>仅在你选择抖音或快手分享并同意后，将本次分享卡片保存到系统相册。</string>
+	<string>用于在你点击“保存海报”时添加本次分享图片；或在你选择抖音、快手分享并同意后，将本次分享卡片保存到系统相册。</string>
 	<key>DouyinAppID</key>
 	<string>awf8w18qtnqq1kum</string>
 	<key>LSApplicationQueriesSchemes</key>

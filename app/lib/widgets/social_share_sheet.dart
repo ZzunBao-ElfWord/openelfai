@@ -2,6 +2,31 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../sharing/social_share.dart';
 
+/// Manual material sharing, independent of vendor SDK/OAuth capabilities.
+Future<ShareAction?> showManualShareOptions(
+        BuildContext context, SocialChannel channel) =>
+    showDialog<ShareAction>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('分享链接／海报'),
+        content: Text(
+            '复制链接或保存海报后，可到 ${channel.label} 自行使用。也可打开系统分享面板，是否显示 ${channel.label} 取决于设备和该客户端的支持情况。不自动发布或绑定账号。'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context), child: const Text('取消')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, ShareAction.copyLink),
+              child: const Text('复制链接')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, ShareAction.image),
+              child: const Text('海报预览')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, ShareAction.system),
+              child: const Text('系统分享')),
+        ],
+      ),
+    );
+
 Future<bool> confirmKwaiShare(BuildContext context) async =>
     await showDialog<bool>(
         context: context,
@@ -75,7 +100,8 @@ enum ShareAction {
   xiaohongshu,
   douyin,
   wechat,
-  kuaishou
+  kuaishou,
+  workbuddy
 }
 
 extension ShareActionChannel on ShareAction {
@@ -85,6 +111,7 @@ extension ShareActionChannel on ShareAction {
         ShareAction.douyin => SocialChannel.douyin,
         ShareAction.wechat => SocialChannel.wechat,
         ShareAction.kuaishou => SocialChannel.kuaishou,
+        ShareAction.workbuddy => SocialChannel.workbuddy,
         _ => null,
       };
 }
@@ -107,7 +134,7 @@ class _SocialShareSheetState extends State<SocialShareSheet> {
 
   Future<Map<SocialChannel, ShareAvailability>> _load() async => {
         for (final c in SocialChannel.values)
-          c: await widget.service.availability(c),
+          if (!c.usesManualMaterials) c: await widget.service.availability(c),
       };
   @override
   Widget build(BuildContext context) => SafeArea(
@@ -142,7 +169,8 @@ class _SocialShareSheetState extends State<SocialShareSheet> {
                                   ShareAction.douyin,
                                   ShareAction.kuaishou,
                                   ShareAction.xiaohongshu,
-                                  ShareAction.bilibili
+                                  ShareAction.bilibili,
+                                  ShareAction.workbuddy
                                 ])
                                   _item(context,
                                       action: action,
@@ -155,6 +183,8 @@ class _SocialShareSheetState extends State<SocialShareSheet> {
                                           Icons.videocam_outlined,
                                         ShareAction.xiaohongshu =>
                                           Icons.auto_stories,
+                                        ShareAction.workbuddy =>
+                                          Icons.workspaces_outline,
                                         _ => Icons.ondemand_video
                                       },
                                       color: switch (action) {
@@ -166,18 +196,25 @@ class _SocialShareSheetState extends State<SocialShareSheet> {
                                           const Color(0xffff6600),
                                         ShareAction.xiaohongshu =>
                                           const Color(0xffff2442),
+                                        ShareAction.workbuddy =>
+                                          const Color(0xff2563eb),
                                         _ => const Color(0xff00a1d6)
                                       },
-                                      status: switch (
-                                          snapshot.data?[action.channel]) {
-                                        ShareAvailability.ready => '官方分享',
-                                        ShareAvailability.notConfigured =>
-                                          '未配置',
-                                        ShareAvailability.integrationPending =>
-                                          '待接入',
-                                        ShareAvailability.notInstalled => '未安装',
-                                        null => '检查中',
-                                      }),
+                                      status: action
+                                              .channel!.usesManualMaterials
+                                          ? '链接／海报'
+                                          : switch (
+                                              snapshot.data?[action.channel]) {
+                                              ShareAvailability.ready => '官方分享',
+                                              ShareAvailability.notConfigured =>
+                                                '未配置',
+                                              ShareAvailability
+                                                    .integrationPending =>
+                                                '待接入',
+                                              ShareAvailability.notInstalled =>
+                                                '未安装',
+                                              null => '检查中',
+                                            }),
                               ]))),
                   const SizedBox(height: 16),
                   const Divider(),

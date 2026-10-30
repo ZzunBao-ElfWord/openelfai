@@ -18,9 +18,14 @@ function prepare(original) {
   for (const [file, symbol] of [['alipay_gateway', 'createAlipayGateway'], ['alipay', 'createAlipayService']]) {
     if (!app.includes(`require('./${file}')`)) app = app.replace("const config = require('./config');", `const config = require('./config');\nconst { ${symbol} } = require('./${file}');`);
   }
-  const setup = section(desiredApp, '  const androidCommerce =', '\n\n  const app = Fastify');
+  // Only replace Android initialization, not following independent web/API
+  // top-up initialization. Copying to Fastify duplicates platformTopup on rerun.
+  const setup = section(desiredApp, '  const androidCommerce =',
+    desiredApp.includes('  // 平台余额充值：') ? '\n  // 平台余额充值：' : '\n\n  const app = Fastify');
   if (app.includes('  const androidCommerce =')) {
-    const pattern = /  const androidCommerce = createCommerceService\([\s\S]*?\n    gateway: options\.alipayGateway \|\| createAlipayGateway\(config\.alipay\) }\);/g;
+    // Explicit known layouts only: legacy inline gateway or shared gateway,
+    // with the documented optional identity and payout-query arguments.
+    const pattern = /  const androidCommerce = createCommerceService\(\{ store: paymentStore, settings: config\.androidCommerce, payout(?:, payoutQuery)?(?:,\s*realname, identityPolicy)? \}\);\r?\n  const alipay = createAlipayService\(\{ store: paymentStore, settings: config\.alipay,\r?\n    commerceSettings: config\.androidCommerce,\r?\n    gateway: (?:options\.alipayGateway \|\| createAlipayGateway\(config\.alipay\)|alipayGateway) \}\);/g;
     if ([...app.matchAll(pattern)].length !== 1) throw new Error('已有安卓初始化无法识别');
     app = app.replace(pattern, setup);
   } else {

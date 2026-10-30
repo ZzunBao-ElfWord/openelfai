@@ -9,7 +9,7 @@ import '../models/elf.dart';
 import '../theme.dart';
 import '../sharing/social_share.dart';
 import '../sharing/douyin_share_adapter.dart';
-import '../sharing/bilibili_share_adapter.dart';
+import '../sharing/poster_saver.dart';
 import '../sharing/wechat_share_adapter.dart';
 import '../sharing/kwai_share_adapter.dart';
 import 'social_share_sheet.dart';
@@ -237,7 +237,6 @@ class ShareHelper {
     SocialChannel.kuaishou: const KwaiShareAdapter(),
     SocialChannel.wechat: const WechatShareAdapter(),
     SocialChannel.douyin: DouyinShareAdapter(),
-    SocialChannel.bilibili: BilibiliShareAdapter(),
   });
   static Object? _activeSession;
 
@@ -257,6 +256,10 @@ class ShareHelper {
         isScrollControlled: true,
         builder: (_) => SocialShareSheet(service: _service),
       );
+      if (!context.mounted || action == null) return;
+      if (action.channel?.usesManualMaterials == true) {
+        action = await showManualShareOptions(context, action.channel!);
+      }
       if (!context.mounted || action == null) return;
       final channel = action.channel;
       if (channel != null &&
@@ -367,22 +370,7 @@ class ShareHelper {
       final text = '${elf.name} 正在 OpenElf 世界里生长，来注视它 → $link';
       if (preview) {
         final share = await showDialog<bool>(
-            context: context,
-            builder: (context) => Dialog(
-                  child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(mainAxisSize: MainAxisSize.min, children: [
-                        const Text('分享图预览'),
-                        const SizedBox(height: 12),
-                        Flexible(child: Image.memory(png, fit: BoxFit.contain)),
-                        TextButton(
-                            onPressed: () => Navigator.pop(context, true),
-                            child: const Text('通过系统分享或保存')),
-                        TextButton(
-                            onPressed: () => Navigator.pop(context, false),
-                            child: const Text('关闭')),
-                      ])),
-                ));
+            context: context, builder: (context) => _PosterPreview(png: png));
         if (share != true || !context.mounted) return;
       }
       if (channel != null) {
@@ -422,4 +410,68 @@ class ShareHelper {
       if (!overlayRemoved) entry.remove();
     }
   }
+}
+
+class _PosterPreview extends StatefulWidget {
+  final Uint8List png;
+  const _PosterPreview({required this.png});
+  @override
+  State<_PosterPreview> createState() => _PosterPreviewState();
+}
+
+class _PosterPreviewState extends State<_PosterPreview> {
+  bool _saving = false;
+  String? _message;
+
+  Future<void> _save() async {
+    if (_saving) return;
+    setState(() {
+      _saving = true;
+      _message = null;
+    });
+    String? message;
+    try {
+      message = switch (await PosterSaver.save(widget.png)) {
+        PosterSaveResult.gallery => '海报已保存到相册，请自行选择应用使用',
+        PosterSaveResult.file => '海报已保存到所选位置，可自行选择发布',
+        PosterSaveResult.cancelled => null,
+      };
+    } on PlatformException catch (error) {
+      message = error.code == 'PHOTO_PERMISSION_DENIED'
+          ? '未获得添加照片权限，可在系统设置中允许，或使用系统分享'
+          : '海报保存失败，请重试或使用系统分享';
+    } catch (_) {
+      message = '海报保存失败，请重试或使用系统分享';
+    }
+    if (mounted) {
+      setState(() {
+        _saving = false;
+        _message = message;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Dialog(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Text('分享图预览'),
+            const SizedBox(height: 12),
+            Flexible(child: Image.memory(widget.png, fit: BoxFit.contain)),
+            if (_message != null)
+              Text(_message!, key: const ValueKey('poster-save-status')),
+            if (PosterSaver.supported)
+              TextButton(
+                  onPressed: _saving ? null : _save,
+                  child: Text(_saving ? '正在保存…' : '保存海报')),
+            TextButton(
+                onPressed: _saving ? null : () => Navigator.pop(context, true),
+                child: const Text('系统分享')),
+            TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('关闭')),
+          ]),
+        ),
+      );
 }

@@ -6,12 +6,15 @@ import io.flutter.plugin.common.MethodChannel
 import com.alipay.sdk.app.EnvUtils
 import com.alipay.sdk.app.PayTask
 import java.util.concurrent.atomic.AtomicBoolean
+import android.content.Intent
 
 class MainActivity : FlutterActivity() {
     private val paying = AtomicBoolean(false)
+    private var posterSaver: PosterSaver? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        posterSaver = PosterSaver(this, flutterEngine.dartExecutor.binaryMessenger)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "openelf/alipay").setMethodCallHandler { call, result ->
             if (call.method != "pay") {
                 result.notImplemented()
@@ -37,5 +40,10 @@ class MainActivity : FlutterActivity() {
                 } finally { paying.set(false) }
             }.start()
         }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        posterSaver?.handleActivityResult(requestCode, resultCode, data)
     }
 }

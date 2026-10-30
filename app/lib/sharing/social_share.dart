@@ -2,7 +2,14 @@ import 'dart:typed_data';
 import 'wechat_share_config.dart';
 import 'pending_share_config.dart';
 
-enum SocialChannel { bilibili, xiaohongshu, douyin, wechat, kuaishou }
+enum SocialChannel {
+  bilibili,
+  xiaohongshu,
+  douyin,
+  wechat,
+  kuaishou,
+  workbuddy
+}
 
 enum ShareAvailability {
   notConfigured,
@@ -18,12 +25,16 @@ enum WechatShareScene { session, timeline }
 enum SocialShareOutcome { handedOff, cancelled, failed }
 
 extension SocialChannelLabel on SocialChannel {
+  bool get usesManualMaterials =>
+      this == SocialChannel.bilibili || this == SocialChannel.workbuddy;
+
   String get label => switch (this) {
         SocialChannel.bilibili => '哔哩哔哩',
         SocialChannel.xiaohongshu => '小红书',
         SocialChannel.douyin => '抖音',
         SocialChannel.wechat => '微信',
         SocialChannel.kuaishou => '快手',
+        SocialChannel.workbuddy => 'WorkBuddy',
       };
 }
 

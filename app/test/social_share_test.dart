@@ -49,9 +49,9 @@ SocialShareContent content({String url = 'https://openelfai.com/e/?id=demo'}) =>
         png: Uint8List.fromList([1, 2, 3]));
 
 void main() {
-  test('五渠道名称与路由一一对应，不伪造平台能力', () {
+  test('六渠道名称与路由一一对应，不伪造平台能力', () {
     expect(SocialChannel.values.map((v) => v.label),
-        ['哔哩哔哩', '小红书', '抖音', '微信', '快手']);
+        ['哔哩哔哩', '小红书', '抖音', '微信', '快手', 'WorkBuddy']);
     for (final action in ShareAction.values.where((a) => a.channel != null)) {
       expect(action.channel!.name, action.name);
     }
@@ -122,7 +122,7 @@ void main() {
         throwsArgumentError);
   });
 
-  testWidgets('渠道面板展示五平台和系统/复制选项，未配置有明确提示', (tester) async {
+  testWidgets('渠道面板展示六平台，手动素材渠道不冒充官方集成', (tester) async {
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
             body: SocialShareSheet(
@@ -132,142 +132,209 @@ void main() {
     for (final channel in SocialChannel.values) {
       expect(find.text(channel.label), findsOneWidget);
     }
-    expect(find.text('未配置'), findsNWidgets(5));
+    expect(find.text('未配置'), findsNWidgets(4));
+    expect(find.text('链接／海报'), findsNWidgets(2));
     expect(find.text('更多分享'), findsOneWidget);
     expect(find.text('生成分享图'), findsOneWidget);
     expect(find.text('复制链接'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('两端共享分享、取消及划掉后重开，不自动上传', (tester) async {
-    final elf = Elf(
-        id: 'demo',
-        serial: '#001',
-        name: '演示AI',
-        initial: '演',
-        ownerId: 'owner',
-        ownerLabel: '演示',
-        isMine: false,
-        generation: 1,
-        edition: '初版',
-        persona: '人设',
-        fear: '',
-        habit: '',
-        status: ElfStatus.active,
-        followers: 0,
-        echo: 0,
-        works: 0,
-        attention: 0,
-        baseCapacity: 2,
-        learnedSkills: [],
-        today: [],
-        relations: []);
-    final copies = <String>[];
-    // This test verifies fallback UI, independently of production AppID and
-    // the device's installed apps. Never send real SDK calls from widget tests.
-    const wechatChannel = MethodChannel('openelf/wechat_share');
-    tester.binding.defaultBinaryMessenger
-        .setMockMethodCallHandler(wechatChannel, (_) async => 'notInstalled');
-    addTearDown(() => tester.binding.defaultBinaryMessenger
-        .setMockMethodCallHandler(wechatChannel, null));
-    tester.binding.defaultBinaryMessenger
-        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
-      if (call.method == 'Clipboard.setData') {
-        copies.add((call.arguments as Map)['text'] as String);
+  for (final manualChannel in [
+    SocialChannel.bilibili,
+    SocialChannel.workbuddy
+  ]) {
+    testWidgets('${manualChannel.label}两端共享分享、取消及划掉后重开，不自动上传', (tester) async {
+      final elf = Elf(
+          id: 'demo',
+          serial: '#001',
+          name: '演示AI',
+          initial: '演',
+          ownerId: 'owner',
+          ownerLabel: '演示',
+          isMine: false,
+          generation: 1,
+          edition: '初版',
+          persona: '人设',
+          fear: '',
+          habit: '',
+          status: ElfStatus.active,
+          followers: 0,
+          echo: 0,
+          works: 0,
+          attention: 0,
+          baseCapacity: 2,
+          learnedSkills: [],
+          today: [],
+          relations: []);
+      final copies = <String>[];
+      const posterChannel = MethodChannel('openelf/poster');
+      String posterResult = 'gallery';
+      bool posterDenied = false;
+      var posterSaves = 0;
+      tester.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(posterChannel, (call) async {
+        expect(call.method, 'save');
+        expect((call.arguments as Map)['png'], isNotEmpty);
+        posterSaves++;
+        if (posterDenied) {
+          throw PlatformException(code: 'PHOTO_PERMISSION_DENIED');
+        }
+        return posterResult;
+      });
+      addTearDown(() => tester.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(posterChannel, null));
+      // This test verifies fallback UI, independently of production AppID and
+      // the device's installed apps. Never send real SDK calls from widget tests.
+      const wechatChannel = MethodChannel('openelf/wechat_share');
+      tester.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(wechatChannel, (_) async => 'notInstalled');
+      addTearDown(() => tester.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(wechatChannel, null));
+      tester.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copies.add((call.arguments as Map)['text'] as String);
+        }
+        return null;
+      });
+      addTearDown(() => tester.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null));
+      await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+              body: Builder(
+                  builder: (context) => TextButton(
+                      onPressed: () => ShareHelper.shareElf(context, elf),
+                      child: const Text('分享'))))));
+      await tester.tap(find.text('分享'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('share-wechat')));
+      await tester.pumpAndSettle();
+      expect(find.text('微信暂不可用'), findsOneWidget);
+      expect(copies, isEmpty);
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      expect(copies, isEmpty);
+      await tester.tap(find.text('分享'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(ValueKey('share-${manualChannel.name}')));
+      await tester.pumpAndSettle();
+      expect(find.text('分享链接／海报'), findsOneWidget);
+      expect(find.text('哔哩哔哩暂不可用'), findsNothing);
+      await tester.tap(find.text('复制链接'));
+      await tester.pumpAndSettle();
+      expect(copies, [shareLinkFor(elf)]);
+      expect(find.text('链接已复制，请自行选择应用发送'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.text('分享'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(ValueKey('share-${manualChannel.name}')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      expect(posterSaves, 0);
+      await tester.tap(find.text('分享'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(ValueKey('share-${manualChannel.name}')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('海报预览'));
+      await tester.pumpAndSettle();
+      await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 100)));
+      await tester.pumpAndSettle();
+      expect(find.text('保存海报'), findsOneWidget);
+      expect(posterSaves, 0); // Preview must never request photo permission.
+      posterDenied = true;
+      await tester.tap(find.text('保存海报'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('未获得添加照片权限'), findsOneWidget);
+      expect(find.textContaining('海报已保存'), findsNothing);
+      posterDenied = false;
+      posterResult = 'cancelled';
+      await tester.tap(find.text('保存海报'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('海报已保存'), findsNothing);
+      posterResult = 'file';
+      await tester.tap(find.text('保存海报'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('海报已保存到所选位置'), findsOneWidget);
+      posterResult = 'gallery';
+      await tester.tap(find.text('保存海报'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('海报已保存到相册'), findsOneWidget);
+      expect(posterSaves, 4);
+      await tester.tap(find.text('关闭'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('分享'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('生成分享图'));
+      await tester.pumpAndSettle();
+      await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 100)));
+      await tester.pumpAndSettle();
+      expect(find.text('分享图预览'), findsOneWidget);
+      expect(find.byType(Image), findsOneWidget);
+      await tester.tap(find.text('关闭'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      // All ordinary dismissal paths must release the panel lock.
+      for (final dismissal in ['drag', 'barrier', 'close']) {
+        await tester.tap(find.text('分享'));
+        await tester.pumpAndSettle();
+        expect(find.text('分享至'), findsOneWidget);
+        if (dismissal == 'drag') {
+          await tester.drag(find.text('分享至'), const Offset(0, 600));
+        } else if (dismissal == 'barrier') {
+          await tester.tapAt(const Offset(5, 5));
+        } else {
+          await tester.tap(find.byKey(const ValueKey('share-close')));
+        }
+        await tester.pumpAndSettle();
+        expect(find.text('分享至'), findsNothing);
       }
-      return null;
-    });
-    addTearDown(() => tester.binding.defaultBinaryMessenger
-        .setMockMethodCallHandler(SystemChannels.platform, null));
-    await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-            body: Builder(
-                builder: (context) => TextButton(
-                    onPressed: () => ShareHelper.shareElf(context, elf),
-                    child: const Text('分享'))))));
-    await tester.tap(find.text('分享'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('share-wechat')));
-    await tester.pumpAndSettle();
-    expect(find.text('微信暂不可用'), findsOneWidget);
-    expect(copies, isEmpty);
-    await tester.tap(find.text('取消'));
-    await tester.pumpAndSettle();
-    expect(copies, isEmpty);
-    await tester.tap(find.text('分享'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('share-bilibili')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('复制链接'));
-    await tester.pumpAndSettle();
-    expect(copies, [shareLinkFor(elf)]);
-    expect(find.text('链接已复制，请自行选择应用发送'), findsOneWidget);
-    expect(tester.takeException(), isNull);
 
-    await tester.tap(find.text('分享'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('生成分享图'));
-    await tester.pumpAndSettle();
-    await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 100)));
-    await tester.pumpAndSettle();
-    expect(find.text('分享图预览'), findsOneWidget);
-    expect(find.byType(Image), findsOneWidget);
-    await tester.tap(find.text('关闭'));
-    await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
-
-    // All ordinary dismissal paths must release the panel lock.
-    for (final dismissal in ['drag', 'barrier', 'close']) {
+      // Reproduce a native sheet swiped away without a completion callback.
+      final previousSharePlatform = SharePlatform.instance;
+      final pending = PendingSystemShare();
+      SharePlatform.instance = pending;
+      addTearDown(() => SharePlatform.instance = previousSharePlatform);
+      await tester.tap(find.text('分享'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(ValueKey('share-${manualChannel.name}')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('系统分享'));
+      await tester.pumpAndSettle();
+      await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 100)));
+      await tester.pumpAndSettle();
+      expect(pending.calls, 1);
+      expect(pending.result.isCompleted, isFalse);
       await tester.tap(find.text('分享'));
       await tester.pumpAndSettle();
       expect(find.text('分享至'), findsOneWidget);
-      if (dismissal == 'drag') {
-        await tester.drag(find.text('分享至'), const Offset(0, 600));
-      } else if (dismissal == 'barrier') {
-        await tester.tapAt(const Offset(5, 5));
-      } else {
-        await tester.tap(find.byKey(const ValueKey('share-close')));
-      }
+      // A late callback for the old native sheet cannot unlock the new panel.
+      pending.result
+          .complete(const ShareResult('', ShareResultStatus.dismissed));
       await tester.pumpAndSettle();
-      expect(find.text('分享至'), findsNothing);
-    }
+      expect(find.text('分享至'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('share-close')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('分享'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('复制链接'));
+      await tester.pumpAndSettle();
+      expect(copies.length, 2);
 
-    // Reproduce a native sheet swiped away without a completion callback.
-    final previousSharePlatform = SharePlatform.instance;
-    final pending = PendingSystemShare();
-    SharePlatform.instance = pending;
-    addTearDown(() => SharePlatform.instance = previousSharePlatform);
-    await tester.tap(find.text('分享'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('更多分享'));
-    await tester.pumpAndSettle();
-    await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 100)));
-    await tester.pumpAndSettle();
-    expect(pending.calls, 1);
-    expect(pending.result.isCompleted, isFalse);
-    await tester.tap(find.text('分享'));
-    await tester.pumpAndSettle();
-    expect(find.text('分享至'), findsOneWidget);
-    // A late callback for the old native sheet cannot unlock the new panel.
-    pending.result.complete(const ShareResult('', ShareResultStatus.dismissed));
-    await tester.pumpAndSettle();
-    expect(find.text('分享至'), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('share-close')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('分享'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('复制链接'));
-    await tester.pumpAndSettle();
-    expect(copies.length, 2);
-
-    await tester.pumpWidget(MaterialApp(
-        home: Scaffold(body: ShareCard(elf: elf, promotional: false))));
-    expect(find.text('内容由 AI 生成'), findsOneWidget);
-    expect(find.text('OpenElf'), findsNothing);
-    expect(find.text(sharePathFor(elf)), findsNothing);
-  },
-      variant:
-          const TargetPlatformVariant({TargetPlatform.android, TargetPlatform.iOS}));
+      await tester.pumpWidget(MaterialApp(
+          home: Scaffold(body: ShareCard(elf: elf, promotional: false))));
+      expect(find.text('内容由 AI 生成'), findsOneWidget);
+      expect(find.text('OpenElf'), findsNothing);
+      expect(find.text(sharePathFor(elf)), findsNothing);
+    },
+        variant: const TargetPlatformVariant(
+            {TargetPlatform.android, TargetPlatform.iOS}));
+  }
 }

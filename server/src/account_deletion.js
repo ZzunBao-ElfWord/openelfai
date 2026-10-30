@@ -23,15 +23,24 @@ async function deleteAccount(db, userId) {
     // Never silently discard unsettled money, liabilities or an in-flight payout.
     const [[wallet]] = await tx.execute(
       'SELECT balance_micro, frozen_micro FROM platform_wallets WHERE user_id = ? FOR UPDATE', [userId]);
+    // Diamonds are not platform API credit. Lock both ledgers before deleting
+    // identity/session data; never make remaining paid assets inaccessible.
+    const [diamonds] = await tx.execute(
+      'SELECT diamonds FROM user_wallets WHERE user_id = ? FOR UPDATE', [userId]);
+    const [sandboxDiamonds] = await tx.execute(
+      'SELECT diamonds FROM apple_iap_sandbox_wallets WHERE user_id = ? FOR UPDATE', [userId]);
     const [meta] = await tx.execute('SELECT * FROM payment_wallet_meta WHERE user_id = ? FOR UPDATE', [userId]);
     const [orders] = await tx.execute(
       "SELECT id FROM platform_topup_orders WHERE user_id = ? AND status NOT IN ('paid', 'closed') FOR UPDATE", [userId]);
     const [pending] = await tx.execute(
       `SELECT kind FROM payment_objects WHERE owner_id = ? AND
-       ((kind IN ('withdrawal', 'alipay_order', 'web_alipay_order', 'web2_alipay_order')
+       ((kind = 'withdrawal'
+         AND state NOT IN ('paid', 'closed', 'rejected', 'cancelled', 'succeeded', 'refunded', 'failed'))
+        OR (kind IN ('alipay_order', 'web_alipay_order', 'web2_alipay_order')
          AND state NOT IN ('paid', 'closed', 'rejected', 'cancelled', 'succeeded', 'refunded'))
         OR (kind = 'earning' AND state = 'pending')) FOR UPDATE`, [userId]);
     if (Number(wallet?.balance_micro || 0) || Number(wallet?.frozen_micro || 0)
+      || [...diamonds, ...sandboxDiamonds].some(row => Number(row.diamonds || 0) !== 0)
       || meta.some((r) => ['refund_debt', 'pending_cents', 'available_cents'].some((k) => Number(r[k] || 0)))
       || orders.length || pending.length) {
       throw fail(409, 'ACCOUNT_UNSETTLED', '账号存在余额、待确认订单或未结算收益，请先完成结算后注销');

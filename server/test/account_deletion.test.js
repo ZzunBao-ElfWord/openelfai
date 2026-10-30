@@ -3,7 +3,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { cleanupDeletedAccount, deleteAccount, registerAccountDeletion, PERSONAL_KINDS } = require('../src/account_deletion');
 
-function fixture({ balance = 0, meta = [], orders = [], pending = [], active = true, breakAt = '' } = {}) {
+function fixture({ balance = 0, diamonds = 0, sandboxDiamonds = 0, meta = [], orders = [], pending = [], active = true, breakAt = '' } = {}) {
   const calls = [];
   const tx = {
     async beginTransaction() { calls.push(['begin']); },
@@ -15,9 +15,20 @@ function fixture({ balance = 0, meta = [], orders = [], pending = [], active = t
       if (breakAt && sql.includes(breakAt)) throw new Error('db unavailable');
       if (sql.startsWith('SELECT * FROM users')) return [[{ id: 'old', phone: '13800000000', status: active ? 'active' : 'deleted' }]];
       if (sql.includes('SELECT balance_micro')) return [[{ balance_micro: balance, frozen_micro: 0 }]];
+      if (sql.includes('SELECT diamonds FROM user_wallets')) return [[{ diamonds }]];
+      if (sql.includes('SELECT diamonds FROM apple_iap_sandbox_wallets')) return [[{ diamonds: sandboxDiamonds }]];
       if (sql.startsWith('SELECT * FROM payment_wallet_meta')) return [meta];
       if (sql.startsWith('SELECT id FROM platform_topup_orders')) return [orders];
-      if (sql.startsWith('SELECT kind')) return [pending];
+      if (sql.startsWith('SELECT kind')) return [pending.filter(row => {
+        if (!row.state) return true;
+        if (row.kind === 'earning') return row.state === 'pending';
+        // Emulate the exact terminal-state list selected by the SQL, so adding
+        // failed to unrelated payment kinds cannot silently weaken this test.
+        const part = row.kind === 'withdrawal'
+          ? /kind = 'withdrawal'\s+AND state NOT IN \(([^)]+)\)/.exec(sql)
+          : /kind IN \([^)]+\)\s+AND state NOT IN \(([^)]+)\)/.exec(sql);
+        return !part || !part[1].includes("'" + row.state + "'");
+      })];
       return [{ affectedRows: 1 }];
     },
   };
@@ -43,12 +54,36 @@ test('注销事务清个人资料、所有会话和API密钥；保留交易、�
 });
 
 test('未结算余额、收益、债务或不确定订单均拒绝注销且回滚', async () => {
-  for (const options of [{ balance: 1 }, { meta: [{ available_cents: 1 }] },
+  for (const options of [{ balance: 1 }, { diamonds: 100 }, { sandboxDiamonds: 1 }, { meta: [{ available_cents: 1 }] },
     { meta: [{ refund_debt: 1 }] }, { orders: [{ id: 'pending' }] }, { pending: [{ kind: 'withdrawal' }] }]) {
     const f = fixture(options);
     await assert.rejects(deleteAccount(f.db, 'old'), { code: 'ACCOUNT_UNSETTLED' });
     assert.ok(f.calls.some(([s]) => s === 'rollback'));
     assert.ok(!f.calls.some(([s]) => s.startsWith('UPDATE users') || s === 'commit'));
+  }
+});
+
+test('zero balances with terminal failed withdrawal permit deletion; uncertain transfers remain blocked', async () => {
+  const ended = fixture({ pending: [{ kind: 'withdrawal', state: 'failed' }] });
+  assert.deepEqual(await deleteAccount(ended.db, 'old'), { deleted: true });
+  for (const state of ['pending_review', 'paying', 'pending_reconciliation', 'unknown']) {
+    const f = fixture({ pending: [{ kind: 'withdrawal', state }] });
+    await assert.rejects(deleteAccount(f.db, 'old'), { code: 'ACCOUNT_UNSETTLED' });
+    assert.ok(!f.calls.some(([s]) => s === 'commit'));
+  }
+  const failedPayment = fixture({ pending: [{ kind: 'web2_alipay_order', state: 'failed' }] });
+  await assert.rejects(deleteAccount(failedPayment.db, 'old'), { code: 'ACCOUNT_UNSETTLED' });
+});
+
+test('diamond balance checks lock both wallets and fail closed on database error', async () => {
+  const empty = fixture();
+  await deleteAccount(empty.db, 'old');
+  for (const table of ['user_wallets', 'apple_iap_sandbox_wallets']) {
+    assert.ok(empty.calls.some(([sql, params]) => sql === `SELECT diamonds FROM ${table} WHERE user_id = ? FOR UPDATE` && params[0] === 'old'));
+    const f = fixture({ breakAt: 'SELECT diamonds FROM ' + table });
+    await assert.rejects(deleteAccount(f.db, 'old'));
+    assert.ok(f.calls.some(([sql]) => sql === 'rollback'));
+    assert.ok(!f.calls.some(([sql]) => sql === 'commit'));
   }
 });
 
