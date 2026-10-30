@@ -37,12 +37,14 @@ android {
         // is added automatically by Flutter. (https://developer.android.com/studio/build/configure-apk-splits#configure-APK-versions)
         // You can force using the value of versionCode by specifying the `-P force-version-code-ignoring-abi=true`
         // flag during build.
-        // Display builds restart after 20; Android update codes must not reset.
-        // 1.0.4 (20) -> code 20; 1.0.5 (1) -> code 21.
+        // User policy: next release is 1.0.4 (22), then roll over after build 99.
+        // Already delivered 1.0.5 (2) used code 22. The migration offset keeps
+        // Android updates monotonic: 1.0.4 (22) -> 23; (99) -> 100;
+        // 1.0.5 (1) -> 101. Never rewrite or reissue the delivered APKs.
         val releaseParts = flutter.versionName.split(".").map { it.toInt() }
         require(releaseParts.size == 3 && releaseParts[0] == 1 && releaseParts[1] == 0 && releaseParts[2] >= 4)
-        require(flutter.versionCode in 1..20)
-        versionCode = (releaseParts[2] - 4) * 20 + flutter.versionCode
+        require(flutter.versionCode in 1..99)
+        versionCode = (releaseParts[2] - 4) * 99 + flutter.versionCode + 1
         versionName = flutter.versionName
     }
 

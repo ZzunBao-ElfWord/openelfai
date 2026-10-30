@@ -11,6 +11,7 @@ import androidx.core.content.FileProvider;
 import com.bytedance.sdk.open.aweme.adapter.okhttp.OpenNetworkOkHttpServiceImpl;
 import com.bytedance.sdk.open.aweme.adapter.image.picasso.PicassoOpenImageServiceImpl;
 import com.bytedance.sdk.open.aweme.base.ImageObject;
+import com.bytedance.sdk.open.aweme.base.VideoObject;
 import com.bytedance.sdk.open.aweme.base.MediaContent;
 import com.bytedance.sdk.open.aweme.core.OpenHostInfoService;
 import com.bytedance.sdk.open.aweme.init.DouYinOpenSDKConfig;
@@ -88,31 +89,45 @@ public final class OpenElfDouyinSharePlugin implements FlutterPlugin, ActivityAw
         if (call.method.equals("availability")) {
             result.success(anyInstalled() ? "ready" : "notInstalled"); return;
         }
-        if (!call.method.equals("shareImage")) { result.notImplemented(); return; }
+        boolean work = call.method.equals("shareWork");
+        if (!call.method.equals("shareImage") && !work) { result.notImplemented(); return; }
         byte[] png = call.argument("png"); String requestedScene = call.argument("scene");
+        boolean video = work && Boolean.TRUE.equals(call.argument("video"));
+        boolean validMedia = png != null && (video
+            ? png.length >= 12 && png.length <= 50 * 1024 * 1024 && png[4] == 'f' && png[5] == 't' && png[6] == 'y' && png[7] == 'p'
+            : png.length >= 8 && png.length <= 8 * 1024 * 1024 && png[0] == (byte)137 && png[1] == 80 && png[2] == 78 && png[3] == 71);
         if (!CLIENT_KEY.equals(call.argument("clientKey")) || !Boolean.TRUE.equals(call.argument("privacyConsent"))
-            || png == null || png.length < 8 || png.length > 8 * 1024 * 1024
-            || png[0] != (byte)137 || png[1] != 80 || png[2] != 78 || png[3] != 71
-            || !("contacts".equals(requestedScene) || "story".equals(requestedScene))) {
+            || !validMedia
+            || !(work ? "publish".equals(requestedScene) : ("contacts".equals(requestedScene) || "story".equals(requestedScene)))) {
             result.error("INVALID_SHARE", "分享素材或授权无效", null); return;
         }
         if (pending != null) { result.error("SHARE_BUSY", "分享正在进行", null); return; }
-        if (activity == null || !anyInstalled()) { result.error("DOUYIN_UNAVAILABLE", "请先安装或更新抖音", null); return; }
+        if (activity == null || !(work ? installed(PACKAGES[0]) : anyInstalled())) { result.error("DOUYIN_UNAVAILABLE", "请先安装或更新抖音主版", null); return; }
         pending = result; scene = requestedScene; state = UUID.randomUUID().toString();
         final String requestState = state;
-        handler.postDelayed(() -> { if (requestState.equals(state)) finish("failed"); }, 180000);
+        // Editing a video may take longer than the callback window. Do not
+        // revoke/delete material the publisher may still be reading on timeout.
+        handler.postDelayed(() -> { if (requestState.equals(state)) finish("failed", false); }, 180000);
         try {
             initializeAfterConsent();
             DouYinOpenApi api = DouYinOpenApiFactory.create(activity);
             if (!api.isShareSupportFileProvider()) { finish("failed"); return; }
             File directory = new File(context.getCacheDir(), "douyin-share");
             if (!directory.isDirectory() && !directory.mkdirs()) throw new IllegalStateException();
-            imageFile = new File(directory, requestState + ".png");
+            File[] stale = directory.listFiles();
+            if (stale != null) for (File file : stale) {
+                if (file.isFile() && System.currentTimeMillis() - file.lastModified() > 86400000L) file.delete();
+            }
+            imageFile = new File(directory, requestState + (video ? ".mp4" : ".png"));
             try (FileOutputStream output = new FileOutputStream(imageFile)) { output.write(png); }
             grantedUri = FileProvider.getUriForFile(context, context.getPackageName() + ".douyin.share.files", imageFile);
             for (String pkg : PACKAGES) if (installed(pkg)) context.grantUriPermission(pkg, grantedUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
             ArrayList<String> paths = new ArrayList<>(); paths.add(grantedUri.toString());
-            MediaContent media = new MediaContent(new ImageObject(paths));
+            MediaContent media;
+            if (video) {
+                VideoObject object = new VideoObject(); object.mVideoPaths = paths;
+                media = new MediaContent(object);
+            } else media = new MediaContent(new ImageObject(paths));
             boolean accepted;
             if ("contacts".equals(scene)) {
                 if (!api.isAppSupportShareToContacts()) { finish("failed"); return; }
@@ -123,7 +138,9 @@ public final class OpenElfDouyinSharePlugin implements FlutterPlugin, ActivityAw
             } else {
                 if (!api.isAppSupportShare()) { finish("failed"); return; }
                 Share.Request request = new Share.Request();
-                request.mState = state; request.mMediaContent = media; request.shareToType = 1;
+                request.mState = state; request.mMediaContent = media;
+                if ("story".equals(scene)) request.shareToType = 1;
+                if (video && api.isAppSupportShareToPublish()) request.shareToPublish = true;
                 request.callerLocalEntry = DouyinCallbackActivity.class.getName();
                 accepted = api.share(request);
             }
@@ -135,19 +152,23 @@ public final class OpenElfDouyinSharePlugin implements FlutterPlugin, ActivityAw
         if (!hasPending()) return;
         String responseState;
         if ("contacts".equals(instance.scene) && response instanceof ShareToContact.Response) responseState = ((ShareToContact.Response) response).mState;
-        else if ("story".equals(instance.scene) && response instanceof Share.Response) responseState = ((Share.Response) response).state;
+        else if (("story".equals(instance.scene) || "publish".equals(instance.scene)) && response instanceof Share.Response) responseState = ((Share.Response) response).state;
         else return;
         if (!instance.state.equals(responseState)) return; // Ignore forged/stale callbacks.
         instance.finish(response.isCancel() ? "cancelled" : response.isSuccess() ? "handedOff" : "failed");
     }
     private void finish(String outcome) {
+        finish(outcome, true);
+    }
+    private void finish(String outcome, boolean cleanup) {
         MethodChannel.Result callback = pending; pending = null; state = null;
-        if (grantedUri != null) {
+        if (cleanup && grantedUri != null) {
             try { context.revokeUriPermission(grantedUri, Intent.FLAG_GRANT_READ_URI_PERMISSION); }
             catch (RuntimeException ignored) { /* Cleanup must not swallow the result. */ }
-            grantedUri = null;
         }
-        if (imageFile != null) { imageFile.delete(); imageFile = null; }
+        if (cleanup && imageFile != null) imageFile.delete();
+        grantedUri = null;
+        imageFile = null;
         if (callback != null) callback.success(outcome);
     }
 }

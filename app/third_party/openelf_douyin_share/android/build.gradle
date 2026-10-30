@@ -19,7 +19,7 @@ dependencies {
     implementation 'androidx.core:core:1.16.0'
     // 0.2.0.11's published POM references an unavailable Polaris artifact.
     // Pin the preceding official stable SDK, without excluding security modules.
-    // This plugin only shares images; it does not use H5 authorization.
+    // Shares local images/videos; it does not use H5 authorization.
     implementation 'com.bytedance.ies.ugc.aweme:opensdk-common:0.2.0.10'
     implementation 'com.bytedance.ies.ugc.aweme:opensdk-china-external:0.2.0.10'
     implementation 'com.bytedance.ies.ugc.aweme:openokhttp-china-external:0.2.0.10'

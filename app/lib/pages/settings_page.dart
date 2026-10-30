@@ -83,7 +83,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                     _tile(
                       icon: Icons.public_rounded,
-                      label: '第三方账号（舞台）',
+                      label: '作品分享平台',
                       subtitle: _stageBindSubtitle(),
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute(
@@ -353,9 +353,9 @@ class _SettingsPageState extends State<SettingsPage> {
     final binds = StageBindService.instance;
     final bound = StagePlatform.values.where(binds.isBound).toList();
     if (bound.isEmpty) {
-      return '绑定抖音、快手、微信、哔哩哔哩，一键分发 AI 内容';
+      return '分享作品到抖音等平台，由你确认发布';
     }
-    return '已绑定 ${bound.length} 个 · ${bound.map((p) => p.label).join('、')}';
+    return '常用 ${bound.length} 个 · ${bound.map((p) => p.label).join('、')}';
   }
 
   Widget _tile({

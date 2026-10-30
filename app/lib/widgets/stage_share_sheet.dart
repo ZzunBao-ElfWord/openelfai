@@ -2,13 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../models/elf.dart';
-import '../pages/stage_bind_page.dart';
 import '../services/stage_bind_service.dart';
 import '../theme.dart';
 import 'share_card.dart';
 
-/// 分享面板：系统分享（分享卡片）+ 已绑定的第三方平台一键分发。
-/// 未绑定的平台点击后跳转绑定页，绑定完成再回来分享。
+/// 兼容旧资料卡分享入口；作品原始素材请使用 WorkShareHelper。
+/// 常用平台不是 OAuth 授权，不作为分享门槛。
 Future<void> showStageShare(
   BuildContext context, {
   required Elf elf,
@@ -25,16 +24,6 @@ Future<void> showStageShare(
   final platform = selection.platform;
   if (platform == null) {
     await ShareHelper.shareElf(context, elf, excerpt: excerpt);
-    return;
-  }
-
-  if (!StageBindService.instance.isBound(platform)) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('绑定${platform.label}后即可一键分发')),
-    );
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const StageBindPage()),
-    );
     return;
   }
 
@@ -213,7 +202,7 @@ class _StageShareSheet extends StatelessWidget {
       label: platform.label,
       icon: platform.icon,
       background: platform.color,
-      status: bound ? '已绑定' : '去绑定',
+      status: bound ? '常用' : '分享资料卡',
       statusColor: bound ? AppColors.ok : AppColors.cyan,
       onTap: () => _pick(context, _ShareSelection.platform(platform)),
     );

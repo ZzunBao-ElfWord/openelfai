@@ -6,6 +6,16 @@ class OpenElfDouyinShare {
   static const clientKey = 'awf8w18qtnqq1kum';
   static Future<String?> availability() =>
       channel.invokeMethod<String>('availability');
+
+  /// Android official SDK publication handoff; no account pre-binding needed.
+  static Future<String?> shareWork(Uint8List bytes, {required bool video}) =>
+      channel.invokeMethod<String>('shareWork', {
+        'png': bytes,
+        'video': video,
+        'scene': 'publish',
+        'clientKey': clientKey,
+        'privacyConsent': true,
+      }).timeout(const Duration(seconds: 190));
   static Future<String?> share(Uint8List png, String scene) =>
       channel.invokeMethod<String>('shareImage', {
         'png': png,

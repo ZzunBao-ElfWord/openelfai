@@ -14,8 +14,8 @@ jobs:
       run:
         working-directory: app
     env:
-      BUILD_NAME: 1.0.5
-      BUILD_NUMBER: '1'
+      BUILD_NAME: 1.0.4
+      BUILD_NUMBER: '22'
 
     steps:
       - name: Check out latest integrated source

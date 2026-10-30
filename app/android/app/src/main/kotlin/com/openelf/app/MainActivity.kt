@@ -45,7 +45,7 @@ class MainActivity : FlutterActivity() {
                 } finally { paying.set(false) }
             }.start()
         }
-        // 站外分发：把分享卡片与文案定向交给已绑定的第三方 App（抖音 / 快手 / 微信 / 哔哩哔哩）。
+        // 交接用户选择的卡片/作品素材，不代表第三方账号授权或发布成功。
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "openelf/share").setMethodCallHandler { call, result ->
             if (call.method != "shareToApp") {
                 result.notImplemented()
@@ -57,14 +57,20 @@ class MainActivity : FlutterActivity() {
                     text = call.argument<String>("text"),
                     title = call.argument<String>("title") ?: "分享",
                     imageBytes = call.argument<ByteArray>("image"),
+                    workBytes = call.argument<ByteArray>("media"),
+                    workMime = call.argument<String>("mime"),
                 )
             )
         }
     }
 
     /// 返回 ok / not_installed / no_receiver / error，由 Flutter 侧决定是否回退系统分享。
-    private fun shareToPackage(pkg: String?, text: String?, title: String, imageBytes: ByteArray?): String {
+    private fun shareToPackage(pkg: String?, text: String?, title: String, imageBytes: ByteArray?, workBytes: ByteArray?, workMime: String?): String {
         if (pkg.isNullOrBlank() || text.isNullOrBlank()) return "error"
+        if (pkg !in setOf("com.ss.android.ugc.aweme", "com.smile.gifmaker", "com.tencent.mm", "tv.danmaku.bili")) return "error"
+        val bytes = workBytes ?: imageBytes
+        val mime = if (workBytes != null) workMime else "image/png"
+        if (bytes != null && (bytes.isEmpty() || bytes.size > 50 * 1024 * 1024 || mime !in setOf("video/mp4", "image/png", "image/jpeg", "image/webp"))) return "error"
         val pm = packageManager
         val installed = try {
             pm.getPackageInfo(pkg, 0)
@@ -74,22 +80,23 @@ class MainActivity : FlutterActivity() {
         }
         if (!installed) return "not_installed"
 
-        // 优先带图片分享：抖音 / 哔哩哔哩的分享入口支持图片，文案作为 EXTRA_TEXT 一并带上。
-        val imageUri = imageBytes?.takeIf { it.isNotEmpty() }?.let { bytes ->
+        // 以真实素材 MIME 交接，是否接收由目标客户端决定。
+        val imageUri = bytes?.takeIf { it.isNotEmpty() }?.let { content ->
             try {
                 val dir = File(cacheDir, "stage_share").apply { mkdirs() }
-                // 只保留本次分享的卡片，避免缓存目录堆积历史图片
-                dir.listFiles()?.forEach { it.delete() }
-                val file = File(dir, "openelf_${System.currentTimeMillis()}.png")
-                file.writeBytes(bytes)
+                // Never remove a file a previously opened publisher may still read.
+                val extension = when (mime) { "video/mp4" -> "mp4"; "image/jpeg" -> "jpg"; "image/webp" -> "webp"; else -> "png" }
+                val file = File(dir, "openelf_${java.util.UUID.randomUUID()}.$extension")
+                file.writeBytes(content)
                 FileProvider.getUriForFile(this, "$packageName.openelf.fileprovider", file)
             } catch (_: Exception) {
                 null
             }
         }
+        if (bytes != null && imageUri == null) return "error"
         if (imageUri != null) {
             val intent = Intent(Intent.ACTION_SEND).apply {
-                type = "image/png"
+                type = mime
                 setPackage(pkg)
                 putExtra(Intent.EXTRA_STREAM, imageUri)
                 putExtra(Intent.EXTRA_TEXT, text)
@@ -104,9 +111,10 @@ class MainActivity : FlutterActivity() {
                     startActivity(intent)
                     return "ok"
                 } catch (_: Exception) {
-                    // 落到纯文本分享再试一次
+                    return "error"
                 }
             }
+            return "no_receiver" // Do not silently replace a video with text.
         }
 
         val textIntent = Intent(Intent.ACTION_SEND).apply {

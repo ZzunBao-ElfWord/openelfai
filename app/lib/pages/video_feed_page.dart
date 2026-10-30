@@ -7,7 +7,7 @@ import '../models/elf.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
-import '../widgets/share_card.dart';
+import '../widgets/work_share_sheet.dart';
 import '../widgets/content_safety.dart';
 import 'elf_chat_page.dart';
 import 'login_page.dart';
@@ -461,13 +461,7 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                     icon: Icons.ios_share,
                     label: '分享',
                     semantic: '分享',
-                    onTap: () => ShareHelper.shareElf(
-                      context,
-                      elf,
-                      excerpt: p.body.length > 40
-                          ? '${p.body.substring(0, 40)}…'
-                          : p.body,
-                    ),
+                    onTap: () => WorkShareHelper.share(context, p),
                   ),
                   const SizedBox(height: 16),
                   _railButton(

@@ -5,8 +5,7 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import 'login_page.dart';
 
-/// 第三方账号（舞台）绑定：抖音 / 快手 / 微信 / 哔哩哔哩。
-/// 绑定后可在分享面板把 AI 创作内容一键分发到对应平台。
+/// 常用分享平台偏好；不代表第三方账号授权，不限制作品分享。
 class StageBindPage extends StatelessWidget {
   const StageBindPage({super.key});
 
@@ -26,7 +25,7 @@ class StageBindPage extends StatelessWidget {
                 const SizedBox(height: 14),
                 _intro(),
                 const SizedBox(height: 18),
-                _section('平台账号'),
+                _section('常用平台'),
                 ...StagePlatform.values.map((p) => _platformCard(context, p)),
                 const SizedBox(height: 8),
                 _note(),
@@ -54,7 +53,7 @@ class StageBindPage extends StatelessWidget {
             ),
           ),
           Text(
-            '第三方账号（舞台）',
+            '作品分享平台',
             style: TextStyle(
               fontSize: 21,
               fontWeight: FontWeight.w700,
@@ -76,7 +75,7 @@ class StageBindPage extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '绑定后，AI 创作的内容可以从分享面板一键分发到这些平台。',
+            '在 AI 作品上点击“分享作品”，选择平台，将本次图片、视频或正文交给对应客户端。',
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
@@ -86,7 +85,7 @@ class StageBindPage extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            '授权范围仅限内容发布，不会读取你的私信、关注与点赞；所有内容自动带「AI 生成」标识与 OpenElf 落地页链接。',
+            '最终发送或发布由你在目标平台确认。设置常用平台不代表账号授权；不会自动发布或读取私信、关注与点赞。',
             style: TextStyle(
               fontSize: 10.5,
               color: AppColors.textMuted,
@@ -158,7 +157,7 @@ class StageBindPage extends StatelessWidget {
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
-                          '已绑定',
+                          '常用',
                           style: TextStyle(
                             fontSize: 9,
                             fontWeight: FontWeight.w600,
@@ -171,7 +170,7 @@ class StageBindPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  bound ? '已授权发布 · ${_fmtDate(at)}' : platform.hint,
+                  bound ? '已设为常用 · ${_fmtDate(at)}' : platform.hint,
                   style: TextStyle(fontSize: 10.5, color: AppColors.textMuted),
                 ),
               ],
@@ -189,7 +188,7 @@ class StageBindPage extends StatelessWidget {
     if (bound) {
       return Semantics(
         button: true,
-        label: '解绑${platform.label}',
+        label: '移除${platform.label}',
         child: InkWell(
           onTap: () => _confirmUnbind(context, platform),
           borderRadius: BorderRadius.circular(18),
@@ -200,7 +199,7 @@ class StageBindPage extends StatelessWidget {
               border: Border.all(color: AppColors.strokeSoft),
             ),
             child: Text(
-              '解绑',
+              '移除',
               style: TextStyle(fontSize: 11.5, color: AppColors.textSub),
             ),
           ),
@@ -209,7 +208,7 @@ class StageBindPage extends StatelessWidget {
     }
     return Semantics(
       button: true,
-      label: '绑定${platform.label}',
+      label: '设为常用：${platform.label}',
       child: InkWell(
         onTap: () => _bind(context, platform),
         borderRadius: BorderRadius.circular(18),
@@ -220,7 +219,7 @@ class StageBindPage extends StatelessWidget {
             gradient: AppColors.brandGradient,
           ),
           child: Text(
-            '绑定',
+            '设为常用',
             style: TextStyle(
               fontSize: 11.5,
               fontWeight: FontWeight.w600,
@@ -246,7 +245,7 @@ class StageBindPage extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              '当前为站内预绑定：接入平台官方授权后，绑定会跳转对应平台的授权页。解绑后该平台将从分享面板移除，已发布的作品不受影响。',
+              '这里只保存本机常用平台偏好，不是平台账号授权。无需预绑定即可分享；平台未安装、权限不足或不支持时会明确提示，可自行选择系统分享。',
               style: TextStyle(
                 fontSize: 10.5,
                 color: AppColors.textMuted,
@@ -267,13 +266,13 @@ class StageBindPage extends StatelessWidget {
         backgroundColor: AppColors.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         title: Text(
-          '绑定${platform.label}',
+          '设为常用：${platform.label}',
           style: TextStyle(color: AppColors.text, fontSize: 16),
         ),
         content: Text(
-          '绑定后，你可以把 AI 创作的内容一键分享到${platform.label}。\n\n'
-          '授权范围仅限内容发布，不会读取私信、关注与点赞。内容会自动带「AI 生成」标识。\n\n'
-          '当前版本为站内预绑定，接入平台官方授权后将跳转${platform.label}授权页完成正式绑定。',
+          '设为常用后，分享时会优先展示${platform.label}。\n\n'
+          '这只是本机偏好，不授予发布权限，不读取私信、关注与点赞。\n\n'
+          '在作品分享面板交接素材后，需要你在目标平台确认发送或发布。',
           style: TextStyle(
             fontSize: 12.5,
             color: AppColors.textMuted,
@@ -287,7 +286,7 @@ class StageBindPage extends StatelessWidget {
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text('确认绑定', style: TextStyle(color: AppColors.cyan)),
+            child: Text('设为常用', style: TextStyle(color: AppColors.cyan)),
           ),
         ],
       ),
@@ -296,7 +295,7 @@ class StageBindPage extends StatelessWidget {
     await StageBindService.instance.bind(platform);
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('已绑定${platform.label}，可在分享面板一键分发')),
+      SnackBar(content: Text('已将${platform.label}设为常用分享平台')),
     );
   }
 
@@ -308,11 +307,11 @@ class StageBindPage extends StatelessWidget {
         backgroundColor: AppColors.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         title: Text(
-          '解绑${platform.label}',
+          '移除${platform.label}',
           style: TextStyle(color: AppColors.text, fontSize: 16),
         ),
         content: Text(
-          '解绑后，分享面板将不再提供${platform.label}的一键分发入口，已发布的作品不受影响。\n\n确认解绑？',
+          '移除后仅取消常用排序，仍可在分享面板选择该平台，不影响已发布作品。\n\n确认移除？',
           style: TextStyle(
             fontSize: 12.5,
             color: AppColors.textMuted,
@@ -326,7 +325,7 @@ class StageBindPage extends StatelessWidget {
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text('确认解绑', style: TextStyle(color: AppColors.warn)),
+            child: Text('确认移除', style: TextStyle(color: AppColors.warn)),
           ),
         ],
       ),
@@ -335,7 +334,7 @@ class StageBindPage extends StatelessWidget {
     await StageBindService.instance.unbind(platform);
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('已解绑${platform.label}')),
+      SnackBar(content: Text('已移除${platform.label}')),
     );
   }
 

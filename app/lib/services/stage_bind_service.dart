@@ -5,16 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// 站外分发平台（第三方账号，产品内称「舞台」账号）。
-///
-/// 四个平台都能通过系统分享定向唤起对应 App 的发布/发送入口，
-/// 微信走的是「发送给好友」链路。正式接入平台官方 OAuth 后，
-/// 绑定流程改为跳转平台授权页，token 由服务端托管。
+/// 分享目标。实际交接能力依赖客户端；此处不保存平台 OAuth 授权。
 enum StagePlatform {
-  douyin('douyin', '抖音', 'com.ss.android.ugc.aweme', '绑定后可唤起抖音直接发布'),
-  kuaishou('kuaishou', '快手', 'com.smile.gifmaker', '绑定后可唤起快手发布作品'),
-  wechat('wechat', '微信', 'com.tencent.mm', '绑定后可一键发送给微信好友'),
-  bilibili('bilibili', '哔哩哔哩', 'tv.danmaku.bili', '绑定后可唤起哔哩哔哩投稿');
+  douyin('douyin', '抖音', 'com.ss.android.ugc.aweme', '交给抖音编辑，由你确认发布'),
+  kuaishou('kuaishou', '快手', 'com.smile.gifmaker', '通过设备支持的分享入口交接作品'),
+  wechat('wechat', '微信', 'com.tencent.mm', '通过设备支持的分享入口交给微信'),
+  bilibili('bilibili', '哔哩哔哩', 'tv.danmaku.bili', '交接本次素材，不代表已获得投稿权限');
 
   const StagePlatform(this.id, this.label, this.androidPackage, this.hint);
 
@@ -60,8 +56,8 @@ extension StagePlatformStyle on StagePlatform {
   }
 }
 
-/// 第三方账号绑定状态。按用户隔离保存在本机，登出只清内存、不删记录，
-/// 同一账号再次登录会自动恢复。
+/// 按用户保存的常用平台偏好，不是账号授权。
+/// 保留旧存储键与方法名以兼容已有本机记录，登出不删除记录。
 class StageBindService extends ChangeNotifier {
   StageBindService._();
   static final StageBindService instance = StageBindService._();
@@ -127,8 +123,7 @@ class StageBindService extends ChangeNotifier {
   }
 }
 
-/// 定向分享结果：ok 表示已交给目标 App；notInstalled / noReceiver / failed
-/// 由调用方统一回退到系统分享，并给出对应提示。
+/// ok 仅表示交接，不代表已发布；失败由调用方提示并询问是否系统分享。
 enum StageShareStatus { ok, notInstalled, noReceiver, unsupported, failed }
 
 /// 定向分享：Android 通过原生通道把分享卡片与文案直接交给目标 App 的分享入口，
@@ -142,6 +137,8 @@ class StageShareService {
     required StagePlatform platform,
     required String text,
     Uint8List? imageBytes,
+    Uint8List? mediaBytes,
+    String? mimeType,
     String? title,
   }) async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
@@ -153,6 +150,8 @@ class StageShareService {
         'text': text,
         'title': title ?? '分享到${platform.label}',
         if (imageBytes != null) 'image': imageBytes,
+        if (mediaBytes != null) 'media': mediaBytes,
+        if (mimeType != null) 'mime': mimeType,
       });
       switch (status) {
         case 'ok':

@@ -37,7 +37,7 @@
         </activity>
         <!-- 站外分发：分享卡片通过 FileProvider 以 content:// 交给第三方 App -->
         <provider
-            android:name="androidx.core.content.FileProvider"
+            android:name=".StageShareFileProvider"
             android:authorities="${applicationId}.openelf.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
