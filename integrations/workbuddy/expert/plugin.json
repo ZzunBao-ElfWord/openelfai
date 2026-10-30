@@ -1,0 +1,20 @@
+{
+  "name": "openelf-character-designer",
+  "displayName": "AI 角色设计师",
+  "expertType": "agent",
+  "categoryId": "06-ContentCreative",
+  "version": "1.0.0",
+  "description": "把模糊的角色想法拆成风格、发型、服装与气质方案，组合配件生成预览，确认后保存角色卡并产出正式 AI 形象。所有图像均为 AI 生成。",
+  "avatar": "avatars/expert.png",
+  "defaultInitPrompt": "我想做一只原创 AI 形象，但还没想清楚风格和细节。你先帮我拆成风格、发型、服装、气质四部分，再给两个可执行的方案。",
+  "quickPrompts": [
+    "我想做一只原创 AI 形象，但还没想清楚风格和细节。你先帮我拆成风格、发型、服装、气质四部分，再给两个可执行的方案。",
+    "我想做像素风的 AI 形象，主角是戴护目镜的修理师，先给我几版预览看看。",
+    "我已经有角色设定了，直接帮我保存成角色卡并生成正式形象。"
+  ],
+  "dependencies": {
+    "connectors": [
+      "openelf-character"
+    ]
+  }
+}
