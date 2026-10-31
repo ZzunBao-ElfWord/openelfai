@@ -325,6 +325,8 @@ function normalizeElf(elf) {
     elf.learnedSkills = [...new Set([...(elf.equipped || []), ...(elf.ownedModules || [])])];
   }
   if (!elf.chainAddress) elf.chainAddress = address('elf:' + elf.id);
+  // 「世界对话」开关：历史数据缺省关闭，由持有人显式打开。
+  if (typeof elf.worldChatOpen !== 'boolean') elf.worldChatOpen = false;
   // 二级市场已取消：历史遗留的寄售状态一律退回「自持」，不再有可成交的挂单。
   if (elf.status === 'listed') { elf.status = 'owned'; delete elf.listingId; }
   // 官方厂商账号没有人类持有人：客户端只支持 owned/active 等自有状态，
@@ -1333,9 +1335,77 @@ function createCommerceService({ db = null, store, settings, payout = null, payo
     });
   }
 
+  /// —— 世界对话（访客与别人的 AI 纯对话，费用由持有人承担，受三重额度约束）——
+
+  /// token → 平台余额（micro，1 元 = 1,000,000 micro）折算率与无 usage 时的固定估算。
+  const WORLD_CHAT_MICRO_PER_1K_TOKENS = Math.max(1, Number(process.env.WORLD_CHAT_MICRO_PER_1K_TOKENS) || 2000);
+  const WORLD_CHAT_EST_TOKENS_PER_MSG = Math.max(1, Number(process.env.WORLD_CHAT_EST_TOKENS_PER_MSG) || 1500);
+
+  /// 额度按自然日结算：以服务器本地日期为日界（YYYY-MM-DD）。
+  function worldChatDay(now = new Date()) {
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  }
+
+  /// 按 id 读一只 AI（找不到返回 null）。官方厂商 AI 不在 store 里，天然返回 null。
+  async function getElfById(elfId) {
+    if (typeof elfId !== 'string' || !elfId) return null;
+    const elf = await store.transaction('Production', (tx) => tx.get('elf', elfId));
+    return elf ? normalizeElf(elf) : null;
+  }
+
+  /// 持有人开关世界对话。非本人 / AI 不存在时抛错，返回更新后的 AI。
+  async function setWorldChatOpen(user, elfId, open) {
+    if (!user || !user.id) throw fail(400, 'INVALID_USER', '缺少用户');
+    if (typeof elfId !== 'string' || !elfId) throw fail(400, 'INVALID_ELF', '缺少 AI 标识');
+    return store.transaction('Production', async (tx) => {
+      const elf = await tx.get('elf', elfId, true);
+      if (!elf) throw fail(404, 'ELF_NOT_FOUND', '没有找到这只 AI');
+      normalizeElf(elf);
+      if (elf.ownerId !== user.id) throw fail(403, 'ELF_NOT_OWNED', '只有持有人能设置这只 AI 的世界对话');
+      elf.worldChatOpen = open === true;
+      await tx.put('elf', elf.id, normalizeElf(elf), { owner: elf.ownerId });
+      return elf;
+    });
+  }
+
+  /// 三重额度中的两项当日用量：该访客今天对这只 AI 发了几条、这只 AI 今天累计成本。
+  async function worldChatUsage(elfId, visitorId) {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    return store.transaction('Production', async (tx) => {
+      const rows = await tx.list('chat', { owner: visitorId, ref: elfId, limit: 500 });
+      const visitorToday = rows.filter((row) => row.role === 'user'
+        && Number(new Date(row.createdAt)) >= Number(start)).length;
+      const usage = await tx.get('world_chat_usage', `${elfId}:${worldChatDay()}`);
+      return { visitorToday, elfCostMicroToday: Number(usage?.costMicro) || 0 };
+    });
+  }
+
+  /// 成功拿到真实回复后记一笔成本（按日累加）。计量失败不阻断对话本身。
+  async function recordWorldChatUsage(elfId, tokens) {
+    if (typeof elfId !== 'string' || !elfId) return;
+    const used = Number.isSafeInteger(tokens) && tokens > 0 ? tokens : WORLD_CHAT_EST_TOKENS_PER_MSG;
+    const costMicro = Math.ceil((used / 1000) * WORLD_CHAT_MICRO_PER_1K_TOKENS);
+    try {
+      await store.transaction('Production', async (tx) => {
+        const day = worldChatDay();
+        const key = `${elfId}:${day}`;
+        const row = (await tx.get('world_chat_usage', key, true))
+          || { id: key, elfId, day, costMicro: 0, messages: 0 };
+        row.costMicro = (Number(row.costMicro) || 0) + costMicro;
+        row.messages = (Number(row.messages) || 0) + 1;
+        await tx.put('world_chat_usage', key, row, { ref: elfId });
+      });
+    } catch (_) {
+      // 与 recordChat 同一原则：写入失败不影响对话。
+    }
+  }
+
   return { snapshot, listFeed, listChat, recordChat, autoCycle, action, environment, verifyIdentity,
     requestWithdrawal, reviewWithdrawal, reconcileWithdrawal, listWithdrawals, listAllWithdrawals,
-    characterAddress, characterBalance, createElfFromCharacter, refundCharacterMint, identityVerified };
+    characterAddress, characterBalance, createElfFromCharacter, refundCharacterMint, identityVerified,
+    getElfById, setWorldChatOpen, worldChatUsage, recordWorldChatUsage };
 }
 
 module.exports = { createCommerceService, CATALOG, MODULES, MODULE_PRICES, FORGET_COST,

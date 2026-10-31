@@ -67,8 +67,20 @@ const AI_UPSTREAM_ERROR = {
   message: 'AI 服务暂时不可用，请稍后再试',
 };
 
+/// 世界对话的固定话术：不向访客暴露持有人的 Key / 余额等细节，语气与既有兜底一致。
+const FIXED_REPLIES = {
+  world_chat_closed:
+    process.env.WORLD_CHAT_CLOSED_REPLY || '（这只 AI 还没有开放世界对话，先去和别的 AI 聊聊吧～）',
+  world_chat_visitor_limit:
+    process.env.WORLD_CHAT_VISITOR_LIMIT_REPLY || '（今天和这只 AI 的对话次数用完啦，明天再来吧～）',
+  world_chat_elf_budget:
+    process.env.WORLD_CHAT_ELF_BUDGET_REPLY || '（这只 AI 今天接待的朋友太多啦，明天再来吧～）',
+  world_chat_owner_unavailable:
+    process.env.WORLD_CHAT_OWNER_UNAVAILABLE_REPLY || '（这只 AI 暂时无法接待，稍后再来看看吧～）',
+};
+
 function fixedReply(reason) {
-  return { mode: 'fixed', reply: FALLBACK_REPLY, reason };
+  return { mode: 'fixed', reply: FIXED_REPLIES[reason] || FALLBACK_REPLY, reason };
 }
 
 async function readPlatformWallet(db, userId) {
@@ -1579,6 +1591,27 @@ async function buildApp(options = {}) {
     return { reply: '技能调用步数超出上限，请再试一次。', images, steps };
   }
 
+  // 持有人开关「世界对话」：开启前置条件是本人已配置可用 API Key 且平台余额大于 0。
+  app.post('/api/v1/elf/world-chat', { bodyLimit: 8 * 1024 }, async (request) => {
+    const { user } = await authenticate(request);
+    const elfId = typeof request.body?.elfId === 'string' ? request.body.elfId.trim() : '';
+    if (!elfId) throw fail(400, 'INVALID_ELF', '缺少 AI 标识');
+    const open = request.body?.open === true;
+    // 先校验归属，再验前置条件：非持有人一律 403，不暴露前置条件的任何信息。
+    const existing = await commerce.getElfById(elfId);
+    if (!existing) throw fail(404, 'ELF_NOT_FOUND', '没有找到这只 AI');
+    if (existing.ownerId !== user.id) throw fail(403, 'ELF_NOT_OWNED', '只有持有人能设置这只 AI 的世界对话');
+    if (open) {
+      const apiKey = await getDefaultKeyPlain(db, user.id);
+      const wallet = await readPlatformWallet(db, user.id);
+      if (!apiKey || wallet.balance_micro - wallet.frozen_micro <= 0) {
+        throw fail(400, 'WORLD_CHAT_PRECONDITION', '需要先配置可用的 API Key 并保持平台余额大于 0');
+      }
+    }
+    const elf = await commerce.setWorldChatOpen(user, elfId, open);
+    return { elf };
+  });
+
   app.post('/api/v1/elf-chat', { bodyLimit: 64 * 1024 }, async (request, reply) => {
     const { user } = await authenticate(request);
     const text = readChatText(request.body);
@@ -1596,12 +1629,30 @@ async function buildApp(options = {}) {
       return saved ? { ...payload, messages: saved.messages } : payload;
     };
 
-    const apiKey = await getDefaultKeyPlain(db, user.id);
-    if (!apiKey) return done(fixedReply('no_api_key'));
+    // 访客网关：与别人的 AI 纯对话（不带技能）时，费用由持有人承担，受三重额度约束。
+    // 带技能的「对外干活」请求、官方 AI（store 查不到）、持有人自己都走调用者自付链路。
+    const skillRequest = Array.isArray(request.body?.skills) && request.body.skills.length > 0;
+    let worldChatElf = null;
+    if (elfId && !skillRequest) {
+      const elf = await commerce.getElfById(elfId);
+      if (elf && elf.ownerId && elf.ownerId !== user.id) {
+        if (!elf.worldChatOpen) return done(fixedReply('world_chat_closed'));
+        const usage = await commerce.worldChatUsage(elfId, user.id);
+        const visitorLimit = Math.max(1, Number(process.env.WORLD_CHAT_VISITOR_DAILY_LIMIT) || 20);
+        if (usage.visitorToday >= visitorLimit) return done(fixedReply('world_chat_visitor_limit'));
+        const elfBudget = Math.max(1, Number(process.env.WORLD_CHAT_ELF_DAILY_BUDGET_MICRO) || 2000000);
+        if (usage.elfCostMicroToday >= elfBudget) return done(fixedReply('world_chat_elf_budget'));
+        worldChatElf = elf;
+      }
+    }
+    // 世界对话的付款方是持有人；固定话术对访客屏蔽持有人的 Key / 余额细节。
+    const payerId = worldChatElf ? worldChatElf.ownerId : user.id;
+    const apiKey = await getDefaultKeyPlain(db, payerId);
+    if (!apiKey) return done(fixedReply(worldChatElf ? 'world_chat_owner_unavailable' : 'no_api_key'));
 
-    const wallet = await readPlatformWallet(db, user.id);
+    const wallet = await readPlatformWallet(db, payerId);
     if (wallet.balance_micro - wallet.frozen_micro <= 0) {
-      return done(fixedReply('insufficient_balance'));
+      return done(fixedReply(worldChatElf ? 'world_chat_owner_unavailable' : 'insufficient_balance'));
     }
 
     const messages = [{ role: 'system', content: buildElfSystemPrompt(request.body) }];
@@ -1667,8 +1718,13 @@ async function buildApp(options = {}) {
         return reply.code(502).send(AI_UPSTREAM_ERROR);
       }
 
-      if (response.status === 402) return done(fixedReply('insufficient_balance'));
-      if (response.status === 401) return done(fixedReply('invalid_api_key'));
+      // 世界对话中上游返回 402/401 是持有人的账户问题，对访客只报「暂时无法接待」。
+      if (response.status === 402) {
+        return done(fixedReply(worldChatElf ? 'world_chat_owner_unavailable' : 'insufficient_balance'));
+      }
+      if (response.status === 401) {
+        return done(fixedReply(worldChatElf ? 'world_chat_owner_unavailable' : 'invalid_api_key'));
+      }
       if (response.status === 404) return done(fixedReply('model_unavailable'));
       if (response.status !== 200) return reply.code(502).send(AI_UPSTREAM_ERROR);
 
@@ -1682,6 +1738,9 @@ async function buildApp(options = {}) {
         return done({ mode: 'fixed', reply: FILTERED_REPLY, reason: 'content_filtered' });
       }
 
+      // 世界对话拿到真实回复后才记一笔成本；固定话术与失败均不计费。
+      if (worldChatElf) await commerce.recordWorldChatUsage(elfId, payload?.usage?.total_tokens);
+      // balance_micro 始终回调用者自己的余额，不把持有人的财务信息透给访客。
       const after = await readPlatformWallet(db, user.id);
       const result = {
         mode: 'ai',
