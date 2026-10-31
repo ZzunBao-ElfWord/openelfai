@@ -5,8 +5,11 @@ import '../models/elf.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/workbench_panel.dart';
+import 'character_studio_page.dart';
 import 'create_elf_page.dart';
 import 'elf_console_page.dart';
+import 'login_page.dart';
 
 /// 「我的 AI」页：列表式陈列持有的智能体。
 /// 每一行是一只 AI（封面 + 名称 + 编号等级），点进去是它的控制台；
@@ -52,6 +55,14 @@ class MyElvesPage extends StatelessWidget {
                     _card([
                       _createRow(context),
                     ]),
+                    // 形象工坊的手机端入口：与桌面技能面板同一套
+                    // 「生成须知确认 → 对话式工坊」流程。
+                    if (elves.isNotEmpty) ...[
+                      const SizedBox(height: 14),
+                      _card([
+                        _studioRow(context),
+                      ]),
+                    ],
                   ],
                 ),
               );
@@ -174,6 +185,45 @@ class MyElvesPage extends StatelessWidget {
                 ),
               ),
             ),
+            Icon(Icons.chevron_right, size: 20, color: AppColors.textMuted),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 形象工坊：先过生成须知的逐条确认（合规闸门与桌面一致），再进对话式工坊。
+  Future<void> _openStudio(BuildContext context) async {
+    if (!checkLoginOrPrompt(context)) return;
+    if (!await WorkbenchPanel.confirmStudioPolicy(context)) return;
+    if (!context.mounted) return;
+    _push(context, const CharacterStudioPage());
+  }
+
+  Widget _studioRow(BuildContext context) {
+    return InkWell(
+      onTap: () => _openStudio(context),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+        child: Row(
+          children: [
+            Icon(Icons.palette_outlined, size: 19, color: AppColors.textSub),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                '形象工坊',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.text,
+                ),
+              ),
+            ),
+            Text(
+              '免费预览',
+              style: TextStyle(fontSize: 10.5, color: AppColors.textMuted),
+            ),
+            const SizedBox(width: 4),
             Icon(Icons.chevron_right, size: 20, color: AppColors.textMuted),
           ],
         ),

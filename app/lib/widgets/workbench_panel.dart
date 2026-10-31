@@ -71,41 +71,6 @@ class WorkbenchPanel extends StatefulWidget {
     );
   }
 
-  /// 手机端「+」与桌面工作台同一套技能面板，选中后立即进入对应流程：
-  /// 形象工坊过生成须知后进对话式工坊；其余技能打开手动创作弹层并
-  /// 预选该技能；还没有 AI 时先引导创建。
-  static Future<void> openSkillFlow(BuildContext context) async {
-    final picked = await pickSkill(context);
-    if (!context.mounted || picked == null) return;
-    if (!checkLoginOrPrompt(context)) return;
-    if (picked.id == studioSkillId) {
-      if (!await confirmStudioPolicy(context)) return;
-      if (!context.mounted) return;
-      await Navigator.of(context).push<bool>(
-        MaterialPageRoute(
-          builder: (_) => const CharacterStudioPage(),
-        ),
-      );
-      return;
-    }
-    final elf = AppState.instance.myElf;
-    if (elf == null) {
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => const CreateElfPage(),
-          fullscreenDialog: true,
-        ),
-      );
-      return;
-    }
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => CreatePostSheet(elf: elf, initialModuleId: picked.id),
-    );
-  }
-
   /// 形象工坊生成前必须逐条确认的合规声明（运营可配置，缺省用内置三条）。
   static Future<bool> confirmStudioPolicy(BuildContext context) async {
     final configured =
