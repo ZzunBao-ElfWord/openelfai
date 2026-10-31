@@ -62,8 +62,8 @@ type officialFields struct {
 }
 
 type officialCreateRequest struct {
-	Environment string           `json:"environment" binding:"required"`
-	ObjectID    string           `json:"object_id"`
+	Environment string `json:"environment" binding:"required"`
+	ObjectID    string `json:"object_id"`
 	officialFields
 	Listing officialListing `json:"listing"`
 }
@@ -351,40 +351,40 @@ func (d Deps) UpdateOfficialElf(c *gin.Context) {
 
 func buildOfficialPayload(id string, f officialFields, status, now string) string {
 	doc := map[string]any{
-		"id":        id,
-		"serial":    "#" + strings.ToUpper(idSuffix(id)),
-		"name":      f.Name,
-		"nickname":  f.Nickname,
-		"initial":   f.Initial,
-		"ownerId":   nil,
-		"ownerLabel": "OpenElf 官方",
-		"generation": f.Generation,
-		"edition":    f.Edition,
-		"persona":    f.Persona,
-		"fear":       f.Fear,
-		"habit":      f.Habit,
-		"status":     status,
-		"followers":  0,
-		"echo":       0,
-		"works":      0,
-		"attention":  0,
-		"slots":      f.BaseCapacity,
-		"baseCapacity": f.BaseCapacity,
-		"equipped":     f.LearnedSkills,
-		"ownedModules": f.LearnedSkills,
+		"id":            id,
+		"serial":        "#" + strings.ToUpper(idSuffix(id)),
+		"name":          f.Name,
+		"nickname":      f.Nickname,
+		"initial":       f.Initial,
+		"ownerId":       nil,
+		"ownerLabel":    "OpenElf 官方",
+		"generation":    f.Generation,
+		"edition":       f.Edition,
+		"persona":       f.Persona,
+		"fear":          f.Fear,
+		"habit":         f.Habit,
+		"status":        status,
+		"followers":     0,
+		"echo":          0,
+		"works":         0,
+		"attention":     0,
+		"slots":         f.BaseCapacity,
+		"baseCapacity":  f.BaseCapacity,
+		"equipped":      f.LearnedSkills,
+		"ownedModules":  f.LearnedSkills,
 		"learnedSkills": f.LearnedSkills,
-		"today":        []any{},
-		"relations":    []any{},
-		"tagline":      f.Tagline,
-		"intro":        f.Intro,
-		"avatarUrl":    f.AvatarURL,
-		"portraitUrl":  f.PortraitURL,
-		"isOfficial":   true,
-		"series":       seriesDoc(f.Series),
-		"officialNote": f.OfficialNote,
+		"today":         []any{},
+		"relations":     []any{},
+		"tagline":       f.Tagline,
+		"intro":         f.Intro,
+		"avatarUrl":     f.AvatarURL,
+		"portraitUrl":   f.PortraitURL,
+		"isOfficial":    true,
+		"series":        seriesDoc(f.Series),
+		"officialNote":  f.OfficialNote,
 		"compliance": map[string]any{
-			"aiGeneratedLabel":     "内容由 AI 生成",
-			"internalTestingOnly":  true,
+			"aiGeneratedLabel":      "内容由 AI 生成",
+			"internalTestingOnly":   true,
 			"noDeepSeekAssociation": true,
 		},
 		"createdAt": now,

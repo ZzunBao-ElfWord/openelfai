@@ -17,6 +17,7 @@ import {
 import { useAuth } from '../auth/AuthContext';
 import { Badge, Button, Card, EmptyState, Input, PageHeader } from '../components/ui/primitives';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
+import SeriesPanel from '../components/character/SeriesPanel';
 
 type Tone = 'gray' | 'red' | 'amber' | 'green' | 'blue';
 
@@ -631,6 +632,10 @@ export default function CharacterStudio() {
           if (pending) saveMutation.mutate(pending);
         }}
       />
+
+      <div className="mt-8 border-t border-gray-200 pt-8">
+        <SeriesPanel />
+      </div>
     </div>
   );
 }

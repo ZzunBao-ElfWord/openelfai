@@ -5,6 +5,7 @@ import {
   fetchPlatformDevelopers,
   fetchPlatformKeys,
   fetchPlatformWallet,
+  reviewPlatformDeveloper,
   revokePlatformKey,
   topupPlatformWallet,
   updatePlatformKey,
@@ -51,13 +52,19 @@ function fmtTime(v: number | string | null | undefined): string {
 }
 
 const devStatusTone = (status: string): 'green' | 'red' | 'amber' | 'gray' =>
-  status === 'active' ? 'green' : status === 'suspended' ? 'red' : status === 'pending' ? 'amber' : 'gray';
+  status === 'approved' ? 'green' : status === 'rejected' ? 'red'
+    : status === 'pending' ? 'amber' : status === 'suspended' ? 'red' : 'gray';
 
 const devStatusLabel: Record<string, string> = {
   pending: '待审核',
-  active: '正常',
-  suspended: '已停用',
+  approved: '已通过',
   rejected: '已拒绝',
+  suspended: '已停用',
+};
+
+const subjectLabel: Record<string, string> = {
+  individual: '个人',
+  enterprise: '企业',
 };
 
 const ledgerTone = (type: string): 'green' | 'red' | 'amber' | 'blue' | 'gray' =>
@@ -87,6 +94,11 @@ export default function PlatformDevelopers() {
 
   // Key 吊销
   const [revokeTarget, setRevokeTarget] = useState<PlatformKey | null>(null);
+
+  // 入驻审核
+  const [reviewAction, setReviewAction] = useState<'approve' | 'reject' | null>(null);
+  const [reviewNote, setReviewNote] = useState('');
+  const [reviewError, setReviewError] = useState('');
 
   // 钱包充值
   const [topupOpen, setTopupOpen] = useState(false);
@@ -158,6 +170,22 @@ export default function PlatformDevelopers() {
     },
   });
 
+  const reviewMutation = useMutation({
+    mutationFn: () =>
+      reviewPlatformDeveloper(userId, { action: reviewAction ?? 'approve', note: reviewNote.trim() }),
+    onSuccess: () => {
+      setReviewAction(null);
+      setReviewNote('');
+      setReviewError('');
+      setDetailError('');
+      setNotice(reviewAction === 'reject' ? '已拒绝该入驻申请' : '入驻已通过');
+      void queryClient.invalidateQueries({ queryKey: ['platform-developers'] });
+    },
+    onError: (err) => {
+      setReviewError(errText(err, '审核失败'));
+    },
+  });
+
   const topupMutation = useMutation({
     mutationFn: () =>
       topupPlatformWallet(userId, {
@@ -197,6 +225,9 @@ export default function PlatformDevelopers() {
     setRevokeTarget(null);
     setTopupOpen(false);
     setTopupConfirm(false);
+    setReviewAction(null);
+    setReviewNote('');
+    setReviewError('');
   }
 
   function openKeyEdit(k: PlatformKey) {
@@ -227,7 +258,7 @@ export default function PlatformDevelopers() {
     <div>
       <PageHeader
         title="开发者与 Key"
-        desc="开放平台开发者、API Key 与钱包；金额单位为元。吊销 Key 与充值均记录审计日志"
+        desc="开放平台开发者、API Key 与钱包；金额单位为元。企业入驻与能力审核均可在此处理，操作记录审计日志"
       />
 
       <form
@@ -247,7 +278,8 @@ export default function PlatformDevelopers() {
         >
           <option value="">全部状态</option>
           <option value="pending">待审核</option>
-          <option value="active">正常</option>
+          <option value="approved">已通过</option>
+          <option value="rejected">已拒绝</option>
           <option value="suspended">已停用</option>
         </select>
       </form>
@@ -262,6 +294,7 @@ export default function PlatformDevelopers() {
                 <tr>
                   <th className="th">用户 ID</th>
                   <th className="th">姓名</th>
+                  <th className="th">主体</th>
                   <th className="th">用途</th>
                   <th className="th">状态</th>
                   <th className="th">等级</th>
@@ -275,7 +308,7 @@ export default function PlatformDevelopers() {
               <tbody className="divide-y divide-gray-100">
                 {devQuery.isLoading ? (
                   <tr>
-                    <td className="td text-gray-400" colSpan={10}>
+                    <td className="td text-gray-400" colSpan={11}>
                       加载中…
                     </td>
                   </tr>
@@ -290,6 +323,16 @@ export default function PlatformDevelopers() {
                         {d.user_id.slice(0, 12)}…
                       </td>
                       <td className="td font-medium text-gray-900">{d.real_name || '(未填写)'}</td>
+                      <td className="td">
+                        <Badge tone={d.subject_type === 'enterprise' ? 'blue' : 'gray'}>
+                          {subjectLabel[d.subject_type] ?? d.subject_type}
+                        </Badge>
+                        {d.subject_type === 'enterprise' && d.org_name ? (
+                          <div className="mt-1 max-w-48 truncate text-xs text-gray-500" title={d.org_name}>
+                            {d.org_name}
+                          </div>
+                        ) : null}
+                      </td>
                       <td className="td max-w-64 truncate text-xs text-gray-600" title={d.purpose}>
                         {d.purpose || '—'}
                       </td>
@@ -322,7 +365,7 @@ export default function PlatformDevelopers() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={10}>
+                    <td colSpan={11}>
                       <EmptyState text="没有匹配的开发者" />
                     </td>
                   </tr>
@@ -387,6 +430,69 @@ export default function PlatformDevelopers() {
             <div className="mt-0.5 text-xs text-gray-600">{fmtTime(selected?.approved_at)}</div>
           </div>
         </div>
+
+        {selected?.subject_type === 'enterprise' ? (
+          <div className="mb-4 rounded-xl bg-gray-50 p-4 ring-1 ring-gray-200">
+            <div className="mb-2 text-xs font-medium text-gray-400">企业资质</div>
+            <div className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
+              <div>
+                <div className="text-xs text-gray-400">企业名称</div>
+                <div className="mt-0.5 text-gray-700">{selected.org_name || '—'}</div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-400">统一社会信用代码</div>
+                <div className="mt-0.5 font-mono text-xs text-gray-700">{selected.org_license_no || '—'}</div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-400">联系人</div>
+                <div className="mt-0.5 text-gray-700">{selected.org_contact || '—'}</div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-400">协议版本</div>
+                <div className="mt-0.5 text-xs text-gray-600">{selected.agreement_version || '—'}</div>
+              </div>
+              <div className="sm:col-span-2">
+                <div className="text-xs text-gray-400">审核意见</div>
+                <div className="mt-0.5 text-gray-700">
+                  {selected.review_note || '—'}
+                  {selected.reviewed_at ? (
+                    <span className="ml-2 text-xs text-gray-400">（{fmtTime(selected.reviewed_at)} 审核）</span>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {isSuper && selected && selected.status !== 'approved' ? (
+          <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl bg-amber-50 px-4 py-3 ring-1 ring-amber-200">
+            <span className="text-sm text-amber-800">
+              当前状态「{devStatusLabel[selected.status] ?? selected.status}」，可在核实资料后执行审核
+            </span>
+            <div className="ml-auto flex gap-2">
+              <Button
+                variant="primary"
+                onClick={() => {
+                  setReviewAction('approve');
+                  setReviewNote('');
+                  setReviewError('');
+                }}
+              >
+                通过入驻
+              </Button>
+              <Button
+                variant="danger"
+                onClick={() => {
+                  setReviewAction('reject');
+                  setReviewNote('');
+                  setReviewError('');
+                }}
+              >
+                拒绝
+              </Button>
+            </div>
+          </div>
+        ) : null}
 
         <div className="mb-4 rounded-xl bg-gray-50 p-4 ring-1 ring-gray-200">
           <div className="mb-3 flex items-center justify-between">
@@ -574,6 +680,44 @@ export default function PlatformDevelopers() {
               </table>
             </div>
           )}
+        </div>
+      </Modal>
+
+      <Modal
+        open={!!reviewAction}
+        title={reviewAction === 'reject' ? '拒绝入驻申请' : '通过入驻申请'}
+        onClose={() => setReviewAction(null)}
+      >
+        <div className="space-y-4">
+          <div className="text-sm text-gray-600">
+            {reviewAction === 'reject'
+              ? '请填写拒绝原因，开发者会看到该说明并可在修改资料后重新提交。'
+              : '通过后该账号即可创建并提交能力；个人主体通常无需人工审核。'}
+          </div>
+          {reviewAction === 'reject' ? (
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">拒绝原因</label>
+              <Textarea
+                className="w-full"
+                placeholder="如：企业资质信息与营业执照不一致"
+                value={reviewNote}
+                onChange={(e) => setReviewNote(e.target.value)}
+              />
+            </div>
+          ) : null}
+          {reviewError ? <div className="text-sm text-red-600">{reviewError}</div> : null}
+          <div className="flex justify-end gap-3">
+            <Button type="button" onClick={() => setReviewAction(null)}>
+              取消
+            </Button>
+            <Button
+              variant={reviewAction === 'reject' ? 'danger' : 'primary'}
+              disabled={reviewMutation.isPending || (reviewAction === 'reject' && !reviewNote.trim())}
+              onClick={() => reviewMutation.mutate()}
+            >
+              {reviewAction === 'reject' ? '确认拒绝' : '确认通过'}
+            </Button>
+          </div>
         </div>
       </Modal>
 

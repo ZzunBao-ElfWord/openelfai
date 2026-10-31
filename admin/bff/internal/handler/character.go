@@ -72,6 +72,12 @@ func normalizeCharacterAssetURLs(node any, base string) {
 
 // characterOpsProxy 代理一次内部运营请求。body 为空表示无请求体。
 func (d Deps) characterOpsProxy(c *gin.Context, method, subPath string, body []byte) {
+	d.characterOpsProxyTimed(c, method, subPath, body, characterOpsTimeout)
+}
+
+// characterOpsProxyTimed 与 characterOpsProxy 相同，但允许调用方指定超时
+// （批量渲染/铸造等长任务使用更长的超时）。
+func (d Deps) characterOpsProxyTimed(c *gin.Context, method, subPath string, body []byte, timeout time.Duration) {
 	if d.Cfg.OpsToken == "" {
 		c.JSON(http.StatusServiceUnavailable, gin.H{
 			"error": "OPS_DISABLED", "message": characterDisabledMsg,
@@ -80,7 +86,7 @@ func (d Deps) characterOpsProxy(c *gin.Context, method, subPath string, body []b
 	}
 
 	target := d.Cfg.OpsAPIBaseURL + characterOpsPath + subPath
-	ctx, cancel := context.WithTimeout(c.Request.Context(), characterOpsTimeout)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), timeout)
 	defer cancel()
 
 	var reader io.Reader
@@ -99,7 +105,7 @@ func (d Deps) characterOpsProxy(c *gin.Context, method, subPath string, body []b
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	client := &http.Client{Timeout: characterOpsTimeout}
+	client := &http.Client{Timeout: timeout}
 	resp, err := client.Do(req)
 	if err != nil {
 		d.Log.Error("character ops upstream unreachable", "method", method,
