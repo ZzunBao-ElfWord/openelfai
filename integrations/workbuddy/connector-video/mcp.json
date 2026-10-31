@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "openelf-video": {
+      "type": "streamableHttp",
+      "url": "https://api.openelfai.com/mcp/video",
+      "headers": {
+        "Authorization": "Bearer ${OPENELF_API_KEY}"
+      }
+    }
+  }
+}

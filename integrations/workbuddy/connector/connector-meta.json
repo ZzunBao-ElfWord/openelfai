@@ -1,9 +1,9 @@
 {
   "name": "openelf-character",
-  "displayName": "OpenElf 形象工坊",
+  "displayName": "形象工坊 OpenElf",
   "type": "mcp",
   "auth_mode": "token",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "一句话描述想要的 AI 形象，即可组合配件、生成预览并产出正式立绘。支持风格选择、缩略图预览、角色卡保存与形象管理。所有产出均标注「内容由 AI 生成」。",
   "homepage": "https://apps.openelfai.com/",
   "icon": "icon.svg",
