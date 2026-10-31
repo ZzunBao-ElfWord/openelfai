@@ -48,6 +48,8 @@ const CODE_RE = /^\d{6}$/;
 
 const CORS_ORIGINS = (process.env.PLATFORM_CORS_ORIGINS || 'https://openelfai.com,https://www.openelfai.com')
   .split(',')
+  // OPENELF_WEB_CORS_20261028: trusted Flutter Web origin.
+  .concat('https://web.openelfai.com')
   .map((origin) => origin.trim())
   .filter(Boolean);
 
@@ -201,7 +203,10 @@ async function buildApp(options = {}) {
     outTradeNo: row.outTradeNo, account: row.account, amountCents: row.netCents,
     remark: `OpenElf 创作者收益 ${row.id}`,
   }) : null;
-  const commerce = createCommerceService({ store: paymentStore, settings: config.appleIap, payout,
+  const payoutQuery = alipayGateway?.queryTransfer ? async row => alipayGateway.queryTransfer({
+    outTradeNo: row.outTradeNo, amountCents: row.netCents,
+  }) : null;
+  const commerce = createCommerceService({ db, store: paymentStore, settings: config.appleIap, payout, payoutQuery,
     realname, identityPolicy, compliance });
   const appleIap = createAppleIapService({
     db,
@@ -210,7 +215,7 @@ async function buildApp(options = {}) {
     paymentStore,
     verifyNotification: options.appleNotificationVerifier,
   });
-  const androidCommerce = createCommerceService({ store: paymentStore, settings: config.androidCommerce, payout,
+  const androidCommerce = createCommerceService({ db, store: paymentStore, settings: config.androidCommerce, payout, payoutQuery,
     realname, identityPolicy, compliance });
   const alipay = createAlipayService({ store: paymentStore, settings: config.alipay,
     commerceSettings: config.androidCommerce,
@@ -638,19 +643,27 @@ async function buildApp(options = {}) {
     });
   });
 
+  require('./push_routes').registerPush(app, { db, authenticate });
+
   // 官方账号头像：静态资源体积小，直接按文件名白名单读取，避免额外挂静态目录。
   // 官方账号生成的短视频与封面：文件名由服务端生成，只允许访问这一层目录。
   app.get('/api/v1/world-assets/videos/:file', async (request, reply) => {
     const file = String(request.params?.file || '');
-    if (!/^[a-z0-9_-]+\.(mp4|jpg|jpeg|webp)$/i.test(file)) {
+    if (!/^[a-z0-9_-]+\.(mp4|jpg|jpeg|webp|srt)$/i.test(file)) {
       return reply.code(404).send({ error: { code: 'NOT_FOUND', message: '资源不存在' } });
     }
     const isVideo = file.toLowerCase().endsWith('.mp4');
+    const isSubtitle = file.toLowerCase().endsWith('.srt');
     try {
       const target = path.join(worldVideoDir, file);
       const stat = await fs.stat(target);
       const buf = await fs.readFile(target);
       reply.header('cache-control', 'public, max-age=86400');
+      if (isSubtitle) {
+        reply.type('text/plain; charset=utf-8');
+        reply.header('content-length', String(stat.size));
+        return reply.send(buf);
+      }
       if (!isVideo) {
         reply.type('image/jpeg');
         reply.header('content-length', String(stat.size));
@@ -792,8 +805,15 @@ async function buildApp(options = {}) {
       const environment = request.body?.environment === 'sandbox' ? 'Sandbox' : 'Production';
       const service = environment === 'Sandbox' ? commerce : androidCommerce;
       return service.reviewWithdrawal({ environment, withdrawalId: request.params.id,
-        action: request.body?.action, reason: request.body?.reason });
+        action: request.body?.action, reason: request.body?.reason,
+        payeeVerified: request.body?.payeeVerified === true });
     });
+  app.post('/internal/withdrawals/:id/reconcile', async request => {
+    requireReviewToken(request);
+    const environment = request.body?.environment === 'sandbox' ? 'Sandbox' : 'Production';
+    const service = environment === 'Sandbox' ? commerce : androidCommerce;
+    return service.reconcileWithdrawal({ environment, withdrawalId: request.params.id });
+  });
 
   // 信息流分页：排序、分页、去重都在服务端完成，客户端只按页追加。
   app.get('/api/v1/commerce/feed',
@@ -801,6 +821,17 @@ async function buildApp(options = {}) {
     async (request) => {
       const { user } = await authenticate(request);
       return commerce.listFeed(user, request.query);
+    });
+
+  // 公开信息流：世界流面向全端开放（桌面/Web/游客），登录态可选——
+  // 带有效 token 时按个人拉黑过滤，游客看公共内容；环境固定为 Production，与支付开关解耦。
+  app.get('/api/v1/feed',
+    { config: { rateLimit: { max: 120, timeWindow: '1 minute' } } },
+    async (request) => {
+      let user = null;
+      try { ({ user } = await authenticate(request)); } catch (_) { /* 游客访问 */ }
+      return commerce.listFeed(user,
+        { ...request.query, environment: 'Production' }, { publicFeed: true });
     });
 
   app.post('/api/v1/commerce/actions',
@@ -1221,6 +1252,8 @@ async function buildApp(options = {}) {
 
   // —— 平台余额充值（支付宝 App 支付） ——
 
+  require('./platform/web_topup').registerWebTopup(app, { db, authenticate });
+
   app.get('/api/v1/platform/topup/products', async (request) => {
     await authenticate(request);
     return platformTopup.products();
@@ -1326,14 +1359,43 @@ async function buildApp(options = {}) {
   // 开发者生态：入驻、技能草稿、沙箱调试（/api/v1/developer/*）。
   require('./developer/routes').registerDeveloperRoutes(app, { db, authenticate });
 
-  // AI 形象内核：配件目录、角色卡草稿、预览与生成（/api/v1/character/*）。
-  require('./character/routes').registerCharacterRoutes(app, { db, authenticate });
+  // AI 形象内核：配件目录、角色卡草稿、预览、生成与 UGC 铸造（/api/v1/character/*）。
+  require('./character/routes').registerCharacterRoutes(app, {
+    db, authenticate, commerce, androidCommerce,
+  });
 
   // 形象运营精修：配件覆盖与批量生成（/internal/ops/character/*，仅运维令牌可访问）。
   require('./character/ops_routes').registerOpsRoutes(app, { db });
 
   // MCP 连接器：WorkBuddy 等外部客户端用用户自己的 API Key 调用形象工具（/mcp）。
   require('./mcp/server').registerMcpRoutes(app, { db });
+
+  // 视频剪辑连接器：独立端点 /mcp/video，剪辑走本机 ffmpeg，转写走可配置 ASR。
+  if (config.videoMcp.enabled) {
+    const { createVideoTools } = require('./mcp/video_tools');
+    const videoTools = createVideoTools({
+      db,
+      mediaDir: worldVideoDir,
+      workDir: config.videoMcp.workDir || path.join(worldAssetDir, 'video-work'),
+      ffmpegPath: config.videoMcp.ffmpegPath,
+      ffprobePath: config.videoMcp.ffprobePath,
+      logger: app.log,
+      asr: {
+        provider: config.videoMcp.asrProvider,
+        url: config.videoMcp.asrUrl,
+        baseUrl: config.videoMcp.asrBaseUrl,
+        apiKey: config.videoMcp.asrApiKey,
+        model: config.videoMcp.asrModel,
+        timeoutMs: config.videoMcp.asrTimeoutMs,
+      },
+    });
+    require('./mcp/server').registerMcpRoutes(app, {
+      db,
+      routePath: '/mcp/video',
+      serverInfo: { name: 'openelf-video', version: '1.0.0' },
+      tools: videoTools,
+    });
+  }
 
   app.get('/api/v1/platform/console/overview', async (request) => {
     const { user } = await authenticate(request);
@@ -1351,6 +1413,171 @@ async function buildApp(options = {}) {
   });
 
   // —— Elf 对话：使用用户名下的默认密钥调用本机开放平台网关 ——
+
+  // 对话可挂载的技能白名单：只有列出的技能允许在私聊里调用工具。
+  const CHAT_SKILLS = new Set(['image-studio-skill']);
+
+  // 技能说明：等价于 WorkBuddy 里由技能包注入的系统提示，约束模型怎么用工具。
+  const SKILL_PROMPTS = {
+    'image-studio-skill': [
+      '你已挂载「形象工坊 OpenElf」技能，可以通过工具直接产出角色形象。',
+      '可用工具：fetch_layers（部件目录）、generate_preview（免费预览，可批量多次调用）、',
+      'generate_batch（批量联系表）、create_character（创建角色卡）、generate_character（生成正式形象）、',
+      'get_character / list_my_characters（查询已有角色）。',
+      '工作方式：先按用户描述提炼风格与外貌要点；需要了解可选部件时调用 fetch_layers；',
+      '然后连续调用 2-4 次 generate_preview（不同 seed）给出多版方案，或按用户要求的数量调整。',
+      '图片会自动展示在对话里，正文里不要粘贴 base64、data:image 链接或图片 markdown；',
+      '正文只需简短说明每版风格与稀有度，并给出下一步建议（例如选定后创建角色卡再生成正式形象）。',
+      '工具参数必须严格按 schema 字段名传，不要自造参数。',
+    ].join(''),
+  };
+
+  /// 去掉正文里的 base64 图片，避免把几 MB 的 data URI 塞进聊天气泡。
+  function sanitizeReply(text) {
+    if (typeof text !== 'string') return '';
+    return text
+      .replace(/!\[[^\]]*\]\(\s*data:image\/[^)]*\)/gi, '')
+      .replace(/data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]{100,}/gi, '')
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+
+  /// 读取 MCP 工具清单（连接器即形象工坊，鉴权用用户自己的 API Key）。
+  async function fetchChatTools(baseUrl, apiKey) {
+    const res = await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+    });
+    if (!res.ok) return [];
+    const payload = await res.json().catch(() => null);
+    const tools = payload?.result?.tools;
+    if (!Array.isArray(tools)) return [];
+    // MCP 的 inputSchema → OpenAI function 工具格式
+    return tools
+      .filter((tool) => typeof tool?.name === 'string')
+      .map((tool) => ({
+        type: 'function',
+        function: {
+          name: tool.name,
+          description: tool.description || '',
+          parameters: tool.inputSchema || { type: 'object', properties: {} },
+        },
+      }));
+  }
+
+  /// 执行一次 MCP 工具调用，返回结构化结果与可供客户端展示的图片地址。
+  async function callChatTool(baseUrl, apiKey, name, args) {
+    const res = await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        jsonrpc: '2.0', id: 2, method: 'tools/call',
+        params: { name, arguments: args || {} },
+      }),
+    });
+    const payload = await res.json().catch(() => null);
+    const result = payload?.result;
+    if (!result) {
+      const message = payload?.error?.message || `工具 ${name} 调用失败`;
+      return { ok: false, content: JSON.stringify({ error: message }), images: [] };
+    }
+    if (result.isError) {
+      const text = result.content?.find((item) => item?.type === 'text')?.text || '工具调用失败';
+      return { ok: false, content: JSON.stringify({ error: text }), images: [] };
+    }
+    const images = collectToolImages(result.structuredContent);
+    const textPart = result.content?.find((item) => item?.type === 'text')?.text;
+    const content = textPart || JSON.stringify(result.structuredContent || {});
+    return { ok: true, content, images };
+  }
+
+  /// 从工具结果里挑可直接渲染的图片：http 地址直传，base64 缩略图限长保护。
+  function collectToolImages(node, out = []) {
+    if (!node || out.length >= 6) return out;
+    if (Array.isArray(node)) {
+      for (const item of node) collectToolImages(item, out);
+      return out;
+    }
+    if (typeof node !== 'object') return out;
+    for (const key of ['imageUrl', 'thumbUrl', 'sheetUrl']) {
+      const value = node[key];
+      if (typeof value === 'string' && value.startsWith('http') && !out.includes(value)) out.push(value);
+    }
+    const thumb = node.thumbDataUrl;
+    if (
+      typeof thumb === 'string' &&
+      thumb.startsWith('data:image/') &&
+      thumb.length <= 200000 &&
+      !out.includes(thumb)
+    ) {
+      out.push(thumb);
+    }
+    for (const value of Object.values(node)) collectToolImages(value, out);
+    return out;
+  }
+
+  /// 带技能的一轮对话：模型多次调用工具，直到给出最终文本。
+  /// messages 已含入参里的当前用户提问，此处不再重复追加。
+  async function chatWithSkills({ baseUrl, apiKey, model, messages, skills = [], maxRounds = 4 }) {
+    const tools = await fetchChatTools(baseUrl, apiKey);
+    const history = [...messages];
+    // 技能说明紧跟人设之后，避免覆盖 AI 自己的语气设定。
+    const skillPrompts = skills.map((id) => SKILL_PROMPTS[id]).filter(Boolean);
+    if (skillPrompts.length) {
+      history.splice(1, 0, { role: 'system', content: skillPrompts.join('\n') });
+    }
+    const images = [];
+    const steps = [];
+    if (!tools.length) {
+      // 没有可用工具时退回普通对话，不让用户卡在空回复。
+      const res = await fetch(`${baseUrl}/v1/chat/completions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({ model, messages: history, max_tokens: 800 }),
+        signal: AbortSignal.timeout(60000),
+      });
+      if (!res.ok) return { reply: '', images, steps };
+      const payload = await res.json().catch(() => null);
+      const content = payload?.choices?.[0]?.message?.content;
+      return { reply: sanitizeReply(content), images, steps };
+    }
+    for (let round = 1; round <= maxRounds; round++) {
+      const res = await fetch(`${baseUrl}/v1/chat/completions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model, messages: history, tools, tool_choice: 'auto', temperature: 0.3, max_tokens: 800,
+        }),
+        signal: AbortSignal.timeout(60000),
+      });
+      const payload = await res.json().catch(() => null);
+      const message = payload?.choices?.[0]?.message;
+      if (!message) return { reply: '', images, steps };
+      const calls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
+      if (!calls.length) {
+        return { reply: sanitizeReply(message.content), images, steps };
+      }
+      history.push(message);
+      for (const call of calls) {
+        const name = call?.function?.name || '';
+        let args = {};
+        try {
+          args = JSON.parse(call?.function?.arguments || '{}');
+        } catch (_) {
+          args = {};
+        }
+        const result = await callChatTool(baseUrl, apiKey, name, args);
+        for (const image of result.images) {
+          if (!images.includes(image)) images.push(image);
+        }
+        steps.push({ round, tool: name, ok: result.ok });
+        history.push({ role: 'tool', tool_call_id: call.id, content: result.content.slice(0, 200000) });
+      }
+    }
+    return { reply: '技能调用步数超出上限，请再试一次。', images, steps };
+  }
 
   app.post('/api/v1/elf-chat', { bodyLimit: 64 * 1024 }, async (request, reply) => {
     const { user } = await authenticate(request);
@@ -1395,6 +1622,28 @@ async function buildApp(options = {}) {
     }
     messages.push(...history.slice(-CHAT_HISTORY_WINDOW), { role: 'user', content: text });
     const baseUrl = process.env.PLATFORM_SELF_URL || `http://127.0.0.1:${config.port}`;
+
+    // 挂载了技能时走「模型 + 工具」循环，交互形态与 WorkBuddy 一致。
+    const skills = Array.isArray(request.body?.skills)
+      ? request.body.skills.filter((item) => typeof item === 'string' && CHAT_SKILLS.has(item.trim()))
+      : [];
+    if (skills.length) {
+      const model = elfId === 'off_workbuddy'
+        ? (process.env.ELF_WORKBUDDY_MODEL || 'hunyuan/hunyuan-turbos-latest')
+        : (process.env.PLATFORM_CHAT_MODEL || 'deepseek/deepseek-chat');
+      try {
+        const result = await chatWithSkills({ baseUrl, apiKey, model, messages, skills });
+        // 模型只返回了图片、正文被清理空时，给一句兜底话术，避免整轮失败。
+        const replyText = result.reply ||
+          (result.images.length ? `已生成 ${result.images.length} 版形象，点开图片可以看大图。` : '');
+        if (!replyText) return reply.code(502).send(AI_UPSTREAM_ERROR);
+        return done({
+          mode: 'real', reply: replyText, images: result.images, steps: result.steps,
+        });
+      } catch (_) {
+        return reply.code(502).send(AI_UPSTREAM_ERROR);
+      }
+    }
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), CHAT_TIMEOUT_MS);

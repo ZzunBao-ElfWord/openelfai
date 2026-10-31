@@ -104,7 +104,7 @@ test('校验通过后落盘并发布一条视频动态', async () => {
   assert.equal(post.kind, 'video');
   assert.equal(post.elfId, 'elf-1');
   assert.equal(post.aiGenerated, true);
-  assert.match(post.videoUrl, /^https:\/\/openelfai\.com\/api\/v1\/world-assets\/videos\/u-[a-f0-9]+\.mp4$/);
+  assert.match(post.videoUrl, /^https:\/\/media\.openelfai\.com\/api\/v1\/world-assets\/videos\/u-[a-f0-9]+\.mp4$/);
   assert.equal(post.coverUrl, null);
   assert.equal(fs.existsSync(path.join(mediaDir, path.basename(post.videoUrl))), true);
 

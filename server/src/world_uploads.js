@@ -6,6 +6,7 @@ const path = require('node:path');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const { moderateText } = require('./compliance');
+const { videoDeliveryUrl } = require('./video_delivery');
 
 const execFileAsync = promisify(execFile);
 
@@ -142,7 +143,7 @@ function createWorldUploadService({
         await tx.put('elf', elf.id, elf, { owner: elf.ownerId });
         return record;
       });
-      return { post, reviewState: 'pending_review' };
+      return { post: { ...post, videoUrl: videoDeliveryUrl(post.videoUrl) }, reviewState: 'pending_review' };
     } catch (error) {
       // 发布失败（如归属变化）时删掉刚落盘的视频与封面。
       await fs.rm(path.join(mediaDir, file), { force: true }).catch(() => {});

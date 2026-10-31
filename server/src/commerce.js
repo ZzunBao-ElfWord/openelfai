@@ -3,6 +3,8 @@
 const crypto = require('node:crypto');
 const { changeBalance, fingerprint, fail } = require('./payment_store');
 const { moderateText } = require('./compliance');
+const { videoDeliveryUrl } = require('./video_delivery');
+const { RESOURCE_POLICY, assertResourceAction } = require('./resource_policy');
 
 const CATALOG = [
   { id: 'pm_001', name: '尘', elfId: 'pm_dust', title: '尘 · 第 1 代', price: 1280, capacity: 2, generation: 1, edition: '初版', learned: [] },
@@ -40,7 +42,7 @@ const ADDRESS_RE = /^0x[a-f0-9]{40}$/;
 const FORGET_COST = 20;
 const CREATE_ELF_COST = 200;
 /// 创作者服务费（百分比）：打赏礼物按 50% 结算给创作者，平台留剩余部分。
-const CREATOR_SHARE_PERCENT = { tip: 50 };
+const CREATOR_SHARE_PERCENT = { tip: 50, dev_skill: 70 };
 /// 收益冷静期：到期才从「待结算」转「可提现」，用于退款与风控兜底。
 const SETTLE_DAYS = 7;
 const SETTLE_MS = SETTLE_DAYS * 86400000;
@@ -57,6 +59,11 @@ const FEED_MAX_SIZE = 30;
 const FEED_SCAN = 1000;
 /// 视频类产出的演示素材（与服务端同域，境内可访问）。
 const SAMPLE_VIDEO_URL = 'https://openelfai.com/app/media/sample.mp4';
+
+function toNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
 /// 自动运营节奏：正常 12–30 分钟一条；余额/算力不足时停工 30 分钟再试。
 const AUTO_GAP_MIN = 12;
 const AUTO_GAP_MAX = 30;
@@ -89,13 +96,45 @@ const PERSONA_AFFINITY = [
 ];
 
 /// 技能书目录（服务端唯一真源）：价格、座位、算力都取自同一处定义。
-function catalogModules() {
-  return Object.keys(MODULES).map((id) => {
+/// 开发者上架的能力与官方技能书合并成同一份目录，客户端不需要区分来源。
+function catalogModules(devRows = []) {
+  const items = Object.keys(MODULES).map((id) => {
     const [seats, compute, kind] = MODULES[id];
     const [name, glyph, category, track, summary, effect] = MODULE_META[id];
     return { id, name, glyph, category, track, summary, effect,
-      price: MODULE_PRICES[id] ?? 0, seats, compute, kind };
+      price: MODULE_PRICES[id] ?? 0, seats, compute, kind, dev: false };
   });
+  for (const row of devRows) items.push(devModuleOf(row));
+  return items;
+}
+
+/// 开发者能力的赛道 → 产出形态：与官方技能书保持同一套 kind 口径。
+const DEV_TRACK_KINDS = { writing: 'text', visual: 'image', video: 'video',
+  voice: 'audio', knowledge: 'quote', social: 'reply' };
+
+function devModuleOf(row) {
+  const name = String(row.name || '');
+  return {
+    id: row.id, name, glyph: [...name][0] || '能',
+    category: row.kind, track: row.track, summary: row.summary, effect: row.summary,
+    price: toNumber(row.price_diamonds), seats: 1, compute: 8,
+    kind: DEV_TRACK_KINDS[row.track] || 'text', dev: true,
+    capability_kind: row.kind, developer_name: row.developer_name || null,
+  };
+}
+
+/// 动态能力目录：已上架（approved）的开发者能力才进入市场与学习入口。
+async function loadDevModules(db) {
+  if (!db) return [];
+  const [rows] = await db.execute(
+    `SELECT d.id, d.slug, d.name, d.track, d.kind, d.summary, d.price_diamonds,
+            p.real_name AS developer_name
+       FROM dev_skill_defs d
+       LEFT JOIN platform_developers p ON p.user_id = d.developer_id
+      WHERE d.status = 'approved'
+      ORDER BY d.updated_at DESC`,
+  ).catch(() => [[]]);
+  return rows;
 }
 
 function affinityOf(elf) {
@@ -192,8 +231,8 @@ function capacityOf(elf) {
   return (Number(elf.baseCapacity) || 3) + (level >= 2 ? 1 : 0) + (level >= 5 ? 1 : 0);
 }
 
-function seatsUsed(elf) {
-  return (elf.learnedSkills || []).reduce((sum, id) => sum + (MODULES[id]?.[0] || 0), 0);
+function seatsUsed(elf, seatsOf = (id) => MODULES[id]?.[0] || 0) {
+  return (elf.learnedSkills || []).reduce((sum, id) => sum + seatsOf(id), 0);
 }
 
 /// 注意力同一时间只加不减，注意力值按天衰减 15%（×0.85^days）。
@@ -214,6 +253,9 @@ function bump(elf, delta) {
 
 /// 兼容旧数据：缺时间戳的帖子保留原有文案，互动计数缺省补 0。
 function normalizePost(post) {
+  // Work on a response copy: never migrate database URLs during a feed read.
+  post = { ...post };
+  if (post.kind === 'video') post.videoUrl = videoDeliveryUrl(post.videoUrl);
   const stamp = post.createdAt || post.time;
   if (stamp) {
     post.createdAt = stamp;
@@ -254,6 +296,26 @@ function scoreOf(post, sort) {
   return post.likes * 1.0 + post.collects * 1.5 + post.replies * 0.3 + post.views * 0.1 + fresh;
 }
 
+/// 推荐流混排：官方厂商账号与用户自建 AI 的内容按 2:1 交错。
+/// 信息流长期被官方账号刷屏时，用户 AI 的作品会沉底、打赏入口也随之消失；
+/// 混排保证用户 AI 的内容稳定出现在首屏（有内容时至少每三条一条来自用户 AI）。
+function blendRecommended(ranked, officialElves) {
+  const official = [];
+  const user = [];
+  for (const row of ranked) {
+    (officialElves.has(row.post.elfId) ? official : user).push(row);
+  }
+  if (user.length === 0) return ranked;
+  const mixed = [];
+  let oi = 0;
+  let ui = 0;
+  while (oi < official.length || ui < user.length) {
+    for (let i = 0; i < 2 && oi < official.length; i += 1) mixed.push(official[oi++]);
+    if (ui < user.length) mixed.push(user[ui++]);
+  }
+  return mixed;
+}
+
 /// 兼容旧数据：slots/equipped/ownedModules 一次性归一到 baseCapacity/learnedSkills。
 function normalizeElf(elf) {
   if (!Number.isSafeInteger(elf.baseCapacity)) {
@@ -291,7 +353,7 @@ function newElf(user, template, id) {
   return elf;
 }
 
-function createCommerceService({ store, settings, payout = null, realname = null,
+function createCommerceService({ db = null, store, settings, payout = null, payoutQuery = null, realname = null,
   identityPolicy = {}, compliance = null }) {
   // 同一用户同一证件连续失败达到上限后锁定一段时间，避免拿证件号反复试探。
   const identityMaxFailures = Math.max(1, Number(identityPolicy.maxFailures) || 5);
@@ -359,6 +421,7 @@ function createCommerceService({ store, settings, payout = null, realname = null
     if (!settings.enabled) throw fail(503, 'PAYMENTS_DISABLED', '收益服务尚未开放');
     if (!REQUEST_RE.test(body?.requestId || '')) throw fail(400, 'INVALID_REQUEST_ID', '缺少操作编号');
     const env = environment(body?.environment);
+    if (env !== 'Production') throw fail(403, 'SANDBOX_WITHDRAW_DISABLED', '测试收益不可提现，不会发起真实转账');
     const account = typeof body?.account === 'string' ? body.account.trim() : '';
     if (!PAYOUT_ACCOUNT_RE.test(account)) throw fail(400, 'INVALID_ACCOUNT', '请填写支付宝登录手机号或邮箱');
     const amount = Number(body?.amountCents);
@@ -405,9 +468,11 @@ function createCommerceService({ store, settings, payout = null, realname = null
   }
 
   /// 提现审核：approve 时调出款通道，reject 时把冻结额度退回可提现。
-  async function reviewWithdrawal({ environment: hint, withdrawalId, action, reason }) {
+  async function reviewWithdrawal({ environment: hint, withdrawalId, action, reason, payeeVerified = false }) {
     const env = environment(hint);
+    if (env !== 'Production' && action === 'approve') throw fail(403, 'SANDBOX_WITHDRAW_DISABLED', '测试环境禁止真实出款');
     if (!['approve', 'reject'].includes(action)) throw fail(400, 'INVALID_ACTION', '审核动作无效');
+    if (action === 'approve' && payeeVerified !== true) throw fail(403, 'PAYEE_REVIEW_REQUIRED', '请先人工核实收款账号属于实名本人，再明确确认');
     const prepared = await store.transaction(env, async (tx) => {
       const row = await tx.get('withdrawal', withdrawalId || '', true);
       if (!row) throw fail(404, 'UNKNOWN_WITHDRAWAL', '提现记录不存在');
@@ -422,6 +487,7 @@ function createCommerceService({ store, settings, payout = null, realname = null
         return { rejected: { withdrawal: publicWithdrawal(row) } };
       }
       row.status = 'paying';
+      row.payeeVerifiedAt = new Date().toISOString();
       await tx.put('withdrawal', row.id, row, { owner: row.ownerId, state: 'paying' });
       return { row, ownerId: row.ownerId };
     });
@@ -432,27 +498,52 @@ function createCommerceService({ store, settings, payout = null, realname = null
       if (!payout) throw fail(503, 'PAYOUT_NOT_CONFIGURED', '出款通道未配置');
       result = await payout(row);
     } catch (error) {
-      result = { status: 'failed', message: error.message || '出款失败' };
+      result = { status: error.code === 'PAYOUT_NOT_CONFIGURED' ? 'failed' : 'unknown',
+        message: error.code === 'PAYOUT_NOT_CONFIGURED' ? '出款通道未配置，未发起转账' : '出款结果待查证，请勿重新申请' };
     }
+    return completeWithdrawal(env, row.id, result);
+  }
+
+  async function completeWithdrawal(env, id, result) {
     return store.transaction(env, async (tx) => {
-      const latest = await tx.get('withdrawal', row.id, true);
+      const latest = await tx.get('withdrawal', id, true);
+      if (!latest) throw fail(404, 'UNKNOWN_WITHDRAWAL', '提现记录不存在');
+      if (!['paying', 'pending_reconciliation'].includes(latest.status)) return { withdrawal: publicWithdrawal(latest) };
       if (result.status === 'paid') {
         latest.status = 'paid'; latest.paidAt = new Date().toISOString(); latest.outOrderId = result.orderId || null;
         const wallet = await tx.lockWallet(latest.ownerId);
         wallet.withdrawnCents += latest.netCents;
         wallet.version++;
         await tx.saveWallet(latest.ownerId, wallet);
-      } else {
+      } else if (result.status === 'failed') {
         // 出款失败即解冻，让创作者可以重新申请，避免资金悬空。
         latest.status = 'failed'; latest.failureReason = String(result.message || result.code || '出款失败').slice(0, 120);
         const wallet = await tx.lockWallet(latest.ownerId);
         wallet.availableCents += latest.amountCents;
         wallet.version++;
         await tx.saveWallet(latest.ownerId, wallet);
+      } else {
+        // A timeout/processing reply is NOT a failed transfer. Keep funds frozen
+        // and the original outTradeNo, otherwise a retry could pay twice.
+        latest.status = 'pending_reconciliation';
+        latest.failureReason = '出款结果待人工查证，额度继续冻结，请勿重复申请';
       }
       await tx.put('withdrawal', latest.id, latest, { owner: latest.ownerId, state: latest.status });
       return { withdrawal: publicWithdrawal(latest) };
     });
+  }
+
+  async function reconcileWithdrawal({ environment: hint, withdrawalId }) {
+    const env = environment(hint);
+    if (env !== 'Production') throw fail(403, 'SANDBOX_WITHDRAW_DISABLED', '测试环境禁止真实出款查证');
+    const row = await store.transaction(env, tx => tx.get('withdrawal', withdrawalId || ''));
+    if (!row) throw fail(404, 'UNKNOWN_WITHDRAWAL', '提现记录不存在');
+    if (!['paying', 'pending_reconciliation'].includes(row.status)) return { withdrawal: publicWithdrawal(row) };
+    if (!payoutQuery) throw fail(503, 'PAYOUT_QUERY_NOT_CONFIGURED', '出款查证通道未配置，额度保持冻结');
+    let result;
+    try { result = await payoutQuery(row); }
+    catch (_) { result = { status: 'unknown' }; }
+    return completeWithdrawal(env, row.id, result);
   }
 
   /// 提现记录：只返回当前用户自己的。
@@ -473,6 +564,8 @@ function createCommerceService({ store, settings, payout = null, realname = null
 
   async function snapshot(user, hint) {
     const env = environment(hint);
+    // 已上架的开发者能力与官方技能书合并下发，价格同源。
+    const devModules = await loadDevModules(db);
     // 被拉黑的 AI 与用户不出现在信息流和相关评论里。
     const blocked = compliance ? await compliance.blockedSets(user) : null;
     return store.transaction(env, async (tx) => {
@@ -498,6 +591,7 @@ function createCommerceService({ store, settings, payout = null, realname = null
         .filter((row) => !blocked?.users.has(row.userId));
       const notices = await tx.list('notice', { owner: user.id, state: 'unread', limit: 20 });
       return { mode: env.toLowerCase(), wallet, commerce: {
+        resourcePolicy: RESOURCE_POLICY,
         activeElfId: profile.activeElfId, revision: profile.revision || 0, earningsFen: wallet.earningsFen,
         // 创作者收益三档 + 提现规则，客户端只做展示与入口。
         earnings: {
@@ -514,7 +608,9 @@ function createCommerceService({ store, settings, payout = null, realname = null
           },
         },
         withdrawals: (await tx.list('withdrawal', { owner: user.id, limit: 20 })).map(publicWithdrawal),
-        humanAddress: profile.humanAddress, modulePrices: MODULE_PRICES,
+        humanAddress: profile.humanAddress,
+        modulePrices: { ...MODULE_PRICES,
+          ...Object.fromEntries(devModules.map((row) => [row.id, toNumber(row.price_diamonds)])) },
         identity: identity ? { status: identity.status, maskedName: identity.maskedName,
           maskedIdNumber: identity.maskedIdNumber, provider: identity.provider,
           verifiedAt: identity.verifiedAt } : null,
@@ -535,8 +631,8 @@ function createCommerceService({ store, settings, payout = null, realname = null
         primary: CATALOG.map((item) => ({ ...item, market: 'primary', subtitle: '官方首发', note: '由服务器登记持有权益' })),
         // 已取消用户间 AI 寄售：市场只保留官方首发，AI 流转只剩免费转赠。
         secondary: [],
-        // 技能书目录：名称、图标、赛道、文案与价格统一由服务端下发。
-        modules: catalogModules(),
+        // 技能书目录：名称、图标、赛道、文案与价格统一由服务端下发（含开发者上架能力）。
+        modules: catalogModules(devModules),
         posts, logs: await tx.logs(user.id),
       } };
     });
@@ -653,15 +749,18 @@ function createCommerceService({ store, settings, payout = null, realname = null
 
   /// 信息流分页：世界（全部）/ 视频（video 形态）两条流，排序、分页与去重都在服务端完成。
   /// 客户端只按页追加，不再本地拼装或重新排序。
-  async function listFeed(user, body) {
-    if (!settings.enabled) throw fail(503, 'PAYMENTS_DISABLED', '信息流服务尚未开放');
+  /// publicFeed 模式：面向全端公开（桌面/Web/游客），跳过支付开关；user 为 null 时
+  /// 不做拉黑过滤、「我的」排序回退为推荐、isMine 恒为 false。
+  async function listFeed(user, body, { publicFeed = false } = {}) {
+    if (!publicFeed && !settings.enabled) throw fail(503, 'PAYMENTS_DISABLED', '信息流服务尚未开放');
     const env = environment(body?.environment);
     const channel = body?.channel === 'video' ? 'video' : 'world';
-    const sort = channel === 'video' ? 'hot'
+    let sort = channel === 'video' ? 'hot'
       : (['hot', 'mine', 'latest'].includes(body?.sort) ? body.sort : 'recommend');
+    if (!user && sort === 'mine') sort = 'recommend';
     const size = Math.min(Math.max(Number(body?.size) || 20, 1), FEED_MAX_SIZE);
     const page = Math.min(Math.max(Number(body?.page) || 0, 0), 200);
-    const blocked = compliance ? await compliance.blockedSets(user) : null;
+    const blocked = user && compliance ? await compliance.blockedSets(user) : null;
     return store.transaction(env, async (tx) => {
       const mine = sort === 'mine'
         ? new Set((await tx.list('elf', { owner: user.id })).map((elf) => elf.id)) : null;
@@ -674,8 +773,16 @@ function createCommerceService({ store, settings, payout = null, realname = null
       const ranked = pool.map((post) => ({ post, score: scoreOf(post, sort) }));
       ranked.sort((a, b) => b.score - a.score
         || String(b.post.id).localeCompare(String(a.post.id)));
+      // 推荐流把用户 AI 的内容混进官方账号之间；其它排序保持原有语义。
+      let ordered = ranked;
+      if (sort === 'recommend') {
+        const officialElves = new Set((await tx.list('elf', { limit: 500 }))
+          .filter((elf) => elf.isOfficial === true || elf.status === 'official')
+          .map((elf) => elf.id));
+        ordered = blendRecommended(ranked, officialElves);
+      }
       const seen = new Set();
-      const posts = ranked.slice(page * size, page * size + size).map((row) => row.post)
+      const posts = ordered.slice(page * size, page * size + size).map((row) => row.post)
         .filter((post) => (seen.has(post.id) ? false : seen.add(post.id)));
       const elves = [];
       for (const id of new Set(posts.map((post) => post.elfId))) {
@@ -683,7 +790,7 @@ function createCommerceService({ store, settings, payout = null, realname = null
         if (!elf) continue;
         const normalized = decayAttention(normalizeElf(elf));
         elves.push({ ...normalized,
-          isMine: normalized.ownerId === user.id && normalized.status === 'owned' });
+          isMine: user != null && normalized.ownerId === user.id && normalized.status === 'owned' });
       }
       return { channel, sort, page, size, posts, elves,
         hasMore: (page + 1) * size < ranked.length };
@@ -691,8 +798,16 @@ function createCommerceService({ store, settings, payout = null, realname = null
   }
   async function action(user, body) {
     if (!settings.enabled) throw fail(503, 'PAYMENTS_DISABLED', '消费服务尚未开放');
+    assertResourceAction(body, fail);
     if (!REQUEST_RE.test(body?.requestId || '')) throw fail(400, 'INVALID_REQUEST_ID', '缺少操作编号');
     const env = environment(body.environment);
+    // 开发者能力与官方技能书共用一套学习/发布链路，这里先取一次已上架目录。
+    const devRows = await loadDevModules(db);
+    const devById = new Map(devRows.map((row) => [row.id, row]));
+    const devTuple = (id) => {
+      const row = devById.get(id);
+      return row ? [1, 8, DEV_TRACK_KINDS[row.track] || 'text'] : null;
+    };
     const { type, requestId } = body;
     const payload = { ...body };
     delete payload.requestId;
@@ -703,6 +818,10 @@ function createCommerceService({ store, settings, payout = null, realname = null
       if (type === 'buy' && !CATALOG.some((l) => l.id === body.listingId)) {
         sellerId = (await tx.get('listing', body.listingId || ''))?.sellerId;
       } else if (type === 'tip') sellerId = (await tx.get('elf', body.elfId || ''))?.ownerId;
+      else if (type === 'buy_module' && devById.has(body.moduleId)) {
+        sellerId = devById.get(body.moduleId).developer_id;
+        if (sellerId === user.id) throw fail(409, 'SELF_PURCHASE', '不能购买自己上架的能力');
+      }
       const wallets = new Map();
       for (const id of [...new Set([user.id, sellerId].filter(Boolean))].sort()) {
         if (!USER_RE.test(id) || (await tx.user(id))?.status !== 'active') throw fail(404, 'UNKNOWN_OWNER', '该内容暂不支持付费');
@@ -900,26 +1019,58 @@ function createCommerceService({ store, settings, payout = null, realname = null
         profile.activeElfId = elf.id;
         await saveElf(elf);
       } else if (type === 'buy_module') {
-        const price = Object.hasOwn(MODULE_PRICES, body.moduleId) ? MODULE_PRICES[body.moduleId] : null;
+        const devRow = devById.get(body.moduleId) || null;
+        const price = devRow
+          ? toNumber(devRow.price_diamonds)
+          : (Object.hasOwn(MODULE_PRICES, body.moduleId) ? MODULE_PRICES[body.moduleId] : null);
         if (!price) throw fail(400, 'INVALID_MODULE', '技能书无效');
         await changeBalance(tx, user.id, wallet, { eventId, type: 'buy_module', amount: -price, spend: true, note: '购入技能书 ' + body.moduleId });
         const bookId = 'bk_' + crypto.randomUUID().replaceAll('-', '');
         await tx.put('book', bookId, { id: bookId, moduleId: body.moduleId, ownerId: user.id,
           ownerAddress: profile.humanAddress, mintedAt: new Date().toISOString(), status: 'owned' },
         { owner: user.id, state: 'owned' });
+        if (devRow && db) {
+          // 开发者分成同样先进「待结算」，冷静期后转为可提现；并单独记一份平台对账流水。
+          await earn(devRow.developer_id, price, 'dev_skill');
+          const cents = Math.round(price * 10 * (CREATOR_SHARE_PERCENT.dev_skill / 100));
+          try {
+            await db.execute(
+              `INSERT INTO dev_earnings
+                (id, developer_id, capability_id, book_id, buyer_id, gross_diamonds, developer_cents,
+                  status, settle_at, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+              [crypto.randomUUID(), devRow.developer_id, devRow.id, bookId, user.id, price, cents,
+                Date.now() + SETTLE_MS, Date.now()],
+            );
+          } catch (error) {
+            // 同一笔书只记一次，重放请求直接忽略。
+            if (error?.code !== 'ER_DUP_ENTRY') throw error;
+          }
+          await db.execute(
+            'UPDATE dev_skill_defs SET sales_count = sales_count + 1, earnings_cents = earnings_cents + ? WHERE id = ?',
+            [cents, devRow.id],
+          );
+        }
       } else if (type === 'learn' || type === 'forget') {
         const elf = await requireOwnedElf(body.elfId);
-        if (!Object.hasOwn(MODULES, body.moduleId)) throw fail(400, 'UNKNOWN_MODULE', '技能不存在');
+        const staticModule = MODULES[body.moduleId] || null;
+        const devRow = devById.get(body.moduleId) || null;
+        if (!staticModule && !devRow) throw fail(400, 'UNKNOWN_MODULE', '技能不存在');
+        const seatsOf = (id) => (MODULES[id]?.[0] ?? (devById.has(id) ? 1 : 0));
+        const moduleSeats = staticModule ? staticModule[0] : 1;
         if (type === 'learn') {
           if (elf.learnedSkills.includes(body.moduleId)) throw fail(409, 'SKILL_ALREADY_LEARNED', '这只 AI 已经学会该技能');
           const books = await tx.list('book', { owner: user.id, state: 'owned', lock: true });
           const book = books.find((item) => item.moduleId === body.moduleId);
           if (!book) throw fail(409, 'BOOK_NOT_OWNED', '仓库里没有这本技能书');
-          if (seatsUsed(elf) + MODULES[body.moduleId][0] > capacityOf(elf)) throw fail(409, 'NO_SLOTS', '学习位不足');
+          if (seatsUsed(elf, seatsOf) + moduleSeats > capacityOf(elf)) throw fail(409, 'NO_SLOTS', '学习位不足');
           book.status = 'burned'; book.burnedInto = elf.id; book.burnedAt = new Date().toISOString();
           await tx.put('book', book.id, book, { owner: user.id, state: 'burned', ref: elf.id });
           elf.learnedSkills.push(body.moduleId);
           if (body.moduleId === 'auto' && !elf.nextAutoPostAt) elf.nextAutoPostAt = Date.now() + 15 * 60000;
+          if (devRow && db) {
+            await db.execute('UPDATE dev_skill_defs SET install_count = install_count + 1 WHERE id = ?', [devRow.id]);
+          }
         } else {
           if (body.moduleId === 'auto') throw fail(409, 'AUTO_BASE', '自动运营中枢不能遗忘');
           if (!elf.learnedSkills.includes(body.moduleId)) throw fail(409, 'SKILL_NOT_LEARNED', '这只 AI 还没学会该技能');
@@ -946,7 +1097,7 @@ function createCommerceService({ store, settings, payout = null, realname = null
             if (typeof body.body !== 'string' || !body.body.trim() || body.body.length > 4000) throw fail(400, 'INVALID_POST', '内容无效');
             const postHit = moderateText(body.body);
             if (postHit) throw fail(400, 'CONTENT_BLOCKED', '包含违规词「' + postHit + '」');
-            const module = body.moduleId && Object.hasOwn(MODULES, body.moduleId) ? MODULES[body.moduleId] : null;
+            const module = body.moduleId ? (MODULES[body.moduleId] || devTuple(body.moduleId)) : null;
             if (body.moduleId === 'auto') throw fail(400, 'INVALID_MODULE', '自动中枢不能直接创作');
             if (body.moduleId && (!module || !elf.learnedSkills.includes(body.moduleId))) throw fail(409, 'MODULE_NOT_LEARNED', '技能尚未学会');
             if (body.operation === 'auto_publish') {
@@ -962,6 +1113,9 @@ function createCommerceService({ store, settings, payout = null, realname = null
               videoUrl: (module?.[2] === 'video') ? SAMPLE_VIDEO_URL : null,
               createdAt: new Date().toISOString(), context: '来自 ' + elf.name };
             await tx.put('post', post.id, post, { owner: elf.ownerId, ref: elf.id });
+            if (body.moduleId && devById.has(body.moduleId) && db) {
+              await db.execute('UPDATE dev_skill_defs SET call_count = call_count + 1 WHERE id = ?', [body.moduleId]);
+            }
           } else throw fail(400, 'INVALID_OPERATION', '操作无效');
         }
         await saveElf(elf);
@@ -1063,8 +1217,120 @@ function createCommerceService({ store, settings, payout = null, realname = null
     return { identity: { status: record.status, maskedName: record.maskedName,
       maskedIdNumber: record.maskedIdNumber, provider: record.provider, verifiedAt: record.verifiedAt } };
   }
+  /// 轻量读取用户人类侧链地址：只读 profile，不拼快照；未初始化时返回 null。
+  async function characterAddress(user, hint) {
+    if (!user || !user.id) throw fail(400, 'INVALID_USER', '缺少用户');
+    const env = environment(hint);
+    return store.transaction(env, async (tx) => {
+      const profile = await tx.get('profile', user.id);
+      return profile?.humanAddress || null;
+    });
+  }
+
+  /// 铸造前轻量预检余额：只锁钱包读取，不触发对账与快照拼装。
+  async function characterBalance(user, hint) {
+    if (!user || !user.id) throw fail(400, 'INVALID_USER', '缺少用户');
+    const env = environment(hint);
+    return store.transaction(env, async (tx) => {
+      const wallet = await tx.lockWallet(user.id);
+      return { diamonds: wallet.diamonds, refundDebt: wallet.refundDebt };
+    });
+  }
+
+  /// UGC 单角色铸造：链上成功后扣 200 钻石并建一只对应 AI。
+  /// 幂等：同一张角色卡只建一只 AI，扣费事件 eventId 固定，重复调用不会重复扣费。
+  async function createElfFromCharacter(user, { card, chain = {}, environment: hint } = {}) {
+    if (!user || !user.id) throw fail(400, 'INVALID_USER', '缺少用户');
+    if (!card || !card.id) throw fail(400, 'INVALID_CARD', '缺少角色卡');
+    const env = environment(hint);
+
+    const existing = await store.transaction(env, async (tx) => {
+      const elves = (await tx.list('elf', { owner: user.id })).map(normalizeElf);
+      return elves.find((item) => item.characterCardId === card.id) || null;
+    });
+    if (existing) return { elf: existing, created: false };
+
+    // 扣费单独提交：后续建 AI 失败时，调用方可以据此追加退款事件。
+    const eventId = 'mint_character:' + card.id;
+    await store.transaction(env, async (tx) => {
+      const wallet = await tx.lockWallet(user.id);
+      await changeBalance(tx, user.id, wallet, { eventId, type: 'mint_character',
+        amount: -CREATE_ELF_COST, spend: true, note: '铸造角色 ' + card.name });
+    });
+
+    try {
+      return await store.transaction(env, async (tx) => {
+        const wallet = await tx.lockWallet(user.id);
+        const profile = await ensureProfile(tx, user, wallet);
+        const elves = (await tx.list('elf', { owner: user.id })).map(normalizeElf);
+        const duplicate = elves.find((item) => item.characterCardId === card.id);
+        if (duplicate) return { elf: duplicate, created: false };
+
+        const id = 'ugc_' + crypto.randomUUID().replaceAll('-', '');
+        const count = elves.filter((item) => item.id.startsWith('ugc_')).length + 1;
+        const elf = newElf(user, {
+          name: card.name,
+          serial: '#U' + String(count).padStart(3, '0'),
+          edition: 'UGC · 初版',
+          persona: card.persona,
+          fear: card.fear,
+          habit: card.habit,
+          capacity: 3,
+          avatarStyle: card.style || null,
+          avatarPrompt: card.prompt || null,
+          portraitSource: card.source || 'text',
+        }, id);
+        // 角色卡铸造的链上与形象字段：全部来自真实卡数据，不做补造。
+        elf.imageUrl = chain.imageUrl || null;
+        elf.imageThumbUrl = chain.thumbUrl || null;
+        elf.characterCardId = card.id;
+        elf.tokenId = chain.tokenId === undefined || chain.tokenId === null ? null : Number(chain.tokenId);
+        elf.workHash = chain.workHash || null;
+        elf.dciId = chain.dciId || null;
+        elf.dciTxHash = chain.antTxHash || null;
+        elf.mintedAt = new Date().toISOString();
+
+        profile.activeElfId = elf.id;
+        profile.revision = (Number(profile.revision) || 0) + 1;
+        await tx.put('elf', elf.id, normalizeElf(elf), { owner: user.id });
+        await tx.put('profile', user.id, profile, { owner: user.id });
+        return { elf: normalizeElf(elf), created: true };
+      });
+    } catch (error) {
+      // 扣费已经提交，标记给编排层，确保一定追加退款事件。
+      error.charged = true;
+      throw error;
+    }
+  }
+
+  /// 铸造失败退回钻石：追加 +200，事件编号带 refund_mint_ 前缀，天然幂等。
+  async function refundCharacterMint(user, { cardId, environment: hint } = {}) {
+    if (!user || !user.id) throw fail(400, 'INVALID_USER', '缺少用户');
+    if (!cardId) throw fail(400, 'INVALID_CARD', '缺少角色卡');
+    const env = environment(hint);
+    return store.transaction(env, async (tx) => {
+      const wallet = await tx.lockWallet(user.id);
+      await changeBalance(tx, user.id, wallet, { eventId: 'refund_mint_' + cardId,
+        type: 'refund_mint', amount: CREATE_ELF_COST,
+        note: `铸造失败退回 ${CREATE_ELF_COST} 钻石` });
+      return { diamonds: wallet.diamonds };
+    });
+  }
+
+  /// 轻量实名预检：只读 identity 记录，不拼快照，供角色卡 idCard 线使用。
+  async function identityVerified(user, hint) {
+    if (!user || !user.id) return false;
+    const env = environment(hint);
+    return store.transaction(env, async (tx) => {
+      const identity = await tx.get('identity', user.id);
+      return Boolean(identity && identity.status === 'verified');
+    });
+  }
+
   return { snapshot, listFeed, listChat, recordChat, autoCycle, action, environment, verifyIdentity,
-    requestWithdrawal, reviewWithdrawal, listWithdrawals, listAllWithdrawals };
+    requestWithdrawal, reviewWithdrawal, reconcileWithdrawal, listWithdrawals, listAllWithdrawals,
+    characterAddress, characterBalance, createElfFromCharacter, refundCharacterMint, identityVerified };
 }
 
-module.exports = { createCommerceService, CATALOG, MODULES, MODULE_PRICES, FORGET_COST };
+module.exports = { createCommerceService, CATALOG, MODULES, MODULE_PRICES, FORGET_COST,
+  CREATE_ELF_COST, address };
