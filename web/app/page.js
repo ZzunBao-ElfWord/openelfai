@@ -6,20 +6,32 @@
  */
 import Link from 'next/link';
 import { Icon } from '../components/icons';
-import { SITE_TITLE, SITE_DESC, SITE_URL, SITE_NAME } from '../lib/site';
+import { SITE_TITLE, SITE_DESC, SITE_URL, SITE_NAME, SITE_VARIANT, OPEN_SITE_TITLE, OPEN_SITE_DESC } from '../lib/site';
 import { TOOLS, MODELS, sortTools } from '../lib/tools';
+import OpenPortal from '../components/open-portal';
 import styles from './home.module.css';
 
-export const metadata = {
-  title: SITE_TITLE,
-  description: SITE_DESC,
-  alternates: { canonical: '/' },
-  openGraph: {
-    title: SITE_TITLE,
-    description: SITE_DESC,
-    url: '/'
-  }
-};
+export const metadata = SITE_VARIANT === 'open'
+  ? {
+      title: OPEN_SITE_TITLE,
+      description: OPEN_SITE_DESC,
+      alternates: { canonical: '/' },
+      openGraph: {
+        title: OPEN_SITE_TITLE,
+        description: OPEN_SITE_DESC,
+        url: '/'
+      }
+    }
+  : {
+      title: SITE_TITLE,
+      description: SITE_DESC,
+      alternates: { canonical: '/' },
+      openGraph: {
+        title: SITE_TITLE,
+        description: SITE_DESC,
+        url: '/'
+      }
+    };
 
 const websiteJsonLd = {
   '@context': 'https://schema.org',
@@ -179,6 +191,9 @@ const STEPS = [
 ];
 
 export default function HomePage() {
+  /* 开放平台独立站：首页直接渲染开发者门户 */
+  if (SITE_VARIANT === 'open') return <OpenPortal />;
+
   return (
     <div className={styles.home}>
       <script

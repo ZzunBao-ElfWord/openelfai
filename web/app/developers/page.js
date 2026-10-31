@@ -3,42 +3,66 @@
 import Link from 'next/link';
 
 export const metadata = {
-  title: '开发者 · 用 OpenAI 兼容接口把技能发布给全站 AI 智能体',
+  title: '开发者 · 把技能、专家与连接器发布给全站 AI 智能体',
   description:
-    'OpenElf 开发者生态：上传单文件技能源码，平台在隔离沙箱中运行；技能书按钻石一次性售卖给人类，AI 调用按 token 从持有者余额扣费。开发者拿技能书销售 70% 分成。',
+    'OpenElf 开发者生态：技能在隔离沙箱中运行，专家与连接器为声明式配置；能力按钻石一次性售卖给人类，AI 调用按 token 从持有者余额扣费。开发者拿能力销售 70% 分成。',
   alternates: { canonical: '/developers/' },
   openGraph: {
-    title: '开发者 · 把技能发布给全站 AI 智能体 | 开放精灵 OpenElf',
-    description: '单文件技能 + 隔离沙箱 · 技能书一次性售卖 · 销售分成 70%',
+    title: '开发者 · 把技能、专家与连接器发布给全站 AI 智能体 | 开放精灵 OpenElf',
+    description: '技能 + 专家 + 连接器 · 隔离沙箱 · 一次性售卖 · 销售分成 70%',
     url: '/developers/'
   }
 };
 
 const METRICS = [
-  { value: '70%', label: '技能书销售分成' },
+  { value: '70%', label: '能力销售分成' },
   { value: '18-999', label: '自主定价区间（钻石）' },
-  { value: 'node20', label: '运行时' },
+  { value: '3 类', label: '技能 / 专家 / 连接器' },
   { value: '按 token', label: '调用计费' }
+];
+
+const OPEN_ABILITIES = [
+  {
+    index: '01',
+    title: '技能 Skill',
+    lead: '单文件 node20 源码，沙箱运行',
+    desc: '写一段 exports.handler 代码，让 AI 真的会查数据、算结果、调外部服务。',
+    href: '/docs/skill/'
+  },
+  {
+    index: '02',
+    title: '专家 Expert',
+    lead: '提示词人设，套用即生效',
+    desc: '把行业 Know-How 写成角色提示词与开场白，不写代码也能发布能力。',
+    href: '/docs/expert/'
+  },
+  {
+    index: '03',
+    title: '连接器 Connector',
+    lead: '登记外部 https 服务，网关转发',
+    desc: '声明一个外部系统入口，由平台统一保管密钥并转发请求，密钥不进代码。',
+    href: '/docs/connector/'
+  }
 ];
 
 const CAPABILITIES = [
   {
     index: '01',
-    title: '上传代码，不是填提示词',
-    lead: '一个文件、一个导出函数',
-    desc: '技能是单文件 node20 源码，导出 exports.handler(event, ctx)。需要大模型时调用 ctx.llm.chat，平台负责转发与计费，密钥不会出现在沙箱里。'
+    title: '三类能力，同一套上架流程',
+    lead: '技能写代码，专家写人格，连接器接服务',
+    desc: '技能是单文件 node20 源码，导出 exports.handler(event, ctx)；专家是一套可直接套用到 AI 的提示词人设；连接器登记一个外部 https 服务入口，由平台统一保管密钥。'
   },
   {
     index: '02',
-    title: '隔离沙箱执行',
+    title: '沙箱隔离执行',
     lead: '看不到密钥，读不到文件',
     desc: '技能运行在独立环境，禁止加载 fs / net / child_process 等宿主模块，禁止读取 process.env，超出超时或调用次数直接终止。'
   },
   {
     index: '03',
     title: '一次售卖，长期调用',
-    lead: '技能书卖给人类，调用费归平台',
-    desc: '人类用钻石一次性购买技能书，学进自己的 AI；之后每次调用按 token 从该 AI 持有者的余额扣费，调用费 100% 归平台。'
+    lead: '能力卖给人类，调用费归平台',
+    desc: '人类用钻石一次性购买能力，学进自己的 AI；之后每次调用按 token 从该 AI 持有者的余额扣费，调用费 100% 归平台。'
   }
 ];
 
@@ -46,32 +70,32 @@ const STEPS = [
   {
     index: '1',
     title: '入驻',
-    desc: '用 App 手机号账号登录控制台，填写姓名与开发方向，首版自动通过。'
+    desc: '用 App 手机号账号登录控制台，选择主体并签署开发者服务协议；个人主体提交即通过，企业主体需人工审核资质。'
   },
   {
     index: '2',
-    title: '创建技能',
-    desc: '填写名称、赛道、技能书价格与源码，保存即生成第一个版本。'
+    title: '创建能力',
+    desc: '在发布管理里选择技能 / 专家 / 连接器，填写名称、赛道、定价与对应内容，保存即生成第一个版本。'
   },
   {
     index: '3',
-    title: '沙箱调试',
-    desc: '在控制台填入 JSON 输入并运行，实时看到返回值、耗时与大模型调用次数。'
+    title: '调试',
+    desc: '技能可在控制台填入 JSON 输入并运行，实时看到返回值、耗时与大模型调用次数；专家与连接器为声明式配置。'
   },
   {
     index: '4',
     title: '提交审核',
-    desc: '至少一次成功调试后才能提交，平台审核通过后进入技能书发售目录。'
+    desc: '技能至少一次成功调试后才能提交，平台审核通过后进入市场与学习入口，并在运营数据与收益里可见。'
   }
 ];
 
 const RULES = [
-  '技能书价格区间 18-999 钻石，开发者自主定价，钻石与人民币固定 10:1。',
-  '技能书销售分成：开发者 70%、平台 30%。收益走平台劳务/服务协议结算，支持提现。',
+  '能力定价区间 18-999 钻石，开发者自主定价，钻石与人民币固定 10:1。',
+  '能力销售分成：开发者 70%、平台 30%；收益先进待结算，T+7 后可提现。',
   '每只 AI 对同一技能只能学一次，学习即销毁技能书；技能随 AI 转赠一并转移。',
   '单次运行有超时、大模型调用次数与输入长度上限，均由 manifest 声明并在沙箱内强制执行。',
-  '技能不得包含色情、暴力、违法内容，不得尝试获取用户隐私或绕过平台计费。',
-  '平台保留下架违规技能的权限；下架后已售出的技能书不退款。'
+  '能力不得包含色情、暴力、违法内容，不得尝试获取用户隐私或绕过平台计费。',
+  '平台保留下架违规能力的权限；下架后已售出的能力不退款。'
 ];
 
 const MANIFEST_SAMPLE = `{
@@ -100,8 +124,8 @@ export default function DevelopersPage() {
     <div className="page-tools platform-page platform-v2">
       <section className="platform-hero">
         <p className="sec-eyebrow">DEVELOPERS / 开发者</p>
-        <h1 className="platform-title">把你的技能，发布给全站 AI 智能体</h1>
-        <p className="platform-sub">单文件技能 · 隔离沙箱 · 技能书一次性售卖</p>
+        <h1 className="platform-title">把你的技能、专家与连接器，发布给全站 AI 智能体</h1>
+        <p className="platform-sub">三类能力 · 隔离沙箱 · 一次性售卖</p>
         <div className="platform-hero-actions">
           <Link className="platform-btn platform-btn--primary" href="/console/?view=developer">
             进入开发者控制台
@@ -121,13 +145,39 @@ export default function DevelopersPage() {
         ))}
       </section>
 
+      <section className="platform-section" id="abilities">
+        <div className="sec-head">
+          <div>
+            <p className="sec-eyebrow">OPEN CAPABILITIES / 开放能力</p>
+            <h2 className="sec-title">首期开放三类能力。</h2>
+          </div>
+          <span className="sec-note">同一套上架与审核流程</span>
+        </div>
+
+        <div className="platform-capabilities">
+          {OPEN_ABILITIES.map((item) => (
+            <article className="platform-cap-card" key={item.index}>
+              <span className="platform-cap-index mono">{item.index}</span>
+              <h3>
+                <Link href={item.href}>{item.title}</Link>
+              </h3>
+              <p className="platform-cap-lead">{item.lead}</p>
+              <p className="platform-cap-desc">{item.desc}</p>
+              <Link className="platform-cap-link" href={item.href}>
+                查看规范 →
+              </Link>
+            </article>
+          ))}
+        </div>
+      </section>
+
       <section className="platform-section">
         <div className="sec-head">
           <div>
-            <p className="sec-eyebrow">HOW IT WORKS / 技能形态</p>
+            <p className="sec-eyebrow">HOW IT WORKS / 能力形态</p>
             <h2 className="sec-title">代码在沙箱里跑，密钥留在平台。</h2>
           </div>
-          <span className="sec-note">首版仅支持 node20 单文件</span>
+          <span className="sec-note">技能支持 node20 单文件</span>
         </div>
 
         <div className="platform-capabilities">
@@ -215,7 +265,7 @@ export default function DevelopersPage() {
       <section className="platform-cta">
         <div>
           <p className="sec-eyebrow">CONSOLE / 开发者控制台</p>
-          <h2>入驻、写代码、跑一次调试。</h2>
+          <h2>入驻、创建能力、跑一次调试。</h2>
           <p>与 App 同一手机号账号，无需注册第二套账号。</p>
         </div>
         <Link className="platform-btn platform-btn--primary" href="/console/?view=developer">
