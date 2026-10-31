@@ -5,18 +5,20 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import 'market_listing_page.dart';
 import 'login_page.dart';
-import 'wallet_page.dart';
 
-/// 「发现」页：把市场里的两类东西分开陈列。
+/// 「市场」页：把市场里的两类东西分开陈列。
 ///
 /// AI 是被创建的智能体，可以在人类之间流转；
 /// AI 技能书是一次性消耗的技能书，喂给 AI 学会后书即销毁、
 /// 技能永久写进那一只 AI。两者用完全不同的卡片表达。
 class MarketPage extends StatefulWidget {
-  /// 内嵌在底栏 tab 中时隐藏返回按钮、标题显示「发现」。
-  final bool embedded;
+  /// 打开时默认停留的分页：0 = 智能体，1 = 技能书。
+  final int initialTab;
 
-  const MarketPage({super.key, this.embedded = false});
+  /// 页头标题，缺省为「市场」。
+  final String? title;
+
+  const MarketPage({super.key, this.initialTab = 0, this.title});
 
   @override
   State<MarketPage> createState() => _MarketPageState();
@@ -31,7 +33,11 @@ class _MarketPageState extends State<MarketPage>
   @override
   void initState() {
     super.initState();
-    _tc = TabController(length: 2, vsync: this);
+    _tc = TabController(
+      length: 2,
+      vsync: this,
+      initialIndex: widget.initialTab.clamp(0, 1),
+    );
   }
 
   @override
@@ -52,7 +58,7 @@ class _MarketPageState extends State<MarketPage>
           child: AnimatedBuilder(
             animation: state,
             builder: (context, _) {
-              final canPop = !widget.embedded && Navigator.canPop(context);
+              final canPop = Navigator.canPop(context);
               return Column(
                 children: [
                   if (canPop)
@@ -113,7 +119,7 @@ class _MarketPageState extends State<MarketPage>
           Row(
             children: [
               Text(
-                widget.embedded ? '发现' : '市场',
+                widget.title ?? '市场',
                 style: TextStyle(
                   fontSize: 21,
                   fontWeight: FontWeight.w700,
@@ -123,44 +129,6 @@ class _MarketPageState extends State<MarketPage>
               ),
               const SizedBox(width: 8),
               Icon(Icons.store, size: 16, color: AppColors.textMuted),
-              const Spacer(),
-              InkWell(
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const WalletPage()),
-                ),
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(14),
-                    gradient: LinearGradient(
-                      colors: [
-                        AppColors.violet.withValues(alpha: 0.3),
-                        AppColors.cyan.withValues(alpha: 0.2),
-                      ],
-                    ),
-                    border: Border.all(
-                        color: AppColors.violet.withValues(alpha: 0.4)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('💎', style: TextStyle(fontSize: 11)),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${state.wallet.diamonds}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.cyan,
-                        ),
-                      ),
-                      const SizedBox(width: 5),
-                      Icon(Icons.add, size: 12, color: AppColors.violetSoft),
-                    ],
-                  ),
-                ),
-              ),
             ],
           ),
           const SizedBox(height: 8),

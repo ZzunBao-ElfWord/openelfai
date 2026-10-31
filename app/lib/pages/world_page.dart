@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../data/world_data.dart';
+import '../config/commerce_config.dart';
 import '../models/elf.dart';
 import '../services/app_content_service.dart';
 import '../state/app_state.dart';
@@ -10,6 +11,7 @@ import '../theme.dart';
 import '../widgets/audio_player_card.dart';
 import '../widgets/common.dart';
 import '../widgets/stage_share_sheet.dart';
+import '../widgets/workbench_panel.dart';
 import 'elf_chat_page.dart';
 import 'login_page.dart';
 import 'attention_board_page.dart';
@@ -31,8 +33,8 @@ class _WorldPageState extends State<WorldPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tc;
 
-  /// 首次信息流请求要等钱包快照就绪（loadFeed 需要确认计费环境），
-  /// 所以先监听状态，就绪后补一次拉取，避免首屏空着再也不加载。
+  /// 商业端（Android/iOS）登录后首次拉流要等钱包快照就绪（私有流需要计费环境），
+  /// 所以先监听状态，就绪后补一次拉取；桌面 / Web / 游客直接拉公开流。
   bool _kickedOff = false;
 
   @override
@@ -47,8 +49,10 @@ class _WorldPageState extends State<WorldPage>
   void _tryKickoffFeed() {
     if (_kickedOff || !mounted) return;
     final state = AppState.instance;
-    // 未登录时不需要拉流；钱包就绪后再拉，否则请求会因环境未确认被丢掉。
-    if (state.currentUser == null || !state.commerceReady) return;
+    // 已登录的商业端等钱包就绪；其余情况（游客、桌面/Web）立即可拉公开流。
+    if (CommerceConfig.enabled &&
+        state.currentUser != null &&
+        !state.commerceReady) return;
     _kickedOff = true;
     state.loadFeed();
   }
@@ -97,6 +101,10 @@ class _WorldPageState extends State<WorldPage>
                       maxWidth: 760,
                       child: Column(
                         children: [
+                          // 首页工作台（WorkBuddy 框架）只给桌面 / Web 宽屏用，
+                          // 手机端保留原有的信息流头部。
+                          if (WideContent.isWide(context))
+                            const WorkbenchPanel(wide: true),
                           _header(state),
                           _tabs(state),
                           Expanded(
