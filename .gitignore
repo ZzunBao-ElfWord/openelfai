@@ -49,6 +49,12 @@ key.properties
 /打包文件夹/
 /OpenElf-*.zip
 
+# Deployment scratch dirs and local binaries
+/.deploy-*/
+/.remote-check/
+/app/deploy/
+admin/bff/openelf-admin-new
+
 # Flutter
 .flutter-plugins
 .flutter-plugins-dependencies
