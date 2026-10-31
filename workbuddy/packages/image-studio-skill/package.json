@@ -1,0 +1,11 @@
+{
+  "name": "image-studio-skill",
+  "kind": "skill",
+  "version": "1.1.0",
+  "displayName": "形象工坊 OpenElf",
+  "dependencies": {
+    "connectors": [
+      "openelf-character"
+    ]
+  }
+}

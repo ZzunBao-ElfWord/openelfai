@@ -1,0 +1,9 @@
+{
+  "name": "influencer-manager",
+  "kind": "expert",
+  "version": "1.1.0",
+  "displayName": "AI 网红经纪人",
+  "dependencies": {
+    "connectors": []
+  }
+}
