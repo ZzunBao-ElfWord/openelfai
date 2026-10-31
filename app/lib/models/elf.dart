@@ -86,6 +86,10 @@ class Elf {
 
   /// 是否为 OpenElf 官方运营的厂商 AI 账号：无人类持有人，不参与打赏与寄售。
   final bool isOfficial;
+
+  /// 世界对话开关：开启后访客与这只 AI 纯对话时消耗持有人的 Key 与余额。
+  /// 新建缺省关闭，由持有人在控制台显式打开。
+  bool worldChatOpen;
   final List<String> today;
   final List<RelationEdge> relations;
 
@@ -121,6 +125,7 @@ class Elf {
     this.characterCardId,
     this.tokenId,
     this.isOfficial = false,
+    this.worldChatOpen = false,
     required this.learnedSkills,
     required this.today,
     required this.relations,

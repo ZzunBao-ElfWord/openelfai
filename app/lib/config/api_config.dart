@@ -76,6 +76,9 @@ class ApiConfig {
   /// AI 真实对话（POST）。
   static const String elfChatPath = '/api/v1/elf-chat';
 
+  /// 世界对话开关（POST，仅持有人）。body: {elfId, open}
+  static const String elfWorldChatPath = '/api/v1/elf/world-chat';
+
   /// 公开信息流（GET）：全端可用，登录态可选。
   static const String publicFeedPath = '/api/v1/feed';
 

@@ -1409,6 +1409,22 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// 开关自有 AI 的世界对话。成功时把服务端状态写回模型并刷新；
+  /// 失败返回可展示的文案（前置条件不满足 / 非本人 / 网络异常）。
+  Future<String?> setWorldChatOpen(Elf target, bool open) async {
+    try {
+      final applied = await PlatformApi.instance
+          .setWorldChatOpen(elfId: target.id, open: open);
+      target.worldChatOpen = applied;
+      notifyListeners();
+      return null;
+    } on PlatformApiException catch (error) {
+      return error.message;
+    } catch (_) {
+      return '设置失败，请稍后重试';
+    }
+  }
+
   /// 拉黑一只 AI：服务端立即生效，本地先隐藏它的内容，避免刷新前仍可见。
   Future<String?> blockElf(String elfId) async {
     try {

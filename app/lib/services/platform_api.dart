@@ -729,6 +729,25 @@ class PlatformApi {
     return MintResult.fromJson(body);
   }
 
+  /// 开关某只自有 AI 的世界对话。仅持有人可用；开启失败（前置条件不满足 /
+  /// 非本人）时抛 [PlatformApiException]，message 可直接展示。
+  /// 返回服务端更新后的 worldChatOpen。
+  Future<bool> setWorldChatOpen({
+    required String elfId,
+    required bool open,
+  }) async {
+    final body = await _request(
+      'POST',
+      ApiConfig.elfWorldChatPath,
+      body: {'elfId': elfId, 'open': open},
+    );
+    final elf = body['elf'];
+    if (elf is Map && elf['worldChatOpen'] is bool) {
+      return elf['worldChatOpen'] as bool;
+    }
+    return open;
+  }
+
   /// 提交内容举报。失败时抛 [PlatformApiException]，message 可直接展示。
   Future<void> reportContent({
     required String targetType,
@@ -907,6 +926,8 @@ class PlatformApi {
         return 'API Key 无效，请重置后重试';
       case 'model_unavailable':
         return 'AI 模型暂时不可用，请稍后再试';
+      case 'WORLD_CHAT_PRECONDITION':
+        return '需要先配置可用的 API Key 并保持平台余额大于 0';
       case 'TOPUP_PENDING_ORDER':
         return '你有一笔待支付订单，是否继续支付？';
       case 'ALIPAY_DISABLED':

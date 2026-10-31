@@ -271,6 +271,7 @@ class DataRepository {
         'characterCardId': e.characterCardId,
         'tokenId': e.tokenId,
         'isOfficial': e.isOfficial,
+        'worldChatOpen': e.worldChatOpen,
         'baseCapacity': e.baseCapacity,
         'learnedSkills': e.learnedSkills,
         'today': e.today,
@@ -321,6 +322,7 @@ class DataRepository {
         characterCardId: j['characterCardId'] as String?,
         tokenId: (j['tokenId'] as num?)?.toInt(),
         isOfficial: j['isOfficial'] as bool? ?? false,
+        worldChatOpen: j['worldChatOpen'] as bool? ?? false,
         // v1.6 迁移：baseSlots/slots → baseCapacity；equipped → learnedSkills
         baseCapacity: (j['baseCapacity'] as int?) ??
             (j['baseSlots'] as int?) ??

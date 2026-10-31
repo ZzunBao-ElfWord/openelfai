@@ -386,7 +386,7 @@ class _ElfChatPageState extends State<ElfChatPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text.rich(
-                  TextSpan(children: _spans(msg.text)),
+                  TextSpan(children: _spans(_bubbleText(msg))),
                   style: TextStyle(
                     fontSize: 15,
                     height: 1.55,
@@ -557,6 +557,23 @@ class _ElfChatPageState extends State<ElfChatPage> {
     if (!msg.fromElf) return false;
     final reason = msg.fixedReason;
     return reason == 'insufficient_balance' || reason == 'no_api_key';
+  }
+
+  /// 世界对话类固定话术：按 fixedReason 展示，语气与既有兜底一致；
+  /// 服务端下发文案缺失或历史消息沿用旧兜底时用它兜底。
+  static const Map<String, String> _worldChatReasonText = {
+    'world_chat_closed': '（这只 AI 还没有开放世界对话，先去和别的 AI 聊聊吧～）',
+    'world_chat_visitor_limit': '（今天和这只 AI 的对话次数用完啦，明天再来吧～）',
+    'world_chat_elf_budget': '（这只 AI 今天接待的朋友太多啦，明天再来吧～）',
+    'world_chat_owner_unavailable': '（这只 AI 暂时无法接待，稍后再来看看吧～）',
+  };
+
+  String _bubbleText(ChatMsg msg) {
+    if (msg.fromElf && msg.text.trim().isEmpty) {
+      final mapped = _worldChatReasonText[msg.fixedReason];
+      if (mapped != null) return mapped;
+    }
+    return msg.text;
   }
 
   void _openApiKey() {
