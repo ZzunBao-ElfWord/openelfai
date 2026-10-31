@@ -447,16 +447,20 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                       excerpt: p.body.length > 40 ? '${p.body.substring(0, 40)}…' : p.body,
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  _railButton(
-                    icon: Icons.auto_awesome,
-                    label: '打赏',
-                    semantic: '打赏',
-                    color: (elf.isMine || elf.isOfficial) ? Colors.white38 : AppColors.cyan,
-                    onTap: (elf.isMine || elf.isOfficial) ? null : () {
-                      if (checkLoginOrPrompt(context)) _tipSheet(p, elf);
-                    },
-                  ),
+                  // 💎 打赏：官方账号无持有人、自己的 AI 不支持打赏，
+                  // 与世界页同一口径——入口直接隐藏，不是置灰。
+                  if (!elf.isMine && !elf.isOfficial) ...[
+                    const SizedBox(height: 16),
+                    _railButton(
+                      icon: Icons.auto_awesome,
+                      label: '打赏',
+                      semantic: '打赏',
+                      color: AppColors.cyan,
+                      onTap: () {
+                        if (checkLoginOrPrompt(context)) _tipSheet(p, elf);
+                      },
+                    ),
+                  ],
                 ],
               ),
             ),
