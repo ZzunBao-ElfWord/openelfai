@@ -23,78 +23,12 @@ class WorkbenchPanel extends StatefulWidget {
 
   const WorkbenchPanel({super.key, this.wide = false});
 
-  @override
-  State<WorkbenchPanel> createState() => _WorkbenchPanelState();
-}
+  /// 「形象工坊」在技能清单里的固定 id：官方技能，置顶展示。
+  static const String studioSkillId = 'studio';
 
-class _WorkbenchPanelState extends State<WorkbenchPanel> {
-  final _input = TextEditingController();
-  final _focus = FocusNode();
-  int _mode = 0;
-
-  /// 已选技能：`studio` = 形象工坊，其余为 AI 已学会的能力模块 id。
-  SkillChoice? _skill;
-
-  static const String _studioSkillId = 'studio';
-
-  static const _modes = [
-    (Icons.edit_outlined, '创作'),
-    (Icons.auto_mode_outlined, '运营'),
-    (Icons.forum_outlined, '互动'),
-  ];
-
-  static const _quickTracks = [
-    (Icons.article_outlined, '写作', '帮我写一篇短文'),
-    (Icons.image_outlined, '视觉', '帮我做一张封面图'),
-    (Icons.movie_outlined, '视频', '帮我写一条短视频脚本'),
-    (Icons.mic_none_outlined, '语音', '帮我生成一段电台播报'),
-    (Icons.menu_book_outlined, '知识', '帮我讲清楚一个知识点'),
-    (Icons.people_outline, '社交', '帮我发一条互动动态'),
-  ];
-
-  static const _examples = [
-    [
-      '写一篇《潮汐来信》的续章',
-      '给今天的动态配一句标题',
-      '把这段想法扩写成一则短文',
-    ],
-    [
-      '规划这周要发的三条动态',
-      '给 AI 写一份人格设定',
-      '挑一个适合自动运营的技能',
-    ],
-    [
-      '引导粉丝在评论区留言',
-      '回复今天最热的评论',
-      '设计一个评论区小互动',
-    ],
-  ];
-
-  static const _fastCommands = [
-    (Icons.history_edu_outlined, '接着故事往下写'),
-    (Icons.brush_outlined, '生成今日封面'),
-    (Icons.movie_filter_outlined, '写一条视频脚本'),
-  ];
-
-  @override
-  void dispose() {
-    _input.dispose();
-    _focus.dispose();
-    super.dispose();
-  }
-
-  AppState get _state => AppState.instance;
-
-  void _fill(String text) {
-    _input
-      ..text = text
-      ..selection = TextSelection.collapsed(offset: text.length);
-    _focus.requestFocus();
-  }
-
-  /// 打开「技能」面板：官方形象工坊 + 当前 AI 已学会的技能。
-  Future<void> _openSkillPicker() async {
-    final state = _state;
+  /// 技能清单：官方形象工坊置顶 + 当前 AI 已学会的技能（自动运营不进清单）。
+  static List<SkillChoice> skillChoices() {
+    final state = AppState.instance;
     final elf = state.myElf;
     final installed = elf == null
         ? const <AbilityModule>[]
@@ -102,9 +36,9 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
             .modulesOf(elf.id)
             .where((m) => m.id != 'auto')
             .toList();
-    final skills = <SkillChoice>[
+    return <SkillChoice>[
       const SkillChoice(
-        id: _studioSkillId,
+        id: studioSkillId,
         name: '形象工坊',
         glyph: '形',
         summary: '一句话描述，免费预览后生成正式形象',
@@ -113,7 +47,11 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
       for (final m in installed)
         SkillChoice(id: m.id, name: m.name, glyph: m.glyph, summary: m.summary),
     ];
-    final picked = await showModalBottomSheet<SkillChoice>(
+  }
+
+  /// 弹出技能面板，返回选中的技能；「管理技能」进技能市场。
+  static Future<SkillChoice?> pickSkill(BuildContext context) {
+    return showModalBottomSheet<SkillChoice>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -122,7 +60,7 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
           maxHeight: MediaQuery.sizeOf(context).height * 0.78,
         ),
         child: SkillPickerSheet(
-          skills: skills,
+          skills: skillChoices(),
           onManage: () {
             Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const MarketPage()),
@@ -131,13 +69,45 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
         ),
       ),
     );
-    if (!mounted || picked == null) return;
-    setState(() => _skill = picked);
-    _focus.requestFocus();
+  }
+
+  /// 手机端「+」与桌面工作台同一套技能面板，选中后立即进入对应流程：
+  /// 形象工坊过生成须知后进对话式工坊；其余技能打开手动创作弹层并
+  /// 预选该技能；还没有 AI 时先引导创建。
+  static Future<void> openSkillFlow(BuildContext context) async {
+    final picked = await pickSkill(context);
+    if (!context.mounted || picked == null) return;
+    if (!checkLoginOrPrompt(context)) return;
+    if (picked.id == studioSkillId) {
+      if (!await confirmStudioPolicy(context)) return;
+      if (!context.mounted) return;
+      await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (_) => const CharacterStudioPage(),
+        ),
+      );
+      return;
+    }
+    final elf = AppState.instance.myElf;
+    if (elf == null) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => const CreateElfPage(),
+          fullscreenDialog: true,
+        ),
+      );
+      return;
+    }
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => CreatePostSheet(elf: elf, initialModuleId: picked.id),
+    );
   }
 
   /// 形象工坊生成前必须逐条确认的合规声明（运营可配置，缺省用内置三条）。
-  Future<bool> _confirmStudioPolicy() async {
+  static Future<bool> confirmStudioPolicy(BuildContext context) async {
     final configured =
         AppContentService.instance.content.value.list('app.create.declarations');
     final items = configured.isEmpty
@@ -198,6 +168,81 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
     return ok == true;
   }
 
+  @override
+  State<WorkbenchPanel> createState() => _WorkbenchPanelState();
+}
+
+class _WorkbenchPanelState extends State<WorkbenchPanel> {
+  final _input = TextEditingController();
+  final _focus = FocusNode();
+  int _mode = 0;
+
+  /// 已选技能：`studio` = 形象工坊，其余为 AI 已学会的能力模块 id。
+  SkillChoice? _skill;
+
+  static const _modes = [
+    (Icons.edit_outlined, '创作'),
+    (Icons.auto_mode_outlined, '运营'),
+    (Icons.forum_outlined, '互动'),
+  ];
+
+  static const _quickTracks = [
+    (Icons.article_outlined, '写作', '帮我写一篇短文'),
+    (Icons.image_outlined, '视觉', '帮我做一张封面图'),
+    (Icons.movie_outlined, '视频', '帮我写一条短视频脚本'),
+    (Icons.mic_none_outlined, '语音', '帮我生成一段电台播报'),
+    (Icons.menu_book_outlined, '知识', '帮我讲清楚一个知识点'),
+    (Icons.people_outline, '社交', '帮我发一条互动动态'),
+  ];
+
+  static const _examples = [
+    [
+      '写一篇《潮汐来信》的续章',
+      '给今天的动态配一句标题',
+      '把这段想法扩写成一则短文',
+    ],
+    [
+      '规划这周要发的三条动态',
+      '给 AI 写一份人格设定',
+      '挑一个适合自动运营的技能',
+    ],
+    [
+      '引导粉丝在评论区留言',
+      '回复今天最热的评论',
+      '设计一个评论区小互动',
+    ],
+  ];
+
+  static const _fastCommands = [
+    (Icons.history_edu_outlined, '接着故事往下写'),
+    (Icons.brush_outlined, '生成今日封面'),
+    (Icons.movie_filter_outlined, '写一条视频脚本'),
+  ];
+
+  @override
+  void dispose() {
+    _input.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  AppState get _state => AppState.instance;
+
+  void _fill(String text) {
+    _input
+      ..text = text
+      ..selection = TextSelection.collapsed(offset: text.length);
+    _focus.requestFocus();
+  }
+
+  /// 打开「技能」面板：官方形象工坊 + 当前 AI 已学会的技能。
+  Future<void> _openSkillPicker() async {
+    final picked = await WorkbenchPanel.pickSkill(context);
+    if (!mounted || picked == null) return;
+    setState(() => _skill = picked);
+    _focus.requestFocus();
+  }
+
   /// 输入框里的内容按当前技能下发。
   Future<void> _dispatch() async {
     final text = _input.text.trim();
@@ -211,8 +256,8 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
     if (!checkLoginOrPrompt(context)) return;
 
     final skill = _skill;
-    if (skill != null && skill.id == _studioSkillId) {
-      if (!await _confirmStudioPolicy()) return;
+    if (skill != null && skill.id == WorkbenchPanel.studioSkillId) {
+      if (!await WorkbenchPanel.confirmStudioPolicy(context)) return;
       if (!mounted) return;
       _input.clear();
       _focus.unfocus();

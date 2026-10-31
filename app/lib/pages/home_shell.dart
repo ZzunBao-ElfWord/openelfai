@@ -10,6 +10,7 @@ import '../config/runtime_platform.dart';
 import '../models/elf.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/workbench_panel.dart';
 import 'create_elf_page.dart';
 import 'create_post_sheet.dart';
 import 'discover_page.dart';
@@ -119,7 +120,13 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 
   void _onNavTap(int i) {
     if (i == 2) {
-      _openCreate();
+      // 中间「创建」：桌面侧栏维持原有创建 AI 流程；手机端与桌面工作台
+      // 走同一套技能面板，选中技能后进入对应创作流程（形象工坊也在这里）。
+      if (WideContent.isWide(context)) {
+        _openCreate();
+      } else {
+        unawaited(WorkbenchPanel.openSkillFlow(context));
+      }
       return;
     }
     setState(() => _current = i < 2 ? i : i - 1);
