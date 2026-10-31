@@ -925,14 +925,16 @@ function createCommerceService({ db = null, store, settings, payout = null, payo
         const savePost = async () => tx.put('post', post.id, post, { owner: elf.ownerId, ref: elf.id });
         if (type === 'follow' || type === 'unfollow') {
           if (type === 'follow' && elf.ownerId === user.id) throw fail(409, 'SELF_FOLLOW', '不能关注自己的 AI');
+          // 取消关注只把记录置为 removed 不删行，判断必须以 state 为准，否则取消后无法重新关注。
+          const activeRows = await tx.list('follow', { owner: user.id, ref: elf.id, state: 'active', lock: true });
           const record = await tx.get('follow', key, true);
-          if (type === 'follow' && !record) {
-            await tx.put('follow', key, { userId: user.id, elfId: elf.id, at: new Date().toISOString() },
+          if (type === 'follow' && activeRows.length === 0) {
+            await tx.put('follow', key, { ...(record || {}), userId: user.id, elfId: elf.id, at: new Date().toISOString() },
               { owner: user.id, ref: elf.id, state: 'active' });
             elf.followers = (Number(elf.followers) || 0) + 1;
             bump(elf, 5);
             await saveElf(elf);
-          } else if (type === 'unfollow' && record) {
+          } else if (type === 'unfollow' && activeRows.length > 0) {
             await tx.put('follow', key, { ...record, removedAt: new Date().toISOString() },
               { owner: user.id, ref: elf.id, state: 'removed' });
             elf.followers = Math.max(0, (Number(elf.followers) || 0) - 1);
@@ -940,26 +942,30 @@ function createCommerceService({ db = null, store, settings, payout = null, payo
             await saveElf(elf);
           }
         } else if (type === 'like' || type === 'unlike') {
+          // 同上：removed 行仍在，必须按 state 判断，否则取消点赞后无法重新点赞、且重复取消会多次扣减。
+          const activeRows = await tx.list('like', { owner: user.id, ref: post.id, state: 'active', lock: true });
           const record = await tx.get('like', key, true);
-          if (type === 'like' && !record) {
-            await tx.put('like', key, { userId: user.id, postId: post.id }, { owner: user.id, ref: post.id, state: 'active' });
+          if (type === 'like' && activeRows.length === 0) {
+            await tx.put('like', key, { ...(record || {}), userId: user.id, postId: post.id }, { owner: user.id, ref: post.id, state: 'active' });
             post.likes = (Number(post.likes) || 0) + 1;
             bump(elf, 1);
             await saveElf(elf); await savePost();
-          } else if (type === 'unlike' && record) {
+          } else if (type === 'unlike' && activeRows.length > 0) {
             await tx.put('like', key, { ...record }, { owner: user.id, ref: post.id, state: 'removed' });
             post.likes = Math.max(0, (Number(post.likes) || 0) - 1);
             bump(elf, -1);
             await saveElf(elf); await savePost();
           }
         } else if (type === 'collect' || type === 'uncollect') {
+          // 同上：按 state 判断当前是否已收藏。
+          const activeRows = await tx.list('collect', { owner: user.id, ref: post.id, state: 'active', lock: true });
           const record = await tx.get('collect', key, true);
-          if (type === 'collect' && !record) {
-            await tx.put('collect', key, { userId: user.id, postId: post.id }, { owner: user.id, ref: post.id, state: 'active' });
+          if (type === 'collect' && activeRows.length === 0) {
+            await tx.put('collect', key, { ...(record || {}), userId: user.id, postId: post.id }, { owner: user.id, ref: post.id, state: 'active' });
             post.collects = (Number(post.collects) || 0) + 1;
             bump(elf, 3);
             await saveElf(elf); await savePost();
-          } else if (type === 'uncollect' && record) {
+          } else if (type === 'uncollect' && activeRows.length > 0) {
             await tx.put('collect', key, { ...record }, { owner: user.id, ref: post.id, state: 'removed' });
             post.collects = Math.max(0, (Number(post.collects) || 0) - 1);
             bump(elf, -3);

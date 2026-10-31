@@ -3,8 +3,8 @@
 const mysql = require('mysql2/promise');
 const { PAYMENT_TABLES } = require('./payment_store');
 const { PLATFORM_TABLES } = require('./platform/tables');
-const { DEV_TABLES } = require('./developer/tables');
-const { CHARACTER_TABLES } = require('./character/tables');
+const { DEV_TABLES, DEV_COLUMN_MIGRATIONS } = require('./developer/tables');
+const { CHARACTER_TABLES, CHARACTER_COLUMN_MIGRATIONS } = require('./character/tables');
 const { KNOWLEDGE_TABLES } = require('./knowledge');
 const { APP_CONTENT_TABLES } = require('./app_content');
 const { COMPLIANCE_TABLES } = require('./compliance');
@@ -147,6 +147,12 @@ async function createPool(config) {
 
   await migrateColumns(pool, 'platform_api_keys', PLATFORM_API_KEY_COLUMN_MIGRATIONS);
   await migrateColumns(pool, 'payment_wallet_meta', WALLET_META_COLUMN_MIGRATIONS);
+  for (const [table, migrations] of Object.entries(DEV_COLUMN_MIGRATIONS)) {
+    await migrateColumns(pool, table, migrations);
+  }
+  for (const [table, migrations] of Object.entries(CHARACTER_COLUMN_MIGRATIONS)) {
+    await migrateColumns(pool, table, migrations);
+  }
 
   return pool;
 }

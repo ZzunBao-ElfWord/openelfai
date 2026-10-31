@@ -17,7 +17,10 @@
     "test:developer": "node --test test/developer.test.js",
     "test:character": "node --test test/character.test.js",
     "test:character:ops": "node --test test/character_ops.test.js",
+    "test:character:mint": "node --test test/character_mint.test.js",
+    "test:character:series": "node --test test/character_series.test.js",
     "test:mcp": "node --test test/mcp.test.js",
+    "test:mcp:video": "node --test test/mcp_video.test.js",
     "test:payments": "node --test test/apple_iap.test.js test/apple_deploy.test.js test/apple_http.test.js test/alipay.test.js test/alipay_gateway.test.js test/android_deploy.test.js test/captcha.test.js test/captcha_deploy.test.js"
   },
   "dependencies": {

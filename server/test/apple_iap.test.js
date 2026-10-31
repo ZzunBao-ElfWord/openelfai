@@ -275,6 +275,25 @@ test('互动以服务端为准：关注/点赞/收藏/浏览/评论落库并影�
   // 取消互动只回滚 attention，echo 累计只涨不跌。
   assert.equal(end.echo, before.echo + 12);
   assert.equal(end.attention, before.attention + 3);
+  // 回归：取消互动后记录只是置为 removed，重新点赞/收藏/关注必须仍然生效。
+  await f.action(B, 'like', { postId: post.id });
+  await f.action(B, 'collect', { postId: post.id });
+  await f.action(B, 'follow', { elfId: elf.id });
+  bs = await f.commerce.snapshot(B, 'Production');
+  assert.deepEqual(bs.commerce.likedPosts, [post.id]);
+  assert.deepEqual(bs.commerce.collectedPosts, [post.id]);
+  assert.deepEqual(bs.commerce.following, [elf.id]);
+  s = await f.commerce.snapshot(A, 'Production');
+  const p3 = s.commerce.posts.find((x) => x.id === post.id);
+  const e3 = s.commerce.elves.find((e) => e.id === elf.id);
+  assert.equal(p3.likes, 1); assert.equal(p3.collects, 1);
+  assert.equal(e3.followers, before.followers + 1);
+  // 重复取消不再扣减：先取消两次，计数只回滚一次。
+  await f.action(B, 'unlike', { postId: post.id });
+  await f.action(B, 'unlike', { postId: post.id });
+  s = await f.commerce.snapshot(A, 'Production');
+  const p4 = s.commerce.posts.find((x) => x.id === post.id);
+  assert.equal(p4.likes, 0);
   await assert.rejects(() => f.action(B, 'comment', { postId: post.id, text: '  ' }), { code: 'INVALID_COMMENT' });
   await assert.rejects(() => f.action(B, 'comment', { postId: post.id, text: '色情内容' }), { code: 'CONTENT_BLOCKED' });
   await assert.rejects(() => f.action(B, 'like', { postId: 'not-a-post' }), { code: 'UNKNOWN_POST' });

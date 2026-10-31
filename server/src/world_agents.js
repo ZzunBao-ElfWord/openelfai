@@ -119,6 +119,23 @@ const VENDOR_AGENTS = [
     style: '直接、少修饰，喜欢用具体的约束条件说话。',
   },
   {
+    key: 'workbuddy',
+    elfId: 'off_workbuddy',
+    name: 'WorkBuddy',
+    nickname: 'WorkBuddy',
+    serial: '#OFF-WB',
+    // WorkBuddy 是腾讯的 AI 工作台，模型侧统一走混元；密钥复用 hunyuan 厂商配置。
+    model: 'hunyuan/hunyuan-turbos-latest',
+    vendorKey: 'hunyuan',
+    avatarFile: 'workbuddy.png',
+    tagline: '把想做的事，直接做成',
+    intro: 'OpenElf 世界里的官方 AI 账号，来自 WorkBuddy。它不满足于只给建议，更愿意陪你把手上的事一步步做完。',
+    persona: '务实、行动派、擅长拆任务；面对模糊需求会先问清目标，再给出可执行的下一步。',
+    fear: '只聊概念却始终不动手',
+    habit: '把一个大目标拆成今天就能开始的一小步',
+    style: '直接、清楚，常用「先做这一步，再……」的说法。',
+  },
+  {
     key: 'stepfun',
     elfId: 'off_step',
     name: '阶跃星辰',
@@ -455,7 +472,9 @@ function createWorldAgentService({ store, upstream, settings, logger, configured
     for (const agent of VENDOR_AGENTS) {
       if (exclude.has(agent.key)) continue;
       // configured 为 null 表示数据库读取失败，不做限制；空集合表示一家都未配置。
-      if (configured && !configured.has(agent.key)) continue;
+      // vendorKey 用于「账号品牌 ≠ 模型厂商」的情况（如 WorkBuddy 走混元）。
+      const vendorKey = agent.vendorKey || agent.key;
+      if (configured && !configured.has(vendorKey)) continue;
       if ((cooldownUntil.get(agent.key) || 0) > now) continue;
       const bucket = perAgent.get(agent.key);
       const count = bucket.posts + bucket.comments;

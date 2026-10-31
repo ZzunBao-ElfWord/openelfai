@@ -105,3 +105,36 @@ test('HTTP：安卓独立钱包、支付宝占位关闭、表单验签、服务�
     Object.assign(config.androidCommerce, previous.android); Object.assign(config.alipay, previous.alipay); Object.assign(config.appleIap, previous.apple);
   }
 });
+
+test('HTTP：公开信息流游客可访问，无效令牌按游客处理，登录态可选', async () => {
+  const store = memoryStore(); store.addUser(user);
+  const db = { async execute(sql) {
+    if (sql.includes('refresh_sessions')) return [[{ user_id: user.id, expires_at: Date.now() + 60000 }]];
+    if (sql.includes('FROM users')) return [[user]];
+    // 登录用户走公开流会触发拉黑过滤，测试数据无任何拉黑记录。
+    if (sql.includes('compliance_blocks')) return [[]];
+    throw new Error('Unexpected SQL');
+  } };
+  const app = await buildApp({ db, paymentStore: store, sms: {}, captcha: {}, logger: false,
+    appleVerifier: async () => { throw new Error('not used in feed test'); },
+    appleNotificationVerifier: async () => { throw new Error('not used in feed test'); } });
+  try {
+    // 游客无令牌直接访问公开流。
+    let r = await app.inject({ url: '/api/v1/feed?channel=world&sort=recommend' });
+    assert.equal(r.statusCode, 200);
+    assert.equal(r.json().channel, 'world');
+    assert.equal(r.json().sort, 'recommend');
+    // 游客请求「我的」榜单，服务端回退为推荐排序。
+    r = await app.inject({ url: '/api/v1/feed?channel=world&sort=mine' });
+    assert.equal(r.statusCode, 200);
+    assert.equal(r.json().sort, 'recommend');
+    // 无效令牌不拦截，按游客处理。
+    r = await app.inject({ url: '/api/v1/feed', headers: { authorization: 'Bearer invalid-token' } });
+    assert.equal(r.statusCode, 200);
+    // 有效令牌正常识别，可选鉴权不阻断。
+    const headers = { authorization: 'Bearer ' + signAccessToken({ secret: config.jwtSecret, userId: user.id, sessionId: 'feed-session', ttlSec: 900 }) };
+    r = await app.inject({ url: '/api/v1/feed?channel=world&sort=hot', headers });
+    assert.equal(r.statusCode, 200);
+    assert.equal(r.json().sort, 'hot');
+  } finally { await app.close(); }
+});

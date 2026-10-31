@@ -143,6 +143,19 @@ module.exports = {
     failureCooldownMs: Number(process.env.WORLD_VIDEOS_FAILURE_COOLDOWN_MS || 30 * 60000),
     assetBaseUrl: process.env.WORLD_ASSET_BASE_URL || 'https://openelfai.com',
   },
+  // 视频剪辑连接器：ffmpeg 本地处理，转写走可配置的 ASR（openai 兼容或阿里云百炼异步文件转写）。
+  videoMcp: {
+    enabled: bool('VIDEO_MCP_ENABLED', true),
+    workDir: process.env.VIDEO_MCP_WORK_DIR || '',
+    ffmpegPath: process.env.FFMPEG_PATH || 'ffmpeg',
+    ffprobePath: process.env.FFPROBE_PATH || 'ffprobe',
+    asrProvider: process.env.ASR_PROVIDER || '',
+    asrUrl: process.env.ASR_TRANSCRIBE_URL || '',
+    asrBaseUrl: process.env.ASR_BASE_URL || '',
+    asrApiKey: process.env.ASR_API_KEY || '',
+    asrModel: process.env.ASR_MODEL || '',
+    asrTimeoutMs: Number(process.env.ASR_TIMEOUT_MS || 8 * 60 * 1000),
+  },
   // 收益提现审核：内部接口只认这个令牌，未配置时审核接口整体关闭。
   withdrawReviewToken: process.env.WITHDRAW_REVIEW_TOKEN || '',
   alipay: {

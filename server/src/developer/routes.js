@@ -66,6 +66,7 @@ function createDeveloperRuntime({ db, app }) {
 function registerDeveloperRoutes(app, { db, authenticate }) {
   const { service } = createDeveloperRuntime({ db, app });
   const auth = (request) => authenticate(request);
+  const saveOptions = { bodyLimit: 160 * 1024, config: { rateLimit: { max: 20, timeWindow: '1 minute' } } };
 
   app.get('/api/v1/developer/profile', async (request) => {
     const { user } = await auth(request);
@@ -81,51 +82,96 @@ function registerDeveloperRoutes(app, { db, authenticate }) {
     },
   );
 
-  app.get('/api/v1/developer/skills', async (request) => {
+  // —— 能力（技能 / 专家 / 连接器）——
+
+  app.get('/api/v1/developer/capabilities', async (request) => {
     const { user } = await auth(request);
-    return service.listSkills(user);
+    return service.listCapabilities(user, request.query);
+  });
+
+  app.post('/api/v1/developer/capabilities', saveOptions, async (request) => {
+    const { user } = await auth(request);
+    return service.createCapability(user, request.body);
+  });
+
+  app.get('/api/v1/developer/capabilities/:id', async (request) => {
+    const { user } = await auth(request);
+    return service.getCapability(user, request.params.id);
+  });
+
+  app.put('/api/v1/developer/capabilities/:id', saveOptions, async (request) => {
+    const { user } = await auth(request);
+    return service.updateCapability(user, request.params.id, request.body);
   });
 
   app.post(
-    '/api/v1/developer/skills',
-    { bodyLimit: 96 * 1024, config: { rateLimit: { max: 20, timeWindow: '1 minute' } } },
+    '/api/v1/developer/capabilities/:id/test',
+    { bodyLimit: 32 * 1024, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
     async (request) => {
       const { user } = await auth(request);
-      return service.createSkill(user, request.body);
+      return service.testCapability(user, request.params.id, request.body);
     },
   );
+
+  app.post('/api/v1/developer/capabilities/:id/submit', async (request) => {
+    const { user } = await auth(request);
+    return service.submitCapability(user, request.params.id);
+  });
+
+  app.post('/api/v1/developer/capabilities/:id/offline', async (request) => {
+    const { user } = await auth(request);
+    return service.offlineCapability(user, request.params.id);
+  });
+
+  app.get('/api/v1/developer/stats', async (request) => {
+    const { user } = await auth(request);
+    return service.getStats(user);
+  });
+
+  app.get('/api/v1/developer/earnings', async (request) => {
+    const { user } = await auth(request);
+    return service.listEarnings(user);
+  });
+
+  // —— 兼容旧路径：/developer/skills* 等价于 kind=skill 的能力接口 ——
+
+  app.get('/api/v1/developer/skills', async (request) => {
+    const { user } = await auth(request);
+    return service.listCapabilities(user, { ...request.query, kind: 'skill' });
+  });
+
+  app.post('/api/v1/developer/skills', saveOptions, async (request) => {
+    const { user } = await auth(request);
+    return service.createCapability(user, { ...request.body, kind: 'skill' });
+  });
 
   app.get('/api/v1/developer/skills/:id', async (request) => {
     const { user } = await auth(request);
-    return service.getSkill(user, request.params.id);
+    return service.getCapability(user, request.params.id);
   });
 
-  app.put(
-    '/api/v1/developer/skills/:id',
-    { bodyLimit: 96 * 1024, config: { rateLimit: { max: 20, timeWindow: '1 minute' } } },
-    async (request) => {
-      const { user } = await auth(request);
-      return service.updateSkill(user, request.params.id, request.body);
-    },
-  );
+  app.put('/api/v1/developer/skills/:id', saveOptions, async (request) => {
+    const { user } = await auth(request);
+    return service.updateCapability(user, request.params.id, { ...request.body, kind: 'skill' });
+  });
 
   app.post(
     '/api/v1/developer/skills/:id/test',
     { bodyLimit: 32 * 1024, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
     async (request) => {
       const { user } = await auth(request);
-      return service.testSkill(user, request.params.id, request.body);
+      return service.testCapability(user, request.params.id, request.body);
     },
   );
 
   app.post('/api/v1/developer/skills/:id/submit', async (request) => {
     const { user } = await auth(request);
-    return service.submitSkill(user, request.params.id);
+    return service.submitCapability(user, request.params.id);
   });
 
   app.post('/api/v1/developer/skills/:id/offline', async (request) => {
     const { user } = await auth(request);
-    return service.offlineSkill(user, request.params.id);
+    return service.offlineCapability(user, request.params.id);
   });
 
   return service;
