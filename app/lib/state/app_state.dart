@@ -805,7 +805,13 @@ class AppState extends ChangeNotifier {
 
   // —— 技能学习 ——
 
-  AbilityModule? module(String id) => WorldData.module(id);
+  /// 技能目录以服务端快照为准（modules 字段），本地种子只作兜底。
+  AbilityModule? module(String id) {
+    for (final m in modules) {
+      if (m.id == id) return m;
+    }
+    return WorldData.module(id);
+  }
 
   /// 这只 AI 已学会的技能模块。
   List<AbilityModule> modulesOf(String elfId) {

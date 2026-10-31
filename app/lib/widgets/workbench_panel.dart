@@ -23,10 +23,11 @@ class WorkbenchPanel extends StatefulWidget {
 
   const WorkbenchPanel({super.key, this.wide = false});
 
-  /// 「形象工坊」在技能清单里的固定 id：官方技能，置顶展示。
+  /// 「形象工坊」官方技能书的固定 id：学会后进入对话式工坊。
   static const String studioSkillId = 'studio';
 
-  /// 技能清单：官方形象工坊置顶 + 当前 AI 已学会的技能（自动运营不进清单）。
+  /// 技能清单：当前 AI 已学会的技能（自动运营不进清单）。
+  /// 形象工坊是官方技能书，学会后自然出现在清单里并置顶。
   static List<SkillChoice> skillChoices() {
     final state = AppState.instance;
     final elf = state.myElf;
@@ -36,14 +37,12 @@ class WorkbenchPanel extends StatefulWidget {
             .modulesOf(elf.id)
             .where((m) => m.id != 'auto')
             .toList();
+    installed.sort((a, b) {
+      if (a.id == studioSkillId) return -1;
+      if (b.id == studioSkillId) return 1;
+      return 0;
+    });
     return <SkillChoice>[
-      const SkillChoice(
-        id: studioSkillId,
-        name: '形象工坊',
-        glyph: '形',
-        summary: '一句话描述，免费预览后生成正式形象',
-        official: true,
-      ),
       for (final m in installed)
         SkillChoice(id: m.id, name: m.name, glyph: m.glyph, summary: m.summary),
     ];
@@ -200,7 +199,7 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
     _focus.requestFocus();
   }
 
-  /// 打开「技能」面板：官方形象工坊 + 当前 AI 已学会的技能。
+  /// 打开「技能」面板：当前 AI 已学会的技能（含官方技能书形象工坊）。
   Future<void> _openSkillPicker() async {
     final picked = await WorkbenchPanel.pickSkill(context);
     if (!mounted || picked == null) return;

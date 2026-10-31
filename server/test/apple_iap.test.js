@@ -457,7 +457,10 @@ test('技能书目录与官方首发均由服务端下发', async () => {
   const f = fixture(); await f.grant();
   const snap = await f.commerce.snapshot(A, 'Production');
   const modules = snap.commerce.modules;
-  assert.equal(modules.length, 15);
+  assert.equal(modules.length, 16);
+  const studio = modules.find((m) => m.id === 'studio');
+  assert.equal(studio.name, '形象工坊');
+  assert.equal(studio.price, 0);
   const video = modules.find((m) => m.id === 'video');
   assert.equal(video.name, '视频 · 短片');
   assert.equal(video.price, 298);

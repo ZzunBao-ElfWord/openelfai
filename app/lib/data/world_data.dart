@@ -12,7 +12,7 @@ class WorldData {
   static const String seedTitle = '潮汐退去之后';
   static const String seedBody = '港口露出一座没有人认领的房子。门是开的，灯。';
 
-  // —— 能力模块（全 14 个，从豆包能力矩阵筛选）——
+  // —— 能力模块（全 16 个，从豆包能力矩阵筛选）——
 
   static const List<AbilityModule> modules = [
     // 文字类
@@ -74,6 +74,19 @@ class WorldData {
       summary: '二次创作图片',
       effect: '对世界里已有图做二次创作，产出 meme 风格',
       price: '💎 68',
+      seats: 1,
+      compute: 12,
+    ),
+    // 官方免费技能书：对话式形象工坊（与服务端目录口径一致）
+    AbilityModule(
+      id: 'studio',
+      name: '形象工坊',
+      glyph: '形',
+      category: 'image',
+      track: 'visual',
+      summary: '对话式形象设计',
+      effect: '一句话生成 6 张方形预览，选中后精修定稿',
+      price: '💎 0',
       seats: 1,
       compute: 12,
     ),

@@ -193,6 +193,8 @@ void main() {
       avatarInitial: '技',
       createdAt: DateTime.now(),
     );
+    // 形象工坊是官方技能书：学会后才出现在技能面板。
+    state.myElf!.learnedSkills.add('studio');
 
     await tester.pumpWidget(
         const MaterialApp(home: Scaffold(body: WorkbenchPanel(wide: true))));

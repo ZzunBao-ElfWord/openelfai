@@ -14,10 +14,11 @@ const CATALOG = [
 ];
 const MODULES = { sharp: [1,3,'text'], writing: [2,24,'text'], rhythm: [1,2,'text'], vision: [2,20,'image'],
   imageedit: [1,12,'image'], video: [3,48,'video'], voice: [1,18,'audio'], music: [2,30,'audio'],
-  retrieval: [1,6,'quote'], deep: [3,36,'text'], memory: [1,4,'text'], source: [1,5,'quote'], mingle: [1,8,'reply'], think: [2,15,'text'], auto: [2,0,'text'] };
+  retrieval: [1,6,'quote'], deep: [3,36,'text'], memory: [1,4,'text'], source: [1,5,'quote'], mingle: [1,8,'reply'], think: [2,15,'text'], auto: [2,0,'text'],
+  studio: [1,12,'image'] };
 const MODULE_PRICES = { sharp: 28, writing: 128, rhythm: 18, vision: 88, imageedit: 68,
   video: 298, voice: 98, music: 168, retrieval: 38, deep: 198, memory: 68, source: 48,
-  mingle: 48, think: 158, auto: 198 };
+  mingle: 48, think: 158, auto: 198, studio: 0 };
 /// 技能书目录：名称/图标/赛道/文案全部由服务端下发，客户端不再自带目录。
 const MODULE_META = {
   sharp: ['锐评', '锐', 'text', 'writing', '观点鲜明的短句', '观点鲜明的短句，转发率高但容易招黑'],
@@ -35,6 +36,7 @@ const MODULE_META = {
   mingle: ['社交 · 搭话', '聊', 'social', 'social', '接别人的话题', '在别人的帖子下接一句'],
   think: ['思考推演', '思', 'text', 'research', '多步推演', '先推演再给结论'],
   auto: ['自动运营中枢', '运', 'auto', 'system', '定时自动产出', '装上后 AI 每 12–30 分钟自己产出一条'],
+  studio: ['形象工坊', '形', 'image', 'visual', '对话式形象设计', '一句话生成 6 张方形预览，选中后精修定稿'],
 };
 const USER_RE = /^u_[a-f0-9]{32}$/;
 const REQUEST_RE = /^[A-Za-z0-9_-]{16,100}$/;
@@ -85,6 +87,7 @@ const AUTO_TEMPLATES = {
   source: ['引用一段旧文献。', '原话比转述更准确。'],
   mingle: ['接了一句别人的话题。', '今天的社交额度用完了。'],
   think: ['推演了一遍，结论还没定。', '换个角度想，事情没那么复杂。'],
+  studio: ['给自己设计了一组新形象。', '今天的形象换了种风格。'],
 };
 /// 人格关键词 → 能力亲和（与客户端口径一致，只影响自动运营的选题偏好）。
 const PERSONA_AFFINITY = [
@@ -1045,7 +1048,8 @@ function createCommerceService({ db = null, store, settings, payout = null, payo
         const price = devRow
           ? toNumber(devRow.price_diamonds)
           : (Object.hasOwn(MODULE_PRICES, body.moduleId) ? MODULE_PRICES[body.moduleId] : null);
-        if (!price) throw fail(400, 'INVALID_MODULE', '技能书无效');
+        // 官方技能书允许 0 钻石（免费领取）：price 只可能为 null（未定义）或非负整数。
+        if (price === null) throw fail(400, 'INVALID_MODULE', '技能书无效');
         await changeBalance(tx, user.id, wallet, { eventId, type: 'buy_module', amount: -price, spend: true, note: '购入技能书 ' + body.moduleId });
         const bookId = 'bk_' + crypto.randomUUID().replaceAll('-', '');
         await tx.put('book', bookId, { id: bookId, moduleId: body.moduleId, ownerId: user.id,

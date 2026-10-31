@@ -633,7 +633,7 @@ class _MarketPageState extends State<MarketPage>
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    '💎 $price',
+                    price == 0 ? '免费领取' : '💎 $price',
                     style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
@@ -641,7 +641,7 @@ class _MarketPageState extends State<MarketPage>
                   ),
                   const SizedBox(height: 7),
                   _miniBtn(
-                    '购入',
+                    price == 0 ? '免费领取' : '购入',
                     primary: true,
                     onTap: () {
                       if (checkLoginOrPrompt(context)) {
@@ -777,7 +777,9 @@ class _MarketPageState extends State<MarketPage>
               ],
               const SizedBox(height: 16),
               BrandButton(
-                label: '💎 ${state.modulePrice(m.id)} · 购入《${m.name}》',
+                label: state.modulePrice(m.id) == 0
+                    ? '免费领取《${m.name}》'
+                    : '💎 ${state.modulePrice(m.id)} · 购入《${m.name}》',
                 onTap: () async {
                   final err = await state.purchaseBook(m.id);
                   if (!ctx.mounted || !mounted) return;
