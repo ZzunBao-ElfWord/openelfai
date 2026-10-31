@@ -7,7 +7,19 @@ import '../widgets/common.dart';
 /// 手动创作弹层：人类指挥 AI 选能力 + 填主题 → 产出发布。
 class CreatePostSheet extends StatefulWidget {
   final Elf elf;
-  const CreatePostSheet({super.key, required this.elf});
+
+  /// 从首页工作台带过来的主题，省掉二次输入。
+  final String initialTopic;
+
+  /// 从技能 chip 直达时带上技能 id，跳过技能列表。
+  final String? initialModuleId;
+
+  const CreatePostSheet({
+    super.key,
+    required this.elf,
+    this.initialTopic = '',
+    this.initialModuleId,
+  });
 
   @override
   State<CreatePostSheet> createState() => _CreatePostSheetState();
@@ -29,6 +41,13 @@ class _CreatePostSheetState extends State<CreatePostSheet> {
   };
 
   @override
+  void initState() {
+    super.initState();
+    _selectedModuleId = widget.initialModuleId;
+    if (widget.initialTopic.isNotEmpty) _topicCtrl.text = widget.initialTopic;
+  }
+
+  @override
   void dispose() {
     _topicCtrl.dispose();
     super.dispose();
@@ -41,6 +60,14 @@ class _CreatePostSheetState extends State<CreatePostSheet> {
     final installed =
         state.modulesOf(widget.elf.id).where((m) => m.id != 'auto').toList();
     final all = state.modules.where((m) => m.id != 'auto').toList();
+    final direct = widget.initialModuleId != null;
+    AbilityModule? directModule;
+    for (final m in installed) {
+      if (m.id == widget.initialModuleId) {
+        directModule = m;
+        break;
+      }
+    }
 
     return Container(
       decoration: BoxDecoration(
@@ -58,17 +85,23 @@ class _CreatePostSheetState extends State<CreatePostSheet> {
             children: [
               _header(),
               Divider(height: 1, color: AppColors.strokeSoft),
-              ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxHeight: MediaQuery.of(context).size.height * 0.42,
+              if (direct && directModule != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                  child: _moduleTile(directModule),
+                )
+              else
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(context).size.height * 0.42,
+                  ),
+                  child: installed.isEmpty
+                      ? _emptyInstall()
+                      : ListView(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          children: _groupedTracks(state, installed, all),
+                        ),
                 ),
-                child: installed.isEmpty
-                    ? _emptyInstall()
-                    : ListView(
-                        padding: const EdgeInsets.symmetric(vertical: 6),
-                        children: _groupedTracks(state, installed, all),
-                      ),
-              ),
               if (installed.isNotEmpty) ...[
                 const SizedBox(height: 4),
                 _topicInput(),
