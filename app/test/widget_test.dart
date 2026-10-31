@@ -1,14 +1,24 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
 import 'package:openelf/main.dart';
 import 'package:openelf/models/user.dart';
+import 'package:openelf/pages/character_studio_page.dart';
 import 'package:openelf/pages/create_elf_page.dart';
+import 'package:openelf/pages/discover_page.dart';
 import 'package:openelf/pages/home_shell.dart';
 import 'package:openelf/pages/login_page.dart';
+import 'package:openelf/pages/profile_page.dart';
+import 'package:openelf/services/platform_api.dart';
 import 'package:openelf/state/app_state.dart';
 import 'package:openelf/theme.dart';
+import 'package:openelf/widgets/workbench_panel.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
 
@@ -68,13 +78,18 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: HomeShell()));
     await tester.pump();
 
-    // 左侧导航：品牌 + 5 项入口
+    // 左侧导航：品牌 + 版本 + 5 项入口
     expect(find.text('OpenElf'), findsOneWidget);
-    expect(find.text('我的 AI，我做主'), findsOneWidget);
+    expect(find.text('v1.3'), findsOneWidget);
     expect(find.text('世界'), findsWidgets); // 导航项 + 页面标题
-    expect(find.text('视频'), findsOneWidget);
+    expect(find.text('视频'), findsWidgets); // 导航项 + 工作台赛道胶囊
     expect(find.text('创建'), findsOneWidget);
     expect(find.text('发现'), findsOneWidget);
+
+    // 首页工作台：大标题 + 药丸输入框
+    expect(find.text('OpenElf，我帮你'), findsOneWidget);
+    expect(find.text('创作'), findsOneWidget);
+    expect(find.text('快速'), findsOneWidget);
 
     // 内容区：世界信息流正常渲染
     expect(find.text('为你推荐'), findsOneWidget);
@@ -114,10 +129,158 @@ void main() {
     // 窄屏无左侧品牌行，底部导航存在
     expect(find.text('OpenElf'), findsNothing);
     expect(find.text('创建'), findsOneWidget);
+    // 手机端不出现工作台，保留原有世界页头部
+    expect(find.text('OpenElf，我帮你'), findsNothing);
+    expect(find.text('写作'), findsNothing);
     expect(find.text('为你推荐'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump();
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets('工作台：赛道胶囊与示例指令填入输入框', (WidgetTester tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    SharedPreferences.setMockInitialValues({});
+    final state = AppState.instance;
+    state.bootstrapSync();
+    state.currentUser = User(
+      id: 'workbench-user',
+      phone: '13800000005',
+      nickname: '工作台',
+      avatarInitial: '工',
+      createdAt: DateTime.now(),
+    );
+
+    await tester.pumpWidget(
+        const MaterialApp(home: Scaffold(body: WorkbenchPanel(wide: true))));
+    await tester.pump();
+
+    expect(find.text('OpenElf，我帮你'), findsOneWidget);
+    expect(find.text('写作'), findsOneWidget);
+
+    // 赛道胶囊 → 模板填入输入框
+    await tester.tap(find.text('写作'));
+    await tester.pump();
+    expect(find.text('帮我写一篇短文'), findsOneWidget);
+
+    // 示例指令胶囊 → 覆盖输入框
+    await tester.tap(find.textContaining('续章'));
+    await tester.pump();
+    expect(find.text('写一篇《潮汐来信》的续章'), findsOneWidget);
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets('工作台：加号打开技能面板，选中形象工坊后输入框出现技能 chip', (WidgetTester tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    SharedPreferences.setMockInitialValues({});
+    final state = AppState.instance;
+    state.bootstrapSync();
+    state.currentUser = User(
+      id: 'skill-user',
+      phone: '13800000006',
+      nickname: '技能',
+      avatarInitial: '技',
+      createdAt: DateTime.now(),
+    );
+
+    await tester.pumpWidget(
+        const MaterialApp(home: Scaffold(body: WorkbenchPanel(wide: true))));
+    await tester.pump();
+
+    // 加号 → 技能面板
+    await tester.tap(find.byIcon(Icons.add));
+    await tester.pumpAndSettle();
+    expect(find.text('技能'), findsOneWidget);
+    expect(find.text('形象工坊'), findsOneWidget);
+
+    // 选中后变成输入框里的技能 chip
+    await tester.tap(find.text('形象工坊'));
+    await tester.pumpAndSettle();
+    expect(find.text('形象工坊'), findsOneWidget);
+    expect(find.text('发消息…（形象工坊已选中）'), findsOneWidget);
+
+    // chip 上的 × 可以移除
+    await tester.tap(find.byIcon(Icons.close));
+    await tester.pumpAndSettle();
+    expect(find.text('形象工坊'), findsNothing);
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets('形象工坊对话页：首屏给出描述引导与风格选项', (WidgetTester tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    SharedPreferences.setMockInitialValues({});
+    AppState.instance.bootstrapSync();
+
+    await tester.pumpWidget(const MaterialApp(home: CharacterStudioPage()));
+    await tester.pump();
+
+    expect(find.text('形象工坊'), findsOneWidget);
+    expect(find.text('通用'), findsOneWidget);
+    expect(find.text('像素画'), findsOneWidget);
+    expect(find.textContaining('说说你想做的形象'), findsOneWidget);
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets('发现页：WorkBuddy 式分组入口，且不再出现充值入口', (WidgetTester tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    SharedPreferences.setMockInitialValues({});
+    AppState.instance.bootstrapSync();
+
+    await tester.pumpWidget(const MaterialApp(home: DiscoverPage()));
+    await tester.pump();
+
+    for (final label in ['资料库', '专家', '技能', '连接器', '项目']) {
+      expect(find.text(label), findsOneWidget);
+    }
+    // 充值入口统一收敛到「我」里的钱包，发现页不再出现
+    expect(find.text('💎'), findsNothing);
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets('我的页：WorkBuddy 式简单列表，钱包充值入口保留在账户卡', (WidgetTester tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    SharedPreferences.setMockInitialValues({});
+    final state = AppState.instance;
+    state.bootstrapSync();
+    state.currentUser = User(
+      id: 'profile-user',
+      phone: '13800000007',
+      nickname: '我的',
+      avatarInitial: '我',
+      createdAt: DateTime.now(),
+    );
+
+    await tester.pumpWidget(const MaterialApp(home: ProfilePage()));
+    await tester.pump();
+
+    expect(find.text('我的'), findsWidgets);
+    expect(find.text('钻石余额'), findsOneWidget);
+    expect(find.text('充值'), findsOneWidget);
+    for (final label in ['我的 AI', '收益', '仓库', '我的 API Key', '设置']) {
+      expect(find.text(label), findsOneWidget);
+    }
     debugDefaultTargetPlatformOverride = null;
   });
 
@@ -314,13 +477,116 @@ void main() {
   });
 
   testWidgets('登录后三步走完并创建成功', (WidgetTester tester) async {
-    // 演示态验证完整创建流程；安卓真机走服务端换取快照。
+    // P3 流程依赖服务端：用假 HTTP 客户端覆盖角色卡接口，验证三步 UI 与铸造落地。
     debugDefaultTargetPlatformOverride = TargetPlatform.windows;
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
     SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({
+      'openelf.accessToken': 'test-access-token',
+      'openelf.refreshToken': 'test-refresh-token',
+    });
+
+    Map<String, dynamic> cardJson({
+      String status = 'draft',
+      String? imageUrl,
+      String? thumbUrl,
+    }) =>
+        {
+          'id': 'card-1',
+          'name': '小满',
+          'source': 'text',
+          'style': '通用',
+          'prompt': '一个安静的短发女孩，黄昏的天台',
+          'persona': '慢下来才能看见细节',
+          'fear': '被当成工具',
+          'habit': '反复看评论',
+          'status': status,
+          'seed': 7,
+          'traits': <String, dynamic>{},
+          'rarity_tier': status == 'generated' ? 'common' : null,
+          'rarity_score': status == 'generated' ? 3 : 0,
+          if (imageUrl != null) 'imageUrl': imageUrl,
+          if (thumbUrl != null) 'thumbUrl': thumbUrl,
+        };
+
+    http.Response jsonRes(Object body) => http.Response(
+          jsonEncode(body),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+
+    final client = MockClient((request) async {
+      final path = request.url.path;
+      if (path == '/api/v1/character/drafts') {
+        return jsonRes(cardJson());
+      }
+      if (path == '/api/v1/character/drafts/card-1') {
+        return jsonRes(cardJson());
+      }
+      if (path == '/api/v1/character/drafts/card-1/preview') {
+        return jsonRes({
+          'thumbDataUrl':
+              'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+          'compositionHash': 'demo-hash',
+          'rarity': {'tier': 'common', 'score': 3},
+          'traits': <String, dynamic>{},
+        });
+      }
+      if (path == '/api/v1/character/drafts/card-1/generate') {
+        return jsonRes({
+          'card': cardJson(
+            status: 'generated',
+            imageUrl: '/api/v1/character-assets/char_demo.png',
+            thumbUrl: '/api/v1/character-assets/char_demo_thumb.png',
+          ),
+          'imageUrl': '/api/v1/character-assets/char_demo.png',
+          'thumbUrl': '/api/v1/character-assets/char_demo_thumb.png',
+          'refine': {'skipped': true},
+        });
+      }
+      if (path == '/api/v1/character/cards/card-1/mint') {
+        return jsonRes({
+          'elf': {
+            'id': 'ugc_test',
+            'serial': '#U001',
+            'name': '小满',
+            'initial': '小',
+            'ownerId': 'flow-user',
+            'ownerLabel': '流程',
+            'isMine': true,
+            'generation': 1,
+            'edition': 'UGC · 初版',
+            'persona': '慢下来才能看见细节',
+            'fear': '被当成工具',
+            'habit': '反复看评论',
+            'status': 'active',
+            'followers': 0,
+            'echo': 0,
+            'works': 0,
+            'attention': 0,
+            'chainAddress': '0xflow',
+            'baseCapacity': 3,
+            'learnedSkills': <String>[],
+            'today': <String>[],
+            'relations': <dynamic>[],
+            'imageUrl': '/api/v1/character-assets/char_demo.png',
+            'imageThumbUrl': '/api/v1/character-assets/char_demo_thumb.png',
+            'characterCardId': 'card-1',
+            'tokenId': 7,
+          },
+          'card': cardJson(status: 'generated'),
+          'tokenId': 7,
+          'chain': {'dciId': 'dci_test', 'antTxHash': 'tx_test'},
+        });
+      }
+      return http.Response('{}', 404);
+    });
+    PlatformApi.debugUseClient(client);
+    addTearDown(PlatformApi.debugResetClient);
+
     final state = AppState.instance;
     state.bootstrapSync();
     state.currentUser = User(
@@ -335,30 +601,42 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: CreateElfPage()));
     await tester.pump();
 
-    // 第 1 步：文字描述形象
+    // 第 1 步：角色设定（名字 + 形象描述 + 合规声明）。
     expect(find.text('输入你脑海中的形象'), findsOneWidget);
-    await tester.enterText(
-        find.byType(TextField).first, '一个安静的短发女孩，黄昏的天台');
-    await tester.pump();
-
-    await tester.tap(find.text('下一步 · 定人格'));
-    await tester.pump();
-
-    // 第 2 步：定人格
     await tester.enterText(find.byType(TextField).first, '小满');
-    await tester.tap(find.text('下一步 · 合规确认'));
+    await tester.enterText(
+        find.byType(TextField).at(1), '一个安静的短发女孩，黄昏的天台');
     await tester.pump();
-
-    // 第 3 步：逐条勾选声明后创建
     for (final box in tester.widgetList<Checkbox>(find.byType(Checkbox))) {
       box.onChanged!(true);
     }
     await tester.pump();
-    await tester.tap(find.text('创建 AI · 💎${AppState.createElfCost}'));
+    await tester.tap(find.text('下一步 · 形象预览'));
     await tester.pumpAndSettle();
 
-    expect(find.text('AI 智能体已创建'), findsOneWidget);
+    // 第 2 步：服务端预览 + 确认生成。
+    expect(find.text('第 2 / 3 步 · 形象预览'), findsOneWidget);
+    expect(find.text('换一组'), findsOneWidget);
+    // 选中一张预览缩略图，再确认生成。
+    await tester.tap(find.byType(Image).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '确认生成所选形象'));
+    await tester.pumpAndSettle();
+    expect(find.text('下一步 · 铸造'), findsOneWidget);
+
+    // 第 3 步：铸造费用与二次确认。
+    await tester.tap(find.text('下一步 · 铸造'));
+    await tester.pumpAndSettle();
+    expect(find.text('铸造将扣除 200 钻石，形象生成免费。'), findsOneWidget);
+    await tester.tap(find.text('铸造 AI · 💎${AppState.createElfCost}'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, '确认铸造'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('铸造成功'), findsOneWidget);
+    expect(find.text('#7'), findsOneWidget);
     expect(state.myElves.any((e) => e.name == '小满'), isTrue);
+    expect(state.activeElfId, 'ugc_test');
     debugDefaultTargetPlatformOverride = null;
   });
 }

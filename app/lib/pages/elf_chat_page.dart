@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
@@ -23,11 +24,20 @@ class ElfChatPage extends StatefulWidget {
 }
 
 class _ElfChatPageState extends State<ElfChatPage> {
+  /// WorkBuddy 官方账号：只有它有技能栏。
+  static const _workBuddyElfId = 'off_workbuddy';
+
+  /// 形象工坊技能标识，与服务端 chat 技能白名单一致。
+  static const _imageStudioSkill = 'image-studio-skill';
+
   final TextEditingController _input = TextEditingController();
   final ScrollController _scroll = ScrollController();
 
   /// 等待 AI 回复中：显示「正在输入…」占位并禁用发送按钮。
   bool _sending = false;
+
+  /// 是否挂载形象工坊技能：WorkBuddy 会话默认挂载，可手动摘除。
+  late bool _skillOn = widget.elfId == _workBuddyElfId;
 
   AppState get _state => AppState.instance;
 
@@ -73,7 +83,11 @@ class _ElfChatPageState extends State<ElfChatPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToLatest());
 
     // 真实对话期间保持占位；页面销毁后不再 setState。
-    await _state.sendChat(widget.elfId, text);
+    await _state.sendChat(
+      widget.elfId,
+      text,
+      skills: _skillOn ? const [_imageStudioSkill] : const [],
+    );
     if (!mounted) return;
     setState(() => _sending = false);
     WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToLatest());
@@ -379,6 +393,7 @@ class _ElfChatPageState extends State<ElfChatPage> {
                     color: AppColors.text,
                   ),
                 ),
+                if (msg.images.isNotEmpty) _chatImages(msg.images),
                 if (_needsTopUp(msg))
                   TextButton(
                     onPressed: _openApiKey,
@@ -395,6 +410,79 @@ class _ElfChatPageState extends State<ElfChatPage> {
               ],
             ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 技能产出的图片：气泡内网格展示，点击看大图。
+  /// http 地址走网络图，data:image 走内存图（形象工坊预览返回 base64 缩略图）。
+  Widget _chatImages(List<String> images) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: [
+          for (final url in images)
+            GestureDetector(
+              onTap: () => _previewImage(url),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: _image(url, width: 112, height: 112, fit: BoxFit.cover),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// 统一图片渲染：兼容网络地址与 data:image base64。
+  Widget _image(String url,
+      {required double width, required double height, required BoxFit fit}) {
+    final error = Container(
+      width: width,
+      height: height,
+      color: AppColors.surface,
+      alignment: Alignment.center,
+      child: Icon(Icons.image_not_supported_outlined,
+          size: 20, color: AppColors.textMuted),
+    );
+    if (url.startsWith('data:image/')) {
+      final comma = url.indexOf(',');
+      if (comma < 0) return error;
+      try {
+        return Image.memory(
+          base64Decode(url.substring(comma + 1)),
+          width: width,
+          height: height,
+          fit: fit,
+          gaplessPlayback: true,
+        );
+      } catch (_) {
+        return error;
+      }
+    }
+    return Image.network(
+      url,
+      width: width,
+      height: height,
+      fit: fit,
+      errorBuilder: (_, __, ___) => error,
+    );
+  }
+
+  void _previewImage(String url) {
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (ctx) => GestureDetector(
+        onTap: () => Navigator.of(ctx).pop(),
+        child: InteractiveViewer(
+          maxScale: 4,
+          child: Center(
+            child: _image(url, width: 320, height: 320, fit: BoxFit.contain),
           ),
         ),
       ),
@@ -522,7 +610,7 @@ class _ElfChatPageState extends State<ElfChatPage> {
     ];
   }
 
-  // —— 底部：数据行 + 输入条 ——
+  // —— 底部：数据行 + 技能栏 + 输入条 ——
 
   Widget _bottomBar(Elf elf) {
     return SafeArea(
@@ -533,9 +621,63 @@ class _ElfChatPageState extends State<ElfChatPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             _statsRow(elf),
+            if (elf.id == _workBuddyElfId) ...[
+              const SizedBox(height: 6),
+              _skillBar(),
+            ],
             const SizedBox(height: 8),
             _inputBar(elf),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// 技能栏：与 WorkBuddy 一致，输入框上方挂载技能，可一键摘除。
+  Widget _skillBar() {
+    final on = _skillOn;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          setState(() => _skillOn = !on);
+          _toast(on ? '已摘除形象工坊技能' : '已挂载形象工坊技能，可直接让它画形象');
+        },
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(10, 6, 8, 6),
+          decoration: BoxDecoration(
+            color: on ? AppColors.brand.withOpacity(0.12) : AppColors.surfaceAlt,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: on ? AppColors.brand.withOpacity(0.45) : AppColors.strokeSoft,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.auto_awesome,
+                size: 13,
+                color: on ? AppColors.brand : AppColors.textMuted,
+              ),
+              const SizedBox(width: 5),
+              Text(
+                '形象工坊 OpenElf',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: on ? AppColors.brand : AppColors.textSub,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Icon(
+                on ? Icons.close : Icons.add,
+                size: 13,
+                color: on ? AppColors.brand : AppColors.textMuted,
+              ),
+            ],
+          ),
         ),
       ),
     );

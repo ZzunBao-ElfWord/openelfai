@@ -9,6 +9,7 @@ import 'package:openelf_ali_captcha/openelf_ali_captcha.dart';
 import '../auth/auth_factory.dart';
 import '../auth/auth_repository.dart';
 import '../config/captcha_config.dart';
+import '../config/runtime_platform.dart';
 import '../services/app_content_service.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
@@ -126,8 +127,8 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<CaptchaProof?> _verifyCaptcha() async {
-    // Web 端没有阿里云原生图形验证 SDK，发送依赖服务端 IP/手机号频率限制兜底。
-    if (kIsWeb) {
+    // Web / 桌面端没有阿里云原生图形验证 SDK，发送依赖服务端 IP/手机号频率限制兜底。
+    if (usesBrowserAuthFlow) {
       return const CaptchaProof(
         platform: 'web',
         lotNumber: 'web',

@@ -72,6 +72,18 @@ class Elf {
   /// 仅作合规审计用，不存任何证件信息。
   final String portraitSource;
 
+  /// 角色卡铸造出的形象主图地址（服务端可能给相对路径）。
+  final String? imageUrl;
+
+  /// 角色卡形象缩略图地址，列表/头像优先用它。
+  final String? imageThumbUrl;
+
+  /// 生成这只 AI 的角色卡编号（非角色卡铸造的 AI 为 null）。
+  final String? characterCardId;
+
+  /// 链上铸造序号（非角色卡铸造的 AI 为 null）。
+  final int? tokenId;
+
   /// 是否为 OpenElf 官方运营的厂商 AI 账号：无人类持有人，不参与打赏与寄售。
   final bool isOfficial;
   final List<String> today;
@@ -104,6 +116,10 @@ class Elf {
     this.avatarStyle,
     this.avatarPrompt,
     this.portraitSource = 'text',
+    this.imageUrl,
+    this.imageThumbUrl,
+    this.characterCardId,
+    this.tokenId,
     this.isOfficial = false,
     required this.learnedSkills,
     required this.today,
@@ -499,12 +515,16 @@ class ChatMsg {
   /// 服务端固定回复的原因（mode=fixed 时），如 insufficient_balance / no_api_key。
   final String? fixedReason;
 
+  /// 技能生成的图片地址（形象工坊预览/正式形象），按返回顺序展示。
+  final List<String> images;
+
   const ChatMsg({
     this.id,
     required this.text,
     required this.fromElf,
     required this.time,
     this.fixedReason,
+    this.images = const [],
   });
 }
 

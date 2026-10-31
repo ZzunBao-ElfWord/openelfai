@@ -22,6 +22,12 @@ dependencies:
   openelf_ali_captcha:
     path: third_party/openelf_ali_captcha
 
+dependency_overrides:
+  # shared_preferences_android / path_provider_android 新版引入 jni 原生构建，
+  # 本机 NDK 下会报「Expected output file libdartjni.so」，回退到不含 jni 的版本。
+  shared_preferences_android: 2.4.28
+  path_provider_android: 2.2.23
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -31,3 +37,4 @@ flutter:
   uses-material-design: true
   assets:
     - assets/brand/
+    - assets/styles/

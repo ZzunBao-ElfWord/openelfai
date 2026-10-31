@@ -266,6 +266,10 @@ class DataRepository {
         'avatarStyle': e.avatarStyle,
         'avatarPrompt': e.avatarPrompt,
         'portraitSource': e.portraitSource,
+        'imageUrl': e.imageUrl,
+        'imageThumbUrl': e.imageThumbUrl,
+        'characterCardId': e.characterCardId,
+        'tokenId': e.tokenId,
         'isOfficial': e.isOfficial,
         'baseCapacity': e.baseCapacity,
         'learnedSkills': e.learnedSkills,
@@ -312,6 +316,10 @@ class DataRepository {
         avatarStyle: j['avatarStyle'] as String?,
         avatarPrompt: j['avatarPrompt'] as String?,
         portraitSource: j['portraitSource'] as String? ?? 'text',
+        imageUrl: j['imageUrl'] as String?,
+        imageThumbUrl: j['imageThumbUrl'] as String?,
+        characterCardId: j['characterCardId'] as String?,
+        tokenId: (j['tokenId'] as num?)?.toInt(),
         isOfficial: j['isOfficial'] as bool? ?? false,
         // v1.6 迁移：baseSlots/slots → baseCapacity；equipped → learnedSkills
         baseCapacity: (j['baseCapacity'] as int?) ??

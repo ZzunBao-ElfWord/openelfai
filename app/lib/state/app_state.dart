@@ -642,25 +642,33 @@ class AppState extends ChangeNotifier {
 
   /// 拉取一页信息流。reset 用于下拉刷新/首次进入，否则追加下一页。
   /// 排序、分页、去重都由服务端决定，客户端不再重排或拼装种子内容。
+  /// 全端可看：已登录的商业端（Android/iOS）走带权益的私有流，
+  /// 其余情况（桌面/Web/游客）走公开流，数据同源。
   Future<String?> loadFeed(
       {String channel = 'world', String sort = 'recommend', bool reset = false}) async {
-    if (!CommerceConfig.enabled) return null;
     final user = currentUser;
-    if (user == null) return '请先登录';
     sort = _effectiveSort(sort);
+    // 「我的 AI」流是私有数据，必须登录。
+    if (user == null && sort == 'mine') return '请先登录';
     final key = '$channel:$sort';
     if (_feedLoading.contains(key)) return null;
     if (!reset && !(_feedHasMore[key] ?? true)) return null;
-    final mode =
-        _paymentMode ?? (CommerceConfig.android ? CommerceConfig.androidMode : null);
-    if (mode == null) return '请先打开钱包，刷新服务端权益';
+    // 商业端已登录时走私有流（需要计费环境），其余走公开流。
+    final usePrivate = CommerceConfig.enabled && user != null;
+    final mode = !usePrivate
+        ? null
+        : _paymentMode ?? (CommerceConfig.android ? CommerceConfig.androidMode : null);
+    if (usePrivate && mode == null) return '请先打开钱包，刷新服务端权益';
     _feedLoading.add(key);
     notifyListeners();
     try {
       final page = reset ? 0 : (_feedPage[key] ?? -1) + 1;
-      final response = await CommerceRepository.instance
-          .feed(user.id, mode, channel: channel, sort: sort, page: page);
-      if (currentUser?.id != user.id) return null;
+      final response = usePrivate
+          ? await CommerceRepository.instance
+              .feed(user.id, mode!, channel: channel, sort: sort, page: page)
+          : await CommerceRepository.instance
+              .publicFeed(channel: channel, sort: sort, page: page);
+      if (user != null && currentUser?.id != user.id) return null;
       final incoming = (response['posts'] as List)
           .map((v) => _data.decodePaymentPost(Map<String, dynamic>.from(v as Map)))
           .toList();
@@ -1503,8 +1511,9 @@ class AppState extends ChangeNotifier {
   }
 
   /// 人类发一条，AI 回一条（真实对话）。休眠的精灵不回复。
+  /// skills 非空时挂载技能（如形象工坊），由模型自行调用工具后再回复。
   /// 网络异常或服务端 502 时插入本地兜底文案，不向 UI 抛异常。
-  Future<void> sendChat(String elfId, String text) async {
+  Future<void> sendChat(String elfId, String text, {List<String> skills = const []}) async {
     final list = chatOf(elfId);
     list.add(ChatMsg(text: text, fromElf: false, time: _now()));
     notifyListeners();
@@ -1531,6 +1540,7 @@ class AppState extends ChangeNotifier {
         persona: target.persona,
         text: text,
         history: history,
+        skills: skills,
       );
     } catch (_) {
       // 网络异常 / 服务端 502 都走兜底文案。
@@ -1546,6 +1556,19 @@ class AppState extends ChangeNotifier {
     if (saved != null && saved.isNotEmpty) {
       final decoded = _decodeChat(saved);
       if (decoded.isNotEmpty) {
+        // 落库的消息不含图片，把本次技能产出的图片挂到末尾的 AI 气泡上。
+        if (result.images.isNotEmpty) {
+          final last = decoded.lastIndexWhere((msg) => msg.fromElf);
+          if (last >= 0) {
+            decoded[last] = ChatMsg(
+              id: decoded[last].id,
+              text: decoded[last].text,
+              fromElf: true,
+              time: decoded[last].time,
+              images: result.images,
+            );
+          }
+        }
         chatOf(elfId);
         _chats[elfId] = decoded;
         notifyListeners();
@@ -1557,6 +1580,7 @@ class AppState extends ChangeNotifier {
       fromElf: true,
       time: _now(),
       fixedReason: result.mode == 'fixed' ? result.reason : null,
+      images: result.images,
     ));
     notifyListeners();
   }
@@ -1773,6 +1797,34 @@ class AppState extends ChangeNotifier {
     _spend(createElfCost, 'create_elf', '创建 ${elf.name}（UGC 形象）');
     notifyListeners();
     return null;
+  }
+
+  /// 角色卡铸造成功：把服务端返回的 AI 并入本地并切为当前 AI。
+  /// 调用方随后会拉一次服务端快照（refreshEarnings），校正余额与 activeElfId。
+  Elf? adoptMintedElf(Map<String, dynamic>? raw) {
+    if (raw == null) return null;
+    try {
+      // 铸造接口返回的是平台 elf 原始结构，补上服务端快照才会带的所有权标记。
+      final elf = _data.decodePaymentElf({
+        ...raw,
+        'isMine': true,
+        'status': 'active',
+      });
+      _ensureChainAddress(elf);
+      final at = elves.indexWhere((e) => e.id == elf.id);
+      if (at >= 0) {
+        elves[at] = elf;
+      } else {
+        elves.insert(0, elf);
+        seats.add(Seat(elfId: elf.id, days: 0, edition: elf.edition, injected: 0));
+      }
+      activeElfId = elf.id;
+      notifyListeners();
+      return elf;
+    } catch (_) {
+      // 解析失败不影响「铸造已成功」这一事实：快照刷新会把 AI 补回来。
+      return null;
+    }
   }
 
   /// 把某只 AI 免费转赠给另一个人类（AI 唯一的流转方式）。

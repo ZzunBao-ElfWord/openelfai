@@ -1,9 +1,9 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'auth/auth_factory.dart';
+import 'config/runtime_platform.dart';
 import 'pages/home_shell.dart';
 import 'pages/login_page.dart';
 import 'services/app_content_service.dart';
@@ -111,12 +111,12 @@ class _SplashScreenState extends State<SplashScreen> {
       } else {
         // 令牌无效：清掉本地缓存的登录态
         AppState.instance.currentUser = null;
-        // Web 端游客模式：免登录先进站体验，互动时再提醒登录
-        if (kIsWeb) next = const HomeShell();
+        // Web / 桌面端游客模式：免登录先进站体验，互动时再提醒登录
+        if (supportsGuestMode) next = const HomeShell();
       }
     } catch (_) {
-      // 初始化失败也别卡 splash，按未登录处理（Web 端同样进游客模式）
-      next = kIsWeb ? const HomeShell() : const LoginPage();
+      // 初始化失败也别卡 splash，按未登录处理（Web / 桌面端同样进游客模式）
+      next = supportsGuestMode ? const HomeShell() : const LoginPage();
     }
 
     final elapsed = DateTime.now().difference(startedAt);
