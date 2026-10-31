@@ -4,6 +4,7 @@ const crypto = require('node:crypto');
 const { changeBalance, fingerprint, fail } = require('./payment_store');
 const { moderateText } = require('./compliance');
 const { videoDeliveryUrl } = require('./video_delivery');
+const { scoreWorldPost, QUALITY_FEED_MIN } = require('./quality');
 const { RESOURCE_POLICY, assertResourceAction } = require('./resource_policy');
 
 const CATALOG = [
@@ -772,9 +773,22 @@ function createCommerceService({ db = null, store, settings, payout = null, payo
         .filter((post) => (mine ? mine.has(post.elfId) : true))
         .filter((post) => !blocked?.elves.has(post.elfId))
         .filter((post) => !(owners && blocked?.users.has(owners.get(post.elfId))));
-      const ranked = pool.map((post) => ({ post, score: scoreOf(post, sort) }));
+      let ranked = pool.map((post) => ({ post, score: scoreOf(post, sort) }));
       ranked.sort((a, b) => b.score - a.score
         || String(b.post.id).localeCompare(String(a.post.id)));
+      // 「空话」过滤：recommend/hot 排序（视频流恒为 hot，同样覆盖）在混排前剔除低质内容；
+      // mine 与 latest 不过滤——持有人永远能看到自己 AI 的内容。
+      let qualityFiltered = 0;
+      if (sort === 'recommend' || sort === 'hot') {
+        const kept = ranked.filter((row) => {
+          const body = row.post?.body;
+          // 无正文的图文/视频形态不参与空话打分，直接保留。
+          if (typeof body !== 'string' || !body.trim()) return true;
+          return scoreWorldPost(body) >= QUALITY_FEED_MIN;
+        });
+        qualityFiltered = ranked.length - kept.length;
+        ranked = kept;
+      }
       // 推荐流把用户 AI 的内容混进官方账号之间；其它排序保持原有语义。
       let ordered = ranked;
       if (sort === 'recommend') {
@@ -794,7 +808,7 @@ function createCommerceService({ db = null, store, settings, payout = null, payo
         elves.push({ ...normalized,
           isMine: user != null && normalized.ownerId === user.id && normalized.status === 'owned' });
       }
-      return { channel, sort, page, size, posts, elves,
+      return { channel, sort, page, size, posts, elves, qualityFiltered,
         hasMore: (page + 1) * size < ranked.length };
     });
   }
@@ -1402,10 +1416,46 @@ function createCommerceService({ db = null, store, settings, payout = null, payo
     }
   }
 
+  /// —— 平台推理成本计量（服务端自持 Key 发起的模型调用；与世界对话预算口径独立，不复用其集合）——
+
+  /// 平台买单的模型调用拿到成功响应后记一笔成本：按「精灵 + 来源」按日累加。
+  /// tokens 缺失时按 WORLD_CHAT_EST_TOKENS_PER_MSG 估算；写入失败不阻断业务本身。
+  async function recordElfCost(elfId, source, tokens) {
+    if (typeof elfId !== 'string' || !elfId) return;
+    const src = typeof source === 'string' && source ? source : 'unknown';
+    const used = Number.isSafeInteger(tokens) && tokens > 0 ? tokens : WORLD_CHAT_EST_TOKENS_PER_MSG;
+    const costMicro = Math.ceil((used / 1000) * WORLD_CHAT_MICRO_PER_1K_TOKENS);
+    try {
+      await store.transaction('Production', async (tx) => {
+        const day = worldChatDay();
+        const key = `${elfId}:${day}`;
+        const row = (await tx.get('elf_cost_daily', key, true))
+          || { id: key, elfId, day, sources: {}, totalMicro: 0 };
+        if (!row.sources || typeof row.sources !== 'object') row.sources = {};
+        const bucket = row.sources[src] || { costMicro: 0, messages: 0 };
+        bucket.costMicro = (Number(bucket.costMicro) || 0) + costMicro;
+        bucket.messages = (Number(bucket.messages) || 0) + 1;
+        row.sources[src] = bucket;
+        row.totalMicro = (Number(row.totalMicro) || 0) + costMicro;
+        await tx.put('elf_cost_daily', key, row, { ref: elfId });
+      });
+    } catch (_) {
+      // 与 recordWorldChatUsage 同一原则：计量失败不影响产出。
+    }
+  }
+
+  /// 查询某日（缺省今天，服务器本地自然日）全部精灵的平台推理成本记录。
+  async function listElfCostDaily(day) {
+    const target = typeof day === 'string' && day ? day : worldChatDay();
+    const rows = await store.transaction('Production',
+      (tx) => tx.list('elf_cost_daily', { limit: 500 }));
+    return rows.filter((row) => row && row.day === target);
+  }
+
   return { snapshot, listFeed, listChat, recordChat, autoCycle, action, environment, verifyIdentity,
     requestWithdrawal, reviewWithdrawal, reconcileWithdrawal, listWithdrawals, listAllWithdrawals,
     characterAddress, characterBalance, createElfFromCharacter, refundCharacterMint, identityVerified,
-    getElfById, setWorldChatOpen, worldChatUsage, recordWorldChatUsage };
+    getElfById, setWorldChatOpen, worldChatUsage, recordWorldChatUsage, recordElfCost, listElfCostDaily };
 }
 
 module.exports = { createCommerceService, CATALOG, MODULES, MODULE_PRICES, FORGET_COST,

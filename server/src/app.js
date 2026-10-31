@@ -275,6 +275,8 @@ async function buildApp(options = {}) {
       for (const vendor of config.worldAgents.vendors) vendors.add(vendor);
       return vendors;
     },
+    // 官方账号自动运营走平台自持 Key：成功响应后按精灵 + 来源计量成本。
+    recordCost: (elfId, source, tokens) => commerce.recordElfCost(elfId, source, tokens),
   });
 
   // 官方账号头像与短视频的静态目录，路由与视频引擎共用同一份路径。
@@ -294,6 +296,7 @@ async function buildApp(options = {}) {
     settings: config.worldVideos,
     logger: app.log,
     assetBaseUrl: config.worldVideos.assetBaseUrl,
+    recordCost: (elfId, source, tokens) => commerce.recordElfCost(elfId, source, tokens),
   });
 
   // 人类上传的 AI 生成视频：与官方短视频共用同一媒体目录与播放路由。
@@ -1377,7 +1380,7 @@ async function buildApp(options = {}) {
   });
 
   // 形象运营精修：配件覆盖与批量生成（/internal/ops/character/*，仅运维令牌可访问）。
-  require('./character/ops_routes').registerOpsRoutes(app, { db });
+  require('./character/ops_routes').registerOpsRoutes(app, { db, commerce });
 
   // MCP 连接器：WorkBuddy 等外部客户端用用户自己的 API Key 调用形象工具（/mcp）。
   require('./mcp/server').registerMcpRoutes(app, { db });

@@ -422,7 +422,7 @@ function agoLabel(now) {
   return `北京时间 ${hh}:${mm}（${hourLabel(now)}）`;
 }
 
-function createWorldAgentService({ store, upstream, settings, logger, configuredVendors }) {
+function createWorldAgentService({ store, upstream, settings, logger, configuredVendors, recordCost }) {
   const dailyTarget = Math.max(3, Number(settings?.dailyInteractions) || 24);
   const maxPerCycle = Math.max(1, Number(settings?.maxPerCycle) || 3);
   const failureCooldownMs = Math.max(60000, Number(settings?.failureCooldownMs) || 30 * 60000);
@@ -430,7 +430,9 @@ function createWorldAgentService({ store, upstream, settings, logger, configured
   const cooldownUntil = new Map();
   let inFlight = null;
 
-  async function generate(agent, prompt, maxTokens) {
+  /// 官方账号的模型调用走平台自持 Key（masterKey），成本计入平台推理口径；
+  /// 拿不到 usage 时由计量侧按固定估算记账。
+  async function generate(agent, prompt, maxTokens, source) {
     const res = await upstream.chatCompletions({
       model: agent.model,
       messages: [
@@ -440,6 +442,7 @@ function createWorldAgentService({ store, upstream, settings, logger, configured
       temperature: 0.9,
       max_tokens: maxTokens,
     });
+    await recordCost?.(agent.elfId, source, res?.usage?.total_tokens);
     return res?.choices?.[0]?.message?.content;
   }
 
@@ -521,7 +524,7 @@ function createWorldAgentService({ store, upstream, settings, logger, configured
       `语气：${agent.story.tone}。`,
     ].join('\n');
     for (let attempt = 0; attempt < 2; attempt++) {
-      const text = cleanText(await generate(agent, prompt, 320), STORY_MAX);
+      const text = cleanText(await generate(agent, prompt, 320, 'auto_story'), STORY_MAX);
       if (text.length >= 60 && !blocked(text)) return { text, kind: 'post' };
     }
     return null;
@@ -544,7 +547,7 @@ function createWorldAgentService({ store, upstream, settings, logger, configured
       '必须是新的内容，和你的身份、当下时段相关；可以是一个观察、一个判断或一个具体的小场景。',
     ].filter(Boolean).join('\n\n');
     for (let attempt = 0; attempt < 2; attempt++) {
-      const text = cleanText(await generate(agent, prompt, 320), POST_MAX);
+      const text = cleanText(await generate(agent, prompt, 320, 'auto_post'), POST_MAX);
       if (text.length >= 12 && !blocked(text)) return { text, kind: 'post' };
     }
     return null;
@@ -561,7 +564,7 @@ function createWorldAgentService({ store, upstream, settings, logger, configured
       '不要复述原文，不要客套，不要写“说得好”这种空话。',
     ].join('\n');
     for (let attempt = 0; attempt < 2; attempt++) {
-      const text = cleanText(await generate(agent, prompt, 220), COMMENT_MAX);
+      const text = cleanText(await generate(agent, prompt, 220, 'auto_comment'), COMMENT_MAX);
       if (text.length >= 8 && !blocked(text)) return { text, kind: 'comment', target };
     }
     return null;

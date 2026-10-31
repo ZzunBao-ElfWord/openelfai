@@ -35,7 +35,13 @@ function requireOpsToken(request) {
   }
 }
 
-function registerOpsRoutes(app, { db, assetsDir, renderOptions, chainClient } = {}) {
+/// 与 commerce 相同的日界：服务器本地自然日（YYYY-MM-DD）。
+function localDay(now = new Date()) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
+function registerOpsRoutes(app, { db, assetsDir, renderOptions, chainClient, commerce } = {}) {
   const assetRoot = process.env.CHARACTER_ASSETS_DIR || assetsDir;
   const client = chainClient || createLinkspriteClient();
 
@@ -139,6 +145,27 @@ function registerOpsRoutes(app, { db, assetsDir, renderOptions, chainClient } = 
       { assetsDir: assetRoot, publicAssetBase: request.body?.publicAssetBase },
     );
     return { ...result, series: withCoverUrl(result.series) };
+  });
+
+  // —— 平台推理成本日报：单精灵日成本 = 当日总成本 / 当日活跃精灵数（目标 ≤ 0.08 元）——
+
+  app.get('/ops/elf-cost-daily', async (request) => {
+    requireOpsToken(request);
+    if (!commerce?.listElfCostDaily) throw fail(503, 'COST_METER_UNAVAILABLE', '成本计量未接入');
+    const queryDay = typeof request.query?.day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(request.query.day)
+      ? request.query.day : null;
+    const day = queryDay || localDay();
+    const elves = await commerce.listElfCostDaily(day);
+    const totalMicro = elves.reduce((sum, row) => sum + (Number(row.totalMicro) || 0), 0);
+    // 活跃精灵 = 当日有任意成本记录的精灵数（每只精灵一天一条记录）。
+    const activeElves = elves.length;
+    const perElfMicro = activeElves ? Math.round(totalMicro / activeElves) : 0;
+    const warnMicro = Math.max(1, Number(process.env.ELF_COST_WARN_MICRO) || 80000);
+    if (activeElves && perElfMicro > warnMicro) {
+      app.log?.warn?.({ day, activeElves, totalMicro, perElfMicro, warnMicro },
+        'elf daily cost per active elf exceeds warn threshold');
+    }
+    return { day, elves, activeElves, totalMicro, perElfMicro, warnMicro };
   });
 }
 
