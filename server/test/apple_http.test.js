@@ -26,6 +26,8 @@ test('HTTP：鉴权、商品、验单、消费、重复请求和退款通知贯�
   const db = { async execute(sql) {
     if (sql === 'SELECT * FROM refresh_sessions WHERE id = ?') return [[{ user_id: user.id, expires_at: Date.now() + 60000 }]];
     if (sql === 'SELECT * FROM users WHERE id = ?') return [[user]];
+    // 拉黑关系为空：信息流快照的合规过滤查询在无屏蔽记录时返回空集。
+    if (sql.includes('FROM compliance_blocks WHERE user_id = ?')) return [[], []];
     throw new Error('Unexpected SQL in HTTP test');
   } };
   const app = await buildApp({ db, paymentStore: store, sms: {}, captcha: {}, logger: false,
@@ -72,6 +74,8 @@ test('HTTP：安卓独立钱包、支付宝占位关闭、表单验签、服务�
   const db = { async execute(sql) {
     if (sql.includes('refresh_sessions')) return [[{ user_id: user.id, expires_at: Date.now() + 60000 }]];
     if (sql.includes('FROM users')) return [[user]];
+    // 拉黑关系为空：钱包快照的合规过滤查询在无屏蔽记录时返回空集。
+    if (sql.includes('FROM compliance_blocks')) return [[], []];
     throw new Error('Unexpected SQL');
   } };
   const gateway = { signOrder: () => 'test-signed-order', verifyNotify: data => data.sign === 'trusted',

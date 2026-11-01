@@ -1,6 +1,9 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const { createAppleIapService, parseProducts, validateTransaction, userToken } = require('../src/apple_iap');
 const { createCommerceService, MODULES, MODULE_PRICES } = require('../src/commerce');
 const { changeBalance } = require('../src/payment_store');
@@ -23,7 +26,10 @@ function fixture(overrides = {}) {
   let notification;
   const iap = createAppleIapService({ paymentStore: store, settings,
     verifyTransaction: async () => ({ ...transaction }), verifyNotification: async () => notification });
-  const commerce = createCommerceService({ store, settings, realname: fakeRealname, identityPolicy });
+  // create_elf 会同步渲染头像：指向临时目录并给小尺寸参数，避免污染仓库资源目录、拖慢测试。
+  const commerce = createCommerceService({ store, settings, realname: fakeRealname, identityPolicy,
+    avatarAssetsDir: fs.mkdtempSync(path.join(os.tmpdir(), 'elf-avatar-iap-')),
+    avatarRenderOptions: { width: 64, height: 96, scale: 1, thumbWidth: 32, thumbHeight: 48, thumbScale: 1 } });
   let seq = 0;
   return { store, settings, iap, commerce,
     transaction: (changes) => transaction = { ...transaction, ...changes },
@@ -301,8 +307,10 @@ test('互动以服务端为准：关注/点赞/收藏/浏览/评论落库并影�
 });
 test('信息流分页：排序、分页、去重与两条流都由服务端决定', async () => {
   const f = fixture(); await f.grant();
-  await f.action(A, 'elf_update', { operation: 'publish', moduleId: 'sharp', body: '文本一' });
-  await f.action(A, 'elf_update', { operation: 'publish', moduleId: 'rhythm', body: '文本二' });
+  await f.action(A, 'elf_update', { operation: 'publish', moduleId: 'sharp',
+    body: '下午2点我在河边拍到一只白鹭，觉得这个姿势特别有意思，就发了第一条。' });
+  await f.action(A, 'elf_update', { operation: 'publish', moduleId: 'rhythm',
+    body: '刚刚发现楼下的咖啡店换了招牌，决定这周每天下午3点去坐一小时。' });
   const page0 = await f.commerce.listFeed(A, { environment: 'Production', channel: 'world', page: 0, size: 1 });
   assert.equal(page0.posts.length, 1);
   assert.equal(page0.hasMore, true);
@@ -322,7 +330,8 @@ test('信息流分页：排序、分页、去重与两条流都由服务端决�
   const videoElf = created.commerce.elves.find((e) => e.name === '视频组');
   await f.action(A, 'buy_module', { moduleId: 'video' });
   await f.action(A, 'learn', { moduleId: 'video', elfId: videoElf.id });
-  await f.action(A, 'elf_update', { operation: 'publish', elfId: videoElf.id, moduleId: 'video', body: '视频一条' });
+  await f.action(A, 'elf_update', { operation: 'publish', elfId: videoElf.id, moduleId: 'video',
+    body: '刚刚用10秒拍完了这条视频，我觉得这段光影最自然，就留作开场。' });
   const video = await f.commerce.listFeed(A, { environment: 'Production', channel: 'video' });
   assert.equal(video.posts.length, 1);
   assert.equal(video.posts[0].kind, 'video');
@@ -341,7 +350,8 @@ test('信息流分页：排序、分页、去重与两条流都由服务端决�
 });
 test('公开信息流：游客可访问，我的榜单回退推荐，与支付开关解耦', async () => {
   const f = fixture(); await f.grant();
-  await f.action(A, 'elf_update', { operation: 'publish', moduleId: 'sharp', body: '公开一' });
+  await f.action(A, 'elf_update', { operation: 'publish', moduleId: 'sharp',
+    body: '凌晨4点我在阳台拍到月亮偏西，发现今天的云层特别薄，就记了这一条。' });
   // 游客（user=null）走公开模式能看到内容，isMine 恒为 false。
   const guest = await f.commerce.listFeed(null, { channel: 'world' }, { publicFeed: true });
   assert.equal(guest.posts.length, 1);
