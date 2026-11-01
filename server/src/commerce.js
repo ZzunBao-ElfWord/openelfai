@@ -6,6 +6,7 @@ const { moderateText } = require('./compliance');
 const { videoDeliveryUrl } = require('./video_delivery');
 const { scoreWorldPost, QUALITY_FEED_MIN } = require('./quality');
 const { RESOURCE_POLICY, assertResourceAction } = require('./resource_policy');
+const { renderElfAvatar, seedFromId, DEFAULT_WORLD_ASSETS_DIR } = require('./elf_avatar');
 
 const CATALOG = [
   { id: 'pm_001', name: '尘', elfId: 'pm_dust', title: '尘 · 第 1 代', price: 1280, capacity: 2, generation: 1, edition: '初版', learned: [] },
@@ -329,6 +330,9 @@ function normalizeElf(elf) {
     elf.learnedSkills = [...new Set([...(elf.equipped || []), ...(elf.ownedModules || [])])];
   }
   if (!elf.chainAddress) elf.chainAddress = address('elf:' + elf.id);
+  // 铸造形象图：老数据没有头像字段，统一补 null，保证三端载荷口径一致。
+  if (elf.imageUrl === undefined) elf.imageUrl = null;
+  if (elf.imageThumbUrl === undefined) elf.imageThumbUrl = null;
   // 「世界对话」开关：历史数据缺省关闭，由持有人显式打开。
   if (typeof elf.worldChatOpen !== 'boolean') elf.worldChatOpen = false;
   // 二级市场已取消：历史遗留的寄售状态一律退回「自持」，不再有可成交的挂单。
@@ -360,7 +364,8 @@ function newElf(user, template, id) {
 }
 
 function createCommerceService({ db = null, store, settings, payout = null, payoutQuery = null, realname = null,
-  identityPolicy = {}, compliance = null }) {
+  identityPolicy = {}, compliance = null, avatarAssetsDir = DEFAULT_WORLD_ASSETS_DIR, avatarRenderOptions = {},
+  logger = null }) {
   // 同一用户同一证件连续失败达到上限后锁定一段时间，避免拿证件号反复试探。
   const identityMaxFailures = Math.max(1, Number(identityPolicy.maxFailures) || 5);
   const identityLockMs = Math.max(1, Number(identityPolicy.lockHours) || 24) * 3600000;
@@ -634,7 +639,12 @@ function createCommerceService({ db = null, store, settings, payout = null, payo
         elves: [...assets.values()].map((elf) => ({ ...decayAttention(elf),
           isMine: elf.ownerId === user.id && elf.status === 'owned',
           earningsYuan: elf.ownerId === user.id ? wallet.earningsFen / 100 : 0 })),
-        primary: CATALOG.map((item) => ({ ...item, market: 'primary', subtitle: '官方首发', note: '由服务器登记持有权益' })),
+        primary: await Promise.all(CATALOG.map(async (item) => {
+          // 市场货架同样带头像：种子脚本渲染的官方形象图，未种子时为 null。
+          const seedRow = await tx.get('elf_avatar_seed', item.id);
+          return { ...item, market: 'primary', subtitle: '官方首发', note: '由服务器登记持有权益',
+            imageUrl: seedRow?.imageUrl || null, imageThumbUrl: seedRow?.imageThumbUrl || null };
+        })),
         // 已取消用户间 AI 寄售：市场只保留官方首发，AI 流转只剩免费转赠。
         secondary: [],
         // 技能书目录：名称、图标、赛道、文案与价格统一由服务端下发（含开发者上架能力）。
@@ -894,6 +904,11 @@ function createCommerceService({ db = null, store, settings, payout = null, payo
         const template = CATALOG.find((item) => item.id === body.listingId);
         if (!template) throw fail(409, 'LISTING_UNAVAILABLE', '该挂单已不可购买');
         const elf = newElf(user, template, 'e_' + crypto.randomUUID().replaceAll('-', ''));
+        elf.templateId = template.id;
+        // 官方形象图种子：由种子脚本提前渲染落库；缺失时不阻断购买，头像字段置 null。
+        const avatarSeed = await tx.get('elf_avatar_seed', template.id);
+        elf.imageUrl = avatarSeed?.imageUrl || null;
+        elf.imageThumbUrl = avatarSeed?.imageThumbUrl || null;
         elf.mintedPrice = template.price;
         await changeBalance(tx, user.id, wallet, { eventId, type: 'buy_elf', amount: -template.price, spend: true, note: '买入 ' + template.name });
         profile.activeElfId = elf.id;
@@ -1040,6 +1055,22 @@ function createCommerceService({ db = null, store, settings, payout = null, payo
           portraitSource: body.portraitSource === 'idCard' ? 'idCard' : 'text' }, id);
         // 寄售限价的参考价：自建 AI 以创建成本为准。
         elf.mintedPrice = CREATE_ELF_COST;
+        // 铸造形象图：按 avatarStyle 走 character 渲染管线同步出图（seed 由精灵 id 派生，重试幂等）；
+        // 渲染失败不阻断创建，只记日志并把头像字段置 null。
+        try {
+          const avatar = await renderElfAvatar({
+            style: elf.avatarStyle,
+            seed: seedFromId(elf.id),
+            assetsDir: avatarAssetsDir,
+            renderOptions: avatarRenderOptions,
+          });
+          elf.imageUrl = avatar.imageUrl;
+          elf.imageThumbUrl = avatar.imageThumbUrl;
+        } catch (error) {
+          (logger || console).warn?.({ err: error, elfId: elf.id }, 'create_elf avatar render failed');
+          elf.imageUrl = null;
+          elf.imageThumbUrl = null;
+        }
         await changeBalance(tx, user.id, wallet, { eventId, type: 'create_elf', amount: -CREATE_ELF_COST, spend: true, note: '创建 ' + name });
         profile.activeElfId = elf.id;
         await saveElf(elf);

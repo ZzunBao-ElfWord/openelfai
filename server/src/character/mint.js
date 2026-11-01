@@ -9,6 +9,7 @@ const fs = require('node:fs/promises');
 
 const { DEFAULT_ASSETS_DIR, publicCard } = require('./store');
 const { allocateTokenIdsIn } = require('./token_alloc');
+const { cleanupBatchCandidates } = require('./batch_cleanup');
 const { CREATE_ELF_COST } = require('../commerce');
 
 const MINT_COST = CREATE_ELF_COST;
@@ -67,9 +68,15 @@ function assetUrl(base, key) {
 }
 
 /// 真实库用连接开事务；内存/假 DB 没有 getConnection 时退化为直接执行，便于单测。
+/// 两条分支的 tx.execute 都只返回 rows，与 token_alloc 的契约保持一致。
 async function withTransaction(db, work) {
   if (typeof db.getConnection !== 'function') {
-    return work({ execute: (sql, params) => db.execute(sql, params) });
+    return work({
+      execute: async (sql, params = []) => {
+        const result = await db.execute(sql, params);
+        return Array.isArray(result) && Array.isArray(result[0]) ? result[0] : result;
+      },
+    });
   }
   const connection = await db.getConnection();
   try {
@@ -126,7 +133,7 @@ async function claimTokenId(db, { cardId, userId, workHash }) {
   for (let attempt = 0; attempt < MAX_TOKEN_ATTEMPTS; attempt += 1) {
     try {
       return await withTransaction(db, async (tx) => {
-        const [rows] = await tx.execute('SELECT * FROM character_mints WHERE card_id = ?', [cardId]);
+        const rows = await tx.execute('SELECT * FROM character_mints WHERE card_id = ?', [cardId]);
         if (rows[0]) {
           const existing = { ...rows[0] };
           // 上次链调用失败（未扣费）可复用同一 tokenId 重试。
@@ -178,7 +185,18 @@ function metadataOf(card, imageUrl) {
   };
 }
 
-async function settledResult({ db, card, mint, commerce, actor, base, userId }) {
+/// 铸造成功后清理中间候选图：只删同批次未当选候选与联系表，失败只记日志。
+async function cleanupAfterMint({ db, dir, card, logger }) {
+  try {
+    await cleanupBatchCandidates({
+      db, assetsDir: dir, imageKey: card.image_key, thumbKey: card.thumb_key, logger,
+    });
+  } catch (error) {
+    logger?.warn?.({ err: error, cardId: card.id }, 'batch candidate cleanup failed');
+  }
+}
+
+async function settledResult({ db, card, mint, commerce, actor, base, userId, dir, logger }) {
   const imageUrl = assetUrl(base, card.image_key);
   const thumbUrl = assetUrl(base, card.thumb_key);
   const chain = {
@@ -199,6 +217,7 @@ async function settledResult({ db, card, mint, commerce, actor, base, userId }) 
       [Date.now(), card.id, userId],
     );
   }
+  await cleanupAfterMint({ db, dir, card, logger });
   return {
     elf,
     card: { ...card, status: 'minted' },
@@ -211,7 +230,7 @@ async function settledResult({ db, card, mint, commerce, actor, base, userId }) 
 
 async function prepareAndMint(db, options = {}) {
   const {
-    userId, cardId, commerce, client, user, assetsDir, publicAssetBase,
+    userId, cardId, commerce, client, user, assetsDir, publicAssetBase, logger,
   } = options;
   if (!db) throw fail(500, 'DB_UNAVAILABLE', '数据库未就绪');
   if (!userId) throw fail(400, 'INVALID_USER', '缺少用户');
@@ -229,7 +248,7 @@ async function prepareAndMint(db, options = {}) {
 
   const existing = await findMintRow(db, cardId);
   if (existing && existing.status === 'minted') {
-    return settledResult({ db, card, mint: existing, commerce, actor, base, userId });
+    return settledResult({ db, card, mint: existing, commerce, actor, base, userId, dir, logger });
   }
   if (existing && existing.status === 'pending') {
     throw fail(409, 'MINT_IN_PROGRESS', '该角色正在铸造中，请稍后刷新');
@@ -268,7 +287,10 @@ async function prepareAndMint(db, options = {}) {
   }
   // 铸造接收地址必须是用户真实的人类侧链地址，取不到就不铸造。
   const recipient = await humanAddressOf(commerce, actor);
-  if (!recipient) throw fail(409, 'HUMAN_ADDRESS_MISSING', '用户链上地址缺失');
+  // 历史数据里出现过把 userId 写进 humanAddress 的情况，非 0x 地址一律不上链。
+  if (!recipient || !/^0x[0-9a-fA-F]{40}$/.test(recipient)) {
+    throw fail(409, 'HUMAN_ADDRESS_MISSING', '用户链上地址缺失');
+  }
 
   const workHash = crypto.createHash('sha256').update(png).digest('hex');
   const imageUrl = assetUrl(base, card.image_key);
@@ -280,7 +302,7 @@ async function prepareAndMint(db, options = {}) {
 
   const mint = await claimTokenId(db, { cardId, userId, workHash });
   if (mint.status === 'minted') {
-    return settledResult({ db, card, mint, commerce, actor, base, userId });
+    return settledResult({ db, card, mint, commerce, actor, base, userId, dir, logger });
   }
 
   const issuedAt = Date.now();
@@ -373,6 +395,7 @@ async function prepareAndMint(db, options = {}) {
     [Date.now(), cardId, userId],
   );
   await saveChainState(db, mint, { workHash, chain, status: 'minted', message: null });
+  await cleanupAfterMint({ db, dir, card, logger });
 
   const [freshRows] = await db.execute('SELECT * FROM character_cards WHERE id = ?', [cardId]);
   const freshCard = publicCard(freshRows[0]) || { ...card, status: 'minted' };

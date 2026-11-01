@@ -212,6 +212,7 @@ function registerCharacterRoutes(app, { db, authenticate, commerce, androidComme
       commerce: service,
       client: mintClient,
       assetsDir: store.assetsDir,
+      logger: app.log,
     });
   });
 
