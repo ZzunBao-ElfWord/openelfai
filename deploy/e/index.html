@@ -80,7 +80,7 @@
   </div>
 
   <a class="cta" id="openApp" href="#">已安装 OpenElf？打开 App 注视它</a>
-  <a class="cta secondary" href="https://openelfai.com/app/openelf-mvp.apk">下载 OpenElf（Android）</a>
+  <a class="cta secondary" id="downloadApp" href="https://openelfai.com/app/openelf-mvp.apk">下载 OpenElf（Android）</a>
 
   <div class="note">内容由 AI 生成 · openelfai.com</div>
 
@@ -108,6 +108,22 @@
     'intent://e/?id=' + encodeURIComponent(id) +
     '#Intent;scheme=https;host=openelfai.com;package=cn.openelfai.openelf;S.browser_fallback_url=' +
     encodeURIComponent('https://openelfai.com/app/openelf-mvp.apk') + ';end';
+
+  // iOS 分支：装了 App 的访客打开本链接时已被 Universal Link 直接拉进 App，
+  // 能看到本页的 iOS 访客一律视为未安装——主按钮改去 App Store，
+  // 并用 Smart App Banner 兜住「已装但未被拉起」的边缘情况。
+  var APP_STORE_URL = 'https://apps.apple.com/cn/app/openelf/id6761752635';
+  if (/iP(hone|ad|od)/.test(navigator.userAgent)) {
+    var meta = document.createElement('meta');
+    meta.name = 'apple-itunes-app';
+    meta.content = 'app-id=6761752635, app-argument=' +
+      encodeURIComponent(location.href.split('#')[0]);
+    document.head.appendChild(meta);
+    var openBtn = document.getElementById('openApp');
+    openBtn.href = APP_STORE_URL;
+    openBtn.textContent = '前往 App Store 下载 OpenElf';
+    document.getElementById('downloadApp').style.display = 'none';
+  }
 </script>
 </body>
 </html>

@@ -11,10 +11,15 @@ const WINDOWS_URL =
   process.env.NEXT_PUBLIC_WINDOWS_URL ||
   'https://openelfai.com/app/openelf-windows-x64.zip';
 
+/* 国区 App Store 上架地址 */
+const APP_STORE_URL =
+  process.env.NEXT_PUBLIC_APP_STORE_URL ||
+  'https://apps.apple.com/cn/app/openelf/id6761752635';
+
 export const metadata = {
   title: 'OpenElf App 下载 · AI 明星养成（Android / iOS / Windows）',
   description:
-    '下载开放精灵 OpenElf：Web 版浏览器打开即用；Android APK 直接安装；Windows 桌面版解压即用；iOS 与 macOS 灰度测试中。持有一只 AI，给它形象、人设与资源包，让它在大模型驱动下自己创作与上台。',
+    '下载开放精灵 OpenElf：Web 版浏览器打开即用；Android APK 直接安装；iOS 已上架国区 App Store；Windows 桌面版解压即用；macOS 灰度测试中。持有一只 AI，给它形象、人设与资源包，让它在大模型驱动下自己创作与上台。',
   alternates: { canonical: '/download/' }
 };
 
@@ -75,22 +80,28 @@ export default function DownloadPage() {
             </p>
           </section>
 
-          <section className={`${styles.card} ${styles.cardMuted}`}>
+          <section className={styles.card}>
             <div className={styles.cardHead}>
               <span className={styles.cardIcon}>
                 <Icon name="apple" size={22} />
               </span>
               <div>
                 <h2>iOS</h2>
-                <p className={styles.meta}>iOS 灰度 · 即将上线</p>
+                <p className={styles.meta}>App Store · 国区已上架</p>
               </div>
-              <span className={`${styles.badge} ${styles.badgeGhost}`}>灰度中</span>
+              <span className={styles.badge}>已上线</span>
             </div>
-            <span className={styles.ghost} aria-disabled="true">
-              即将上线
-            </span>
+            <a
+              className={styles.primary}
+              href={APP_STORE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              App Store 下载
+              <Icon name="external" size={16} />
+            </a>
             <p className={styles.note}>
-              iOS 版本正在灰度测试，暂未开放下载；开放后此处会切换为 App Store 入口。
+              国区 App Store 搜索「OpenElf」或点此跳转；与 Android 账号数据互通。
             </p>
           </section>
         </div>
