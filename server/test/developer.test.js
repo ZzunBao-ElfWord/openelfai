@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 
 const { validateManifest, validateSource } = require('../src/developer/manifest');
 const { createSandbox } = require('../src/developer/sandbox');
-const { createDeveloperService } = require('../src/developer/service');
+const { createDeveloperService, DEVELOPER_AGREEMENT_VERSION } = require('../src/developer/service');
 
 const BASE_MANIFEST = {
   slug: 'weather-brief',
@@ -29,35 +29,53 @@ function makeDb() {
     }
 
     if (query.startsWith('INSERT INTO platform_developers')) {
-      const [user_id, real_name, purpose, status, tier, created_at, approved_at] = params;
-      state.developers.push({ user_id, real_name, purpose, status, tier, created_at, approved_at });
+      const [user_id, real_name, purpose, subject_type, org_name, org_license_no, org_contact,
+        agreement_version, agreement_at, status, tier, created_at, approved_at, updated_at] = params;
+      state.developers.push({ user_id, real_name, purpose, subject_type, org_name, org_license_no, org_contact,
+        agreement_version, agreement_at, status, tier, created_at, approved_at, updated_at });
       return [{ affectedRows: 1 }, []];
     }
 
     if (query.startsWith('UPDATE platform_developers SET real_name')) {
-      const row = state.developers.find((item) => item.user_id === params[2]);
+      const row = state.developers.find((item) => item.user_id === params[params.length - 1]);
       if (row) {
-        row.real_name = params[0];
-        row.purpose = params[1];
+        Object.assign(row, { real_name: params[0], purpose: params[1], subject_type: params[2],
+          org_name: params[3], org_license_no: params[4], org_contact: params[5],
+          agreement_version: params[6], agreement_at: params[7], status: params[8], approved_at: params[9] });
       }
       return [{ affectedRows: row ? 1 : 0 }, []];
     }
 
+    if (query.includes('GROUP BY kind, status')) {
+      const groups = new Map();
+      for (const row of state.defs.filter((item) => item.developer_id === params[0])) {
+        const key = row.kind + '|' + row.status;
+        const group = groups.get(key) || { kind: row.kind, status: row.status, count: 0,
+          installs: 0, sales: 0, calls: 0, earnings_cents: 0 };
+        group.count += 1;
+        groups.set(key, group);
+      }
+      return [[...groups.values()], []];
+    }
+
     if (query.startsWith('INSERT INTO dev_skill_defs')) {
-      const [id, developer_id, slug, name, track, kind, summary, status, created_at, updated_at] = params;
+      const [id, developer_id, slug, name, track, kind, summary, price_diamonds, definition,
+        status, created_at, updated_at] = params;
       if (state.defs.some((row) => row.developer_id === developer_id && row.slug === slug)) {
         const error = new Error('duplicate slug');
         error.code = 'ER_DUP_ENTRY';
         throw error;
       }
-      state.defs.push({ id, developer_id, slug, name, track, kind, summary, status, created_at, updated_at });
+      state.defs.push({ id, developer_id, slug, name, track, kind, summary, price_diamonds, definition,
+        status, created_at, updated_at });
       return [{ affectedRows: 1 }, []];
     }
 
     if (query.startsWith('UPDATE dev_skill_defs SET slug')) {
-      const [slug, name, track, summary, updated_at, id, developer_id] = params;
+      const [slug, name, track, summary, price_diamonds, definition, updated_at, id, developer_id] = params;
       const row = state.defs.find((item) => item.id === id && item.developer_id === developer_id);
-      if (row) Object.assign(row, { slug, name, track, summary, updated_at });
+      if (row) Object.assign(row, { slug, name, track, summary, price_diamonds, definition,
+        status: 'draft', updated_at });
       return [{ affectedRows: row ? 1 : 0 }, []];
     }
 
@@ -235,37 +253,38 @@ test('服务闭环：入驻 → 建技能 → 调试 → 提交', async () => {
   const applied = await service.apply(user, {
     realName: '张三',
     purpose: '开发写作类技能，服务站内 AI 智能体',
+    agreementVersion: DEVELOPER_AGREEMENT_VERSION,
   });
   assert.equal(applied.developer.status, 'approved');
   assert.equal(applied.pricing.developer_share_bp, 7000);
 
   await assert.rejects(
-    () => service.createSkill(user, {
+    () => service.createCapability(user, {
       manifest: { ...BASE_MANIFEST, pricing: { book_diamonds: 1 } },
       source: ECHO_SOURCE,
     }),
     (error) => error.code === 'INVALID_MANIFEST',
   );
 
-  const created = await service.createSkill(user, { manifest: BASE_MANIFEST, source: ECHO_SOURCE });
-  assert.equal(created.skill.status, 'draft');
-  assert.equal(created.skill.latest_version, 1);
+  const created = await service.createCapability(user, { manifest: BASE_MANIFEST, source: ECHO_SOURCE });
+  assert.equal(created.capability.status, 'draft');
+  assert.equal(created.capability.latest_version, 1);
   assert.equal(created.versions.length, 1);
 
   await assert.rejects(
-    () => service.submitSkill(user, created.skill.id),
+    () => service.submitCapability(user, created.capability.id),
     (error) => error.code === 'TEST_REQUIRED',
   );
 
-  const run = await service.testSkill(user, created.skill.id, { input: { text: '上海' } });
+  const run = await service.testCapability(user, created.capability.id, { input: { text: '上海' } });
   assert.equal(run.ok, true);
   assert.deepEqual(run.output, { echo: '上海' });
 
-  const submitted = await service.submitSkill(user, created.skill.id);
-  assert.equal(submitted.skill.status, 'submitted');
+  const submitted = await service.submitCapability(user, created.capability.id);
+  assert.equal(submitted.capability.status, 'submitted');
 
   await assert.rejects(
-    () => service.testSkill(user, created.skill.id, {}),
-    (error) => error.code === 'SKILL_LOCKED',
+    () => service.testCapability(user, created.capability.id, {}),
+    (error) => error.code === 'CAPABILITY_LOCKED',
   );
 });

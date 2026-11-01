@@ -106,9 +106,9 @@ function mapCapability(row, extra = {}) {
     sales_count: toNumber(row.sales_count),
     call_count: toNumber(row.call_count),
     earnings_cents: toNumber(row.earnings_cents),
-    latest_version: toNumber(extra.latest_version),
-    runs: toNumber(extra.runs),
-    last_run_at: extra.last_run_at == null ? null : toNumber(extra.last_run_at),
+    latest_version: toNumber(row.latest_version ?? extra.latest_version),
+    runs: toNumber(row.runs ?? extra.runs),
+    last_run_at: (row.last_run_at ?? extra.last_run_at) == null ? null : toNumber(row.last_run_at ?? extra.last_run_at),
     created_at: toNumber(row.created_at),
     updated_at: toNumber(row.updated_at),
   };
