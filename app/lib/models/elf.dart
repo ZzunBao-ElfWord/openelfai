@@ -59,9 +59,6 @@ class Elf {
   /// AI 专属钱包（仅记录专属地址）。真实余额归人类账号统一支付。
   final ElfWallet wallet;
 
-  /// UGC 形象：形象生成模型产出的头像地址。接入模型前为 null，回落到首字头像。
-  String? avatarUrl;
-
   /// UGC 形象风格（通用 / 像素画 / 言情漫画 / 细腻厚涂），用于重新生成与审计。
   String? avatarStyle;
 
@@ -116,7 +113,6 @@ class Elf {
     this.nextAutoPostAt,
     this.lastDecayAt,
     ElfWallet? wallet,
-    this.avatarUrl,
     this.avatarStyle,
     this.avatarPrompt,
     this.portraitSource = 'text',

@@ -121,6 +121,18 @@ class ApiConfig {
   static const String blocksPath = '/api/v1/blocks';
   static const String blocksUnblockPath = '/api/v1/blocks/unblock';
 
+  /// 社区快照（GET）：含 termsAccepted（是否已同意社区规范）。
+  static const String communityPath = '/api/v1/community';
+
+  /// 同意社区规范（POST）。body: {version, accepted: true}
+  static const String communityTermsPath = '/api/v1/community/terms';
+
   /// 注销账号（DELETE）。body: {confirm: true}
   static const String accountPath = '/api/v1/account';
+
+  /// 生成器作品画廊（GET）：发现页用，游客可看。query: limit/offset。
+  static const String generatorFeedPath = '/api/v1/generator/feed';
+
+  /// 我的生成器作品（GET）：仅本人。query: limit/offset。
+  static const String generatorMinePath = '/api/v1/generator/mine';
 }

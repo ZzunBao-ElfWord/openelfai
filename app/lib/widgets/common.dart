@@ -229,9 +229,9 @@ class ElfAvatar extends StatelessWidget {
   final double size;
   const ElfAvatar({super.key, required this.elf, this.size = 40});
 
-  /// 角色卡铸造出的形象优先；老数据回落到程序化头像 / 首字。
+  /// 头像唯一来源是铸造形象图；无图或加载失败时回落到首字色块。
   String? get _imageUrl => ApiConfig.resolveAssetUrl(
-        elf.imageThumbUrl ?? elf.imageUrl ?? elf.avatarUrl,
+        elf.imageThumbUrl ?? elf.imageUrl,
       );
 
   @override

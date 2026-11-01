@@ -12,9 +12,9 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import 'create_elf_page.dart';
 import 'create_post_sheet.dart';
-import 'discover_page.dart';
 import 'elf_chat_page.dart';
 import 'login_page.dart';
+import 'market_page.dart';
 import 'profile_page.dart';
 import 'settings_page.dart';
 import 'video_feed_page.dart';
@@ -39,7 +39,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   List<Widget> get _pages => [
         const WorldPage(),
         VideoFeedPage(active: _current == 1),
-        const DiscoverPage(),
+        const MarketPage(embedded: true),
         const ProfilePage(),
       ];
 

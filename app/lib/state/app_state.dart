@@ -1737,7 +1737,7 @@ class AppState extends ChangeNotifier {
   /// 创建并归属于自己的一只 AI。返回 null 表示成功，否则是失败原因。
   ///
   /// 合规顺序：登录 → 长度 → 敏感词初筛 → 扣费 → 生成专属地址 → 归入「我的 AI」。
-  /// 形象图暂由 [avatarUrl] 留空（客户端用首字头像），接入形象生成模型后填真实图。
+  /// 头像唯一来源是服务端铸造形象图（imageUrl/imageThumbUrl），无图时客户端回落首字色块。
   Future<String?> createElf({
     required String name,
     required String prompt,

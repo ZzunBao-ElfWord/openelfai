@@ -499,6 +499,101 @@ class MintResult {
   }
 }
 
+/// 千人千面生成器产出的一件作品（画廊 / 我的作品共用）。
+class GeneratorWork {
+  final String id;
+  final String batchId;
+  final int idx;
+  final String seed;
+  final List<Map<String, dynamic>> traits;
+  final int rarityScore;
+
+  /// common / rare / epic / legendary。
+  final String rarityTier;
+  final String? imageUrl;
+  final String? thumbUrl;
+  final DateTime? createdAt;
+
+  /// 仅画廊接口返回：作者昵称。
+  final String? authorNickname;
+
+  const GeneratorWork({
+    required this.id,
+    required this.batchId,
+    required this.idx,
+    required this.seed,
+    required this.traits,
+    required this.rarityScore,
+    required this.rarityTier,
+    this.imageUrl,
+    this.thumbUrl,
+    this.createdAt,
+    this.authorNickname,
+  });
+
+  factory GeneratorWork.fromJson(Map<String, dynamic> json) {
+    final rawRarity = json['rarity'];
+    final rarity = rawRarity is Map
+        ? Map<String, dynamic>.from(rawRarity)
+        : const <String, dynamic>{};
+    final rawTraits = json['traits'];
+    final rawAuthor = json['author'];
+    return GeneratorWork(
+      id: json['id']?.toString() ?? '',
+      batchId: json['batchId']?.toString() ?? '',
+      idx: _asInt(json['idx']) ?? 0,
+      seed: json['seed']?.toString() ?? '',
+      traits: rawTraits is List
+          ? rawTraits
+              .whereType<Map>()
+              .map((item) => Map<String, dynamic>.from(item))
+              .toList()
+          : const [],
+      rarityScore: _asInt(rarity['score']) ?? 0,
+      rarityTier: rarity['tier']?.toString() ?? 'common',
+      imageUrl: ApiConfig.resolveAssetUrl(json['imageUrl']?.toString()),
+      thumbUrl: ApiConfig.resolveAssetUrl(json['thumbUrl']?.toString()),
+      createdAt: _parseTime(json['createdAt']),
+      authorNickname:
+          rawAuthor is Map ? rawAuthor['nickname']?.toString() : null,
+    );
+  }
+}
+
+/// 一页生成器作品：服务端按最新优先返回。
+class GeneratorWorkPage {
+  final List<GeneratorWork> items;
+  final int total;
+  final int limit;
+  final int offset;
+
+  const GeneratorWorkPage({
+    required this.items,
+    required this.total,
+    required this.limit,
+    required this.offset,
+  });
+
+  /// 是否还有下一页。
+  bool get hasMore => offset + items.length < total;
+
+  factory GeneratorWorkPage.fromJson(Map<String, dynamic> json) {
+    final raw = json['items'];
+    return GeneratorWorkPage(
+      items: raw is List
+          ? raw
+              .whereType<Map>()
+              .map((item) =>
+                  GeneratorWork.fromJson(Map<String, dynamic>.from(item)))
+              .toList()
+          : const [],
+      total: _asInt(json['total']) ?? 0,
+      limit: _asInt(json['limit']) ?? 20,
+      offset: _asInt(json['offset']) ?? 0,
+    );
+  }
+}
+
 /// 平台 API：每个账号一把 API Key + AI 真实对话。
 class PlatformApi {
   PlatformApi._({http.Client? client}) : _client = client ?? http.Client();
@@ -794,9 +889,48 @@ class PlatformApi {
     });
   }
 
+  /// 社区规范同意状态：首次发布动态/评论前必须已同意，否则服务端拦截。
+  Future<bool> fetchCommunityTermsAccepted() async {
+    final json = await _request('GET', ApiConfig.communityPath);
+    return json['termsAccepted'] == true;
+  }
+
+  /// 同意当前版本社区规范。[version] 需与服务端 community.js 校验值一致。
+  Future<void> acceptCommunityTerms(String version) async {
+    await _request('POST', ApiConfig.communityTermsPath, body: {
+      'version': version,
+      'accepted': true,
+    });
+  }
+
   /// 注销账号。成功后服务端清除个人数据并吊销所有会话。
   Future<void> deleteAccount() async {
     await _request('DELETE', ApiConfig.accountPath, body: {'confirm': true});
+  }
+
+  // —— 千人千面生成器：画廊与我的作品 ——
+
+  /// 作品画廊：全量作品按最新优先，游客可看。
+  Future<GeneratorWorkPage> fetchGeneratorFeed({
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final body = await _requestPublic(
+      '${ApiConfig.generatorFeedPath}?limit=$limit&offset=$offset',
+    );
+    return GeneratorWorkPage.fromJson(body);
+  }
+
+  /// 我的作品：仅本人，未登录时抛 [PlatformApiException]（UNAUTHORIZED）。
+  Future<GeneratorWorkPage> fetchGeneratorMine({
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final body = await _request(
+      'GET',
+      '${ApiConfig.generatorMinePath}?limit=$limit&offset=$offset',
+    );
+    return GeneratorWorkPage.fromJson(body);
   }
 
   // —— HTTP ——
@@ -827,6 +961,26 @@ class PlatformApi {
       }
       return _send(method, path, token: next, body: body, timeout: timeout);
     }
+  }
+
+  /// 公开 GET：不要求登录；已有会话时顺带带上 token（可享个性化与续期重试）。
+  Future<Map<String, dynamic>> _requestPublic(String path) async {
+    final token = await RemoteAuthRepository.instance.accessToken;
+    if (token != null && token.isNotEmpty) {
+      return _request('GET', path);
+    }
+    final uri = Uri.parse('${ApiConfig.baseUrl}$path');
+    http.Response response;
+    try {
+      response = await _client
+          .get(uri, headers: ApiConfig.jsonHeaders)
+          .timeout(ApiConfig.timeout);
+    } on TimeoutException {
+      throw const PlatformApiException('NETWORK_ERROR', '网络超时，请稍后重试');
+    } catch (_) {
+      throw const PlatformApiException('NETWORK_ERROR', '网络连接失败，请检查网络');
+    }
+    return _decode(response);
   }
 
   Future<Map<String, dynamic>> _send(

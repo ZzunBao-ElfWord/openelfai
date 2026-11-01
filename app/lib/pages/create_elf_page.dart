@@ -547,12 +547,16 @@ class _CreateElfPageState extends State<CreateElfPage> {
                 padding: const EdgeInsets.only(bottom: 12),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(14),
-                  child: Image.network(
-                    image,
+                  // 弹窗内容由 IntrinsicWidth 布局，图片必须给有限宽度；
+                  // 用 double.infinity 会触发 input.isFinite 断言失败，整个弹窗渲染成空白。
+                  child: SizedBox(
                     height: 160,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                    width: MediaQuery.sizeOf(dctx).width - 80,
+                    child: Image.network(
+                      image,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                    ),
                   ),
                 ),
               ),

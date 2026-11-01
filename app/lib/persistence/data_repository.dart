@@ -262,7 +262,6 @@ class DataRepository {
         'nextAutoPostAt': e.nextAutoPostAt?.toIso8601String(),
         'lastDecayAt': e.lastDecayAt?.toIso8601String(),
         'chainAddress': e.chainAddress,
-        'avatarUrl': e.avatarUrl,
         'avatarStyle': e.avatarStyle,
         'avatarPrompt': e.avatarPrompt,
         'portraitSource': e.portraitSource,
@@ -313,7 +312,6 @@ class DataRepository {
             ? null
             : DateTime.tryParse(j['lastDecayAt'] as String),
         wallet: ElfWallet(chainAddress: j['chainAddress'] as String?),
-        avatarUrl: j['avatarUrl'] as String?,
         avatarStyle: j['avatarStyle'] as String?,
         avatarPrompt: j['avatarPrompt'] as String?,
         portraitSource: j['portraitSource'] as String? ?? 'text',
