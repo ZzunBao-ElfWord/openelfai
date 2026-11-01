@@ -184,6 +184,13 @@ function createWorldVideoService({
         ],
         temperature: 0.9,
         max_tokens: 200,
+        trace: {
+          name: 'world-video/caption',
+          userId: ELF_ID,
+          sessionId: ELF_ID,
+          tags: ['world-video'],
+          metadata: { source: 'video_caption', model: captionModel },
+        },
       });
       // 文案走平台自持 Key（worldUpstream 的 masterKey），计入平台推理成本口径。
       await recordCost?.(ELF_ID, 'video_caption', res?.usage?.total_tokens);

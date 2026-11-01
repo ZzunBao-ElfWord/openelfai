@@ -441,6 +441,13 @@ function createWorldAgentService({ store, upstream, settings, logger, configured
       ],
       temperature: 0.9,
       max_tokens: maxTokens,
+      trace: {
+        name: 'world-agent/generate',
+        userId: agent.elfId,
+        sessionId: agent.elfId,
+        tags: ['world-agent', source].filter(Boolean),
+        metadata: { elfId: agent.elfId, agent: agent.key, source },
+      },
     });
     await recordCost?.(agent.elfId, source, res?.usage?.total_tokens);
     return res?.choices?.[0]?.message?.content;
