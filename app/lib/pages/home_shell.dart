@@ -70,7 +70,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   void _refreshPayments() {
     // 桌面端没有支付宝 / StoreKit 支付通道，跳过支付初始化。
     if (isDesktopPlatform) return;
-    if (CommerceConfig.android) {
+    if (CommerceConfig.alipay) {
       unawaited(AlipayService.instance.initialize());
     } else {
       unawaited(IosIapService.instance.initialize());

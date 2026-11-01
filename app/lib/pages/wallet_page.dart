@@ -39,7 +39,7 @@ class WalletPage extends StatelessWidget {
                     const SizedBox(height: 10),
                     if (IapConfig.enabled)
                       const IosRechargePanel()
-                    else if (CommerceConfig.android)
+                    else if (CommerceConfig.alipay)
                       const AlipayRechargePanel()
                     else
                       _rechargeClosed(),

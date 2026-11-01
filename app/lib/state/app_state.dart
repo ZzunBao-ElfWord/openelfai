@@ -268,7 +268,7 @@ class AppState extends ChangeNotifier {
     // 登录后异步刷新真实钱包余额，不阻塞登录流程。
     unawaited(refreshPlatformBalance());
     // 单一真源：登录后即拉取服务端权益快照（AI/技能书/挂单/钱包）。
-    if (CommerceConfig.android) unawaited(_ensureCommerceReady());
+    if (CommerceConfig.alipay) unawaited(_ensureCommerceReady());
   }
 
   /// 从服务端刷新真实钱包余额。失败静默，保留已有值。
@@ -290,7 +290,7 @@ class AppState extends ChangeNotifier {
     final user = currentUser;
     if (user == null) return '请先登录';
     final mode =
-        _paymentMode ?? (CommerceConfig.android ? CommerceConfig.androidMode : null);
+        _paymentMode ?? CommerceConfig.defaultMode;
     if (mode == null) return '请先打开钱包，刷新服务端权益';
     try {
       final response =
@@ -657,7 +657,7 @@ class AppState extends ChangeNotifier {
     final usePrivate = CommerceConfig.enabled && user != null;
     final mode = !usePrivate
         ? null
-        : _paymentMode ?? (CommerceConfig.android ? CommerceConfig.androidMode : null);
+        : _paymentMode ?? CommerceConfig.defaultMode;
     if (usePrivate && mode == null) return '请先打开钱包，刷新服务端权益';
     _feedLoading.add(key);
     notifyListeners();
@@ -1311,7 +1311,7 @@ class AppState extends ChangeNotifier {
     if (CommerceConfig.enabled) {
       final user = currentUser;
       final mode = _paymentMode ??
-          (CommerceConfig.android ? CommerceConfig.androidMode : null);
+          CommerceConfig.defaultMode;
       if (user == null || mode == null) return null;
       try {
         final response = await CommerceRepository.instance.action(
@@ -1500,7 +1500,7 @@ class AppState extends ChangeNotifier {
     if (!CommerceConfig.enabled) return;
     final user = currentUser;
     final mode =
-        _paymentMode ?? (CommerceConfig.android ? CommerceConfig.androidMode : null);
+        _paymentMode ?? CommerceConfig.defaultMode;
     if (user == null || mode == null) return;
     try {
       final response =
@@ -1967,13 +1967,12 @@ class AppState extends ChangeNotifier {
     _clearFeedCache();
   }
 
-  /// 拉取服务端快照。Android 钱包环境固定，可直接同步，无需先打开钱包页。
+  /// 拉取服务端快照。Android / Web 钱包环境固定，可直接同步，无需先打开钱包页。
   Future<String?> _ensureCommerceReady() async {
     if (_commerceReady) return null;
     final user = currentUser;
     if (user == null) return '请先登录';
-    final mode = _paymentMode ??
-        (CommerceConfig.android ? CommerceConfig.androidMode : null);
+    final mode = _paymentMode ?? CommerceConfig.defaultMode;
     if (mode == null) return '请先打开钱包，刷新服务端权益';
     try {
       final response =
@@ -2022,7 +2021,7 @@ class AppState extends ChangeNotifier {
     final user = currentUser;
     if (user == null) return null;
     final mode =
-        _paymentMode ?? (CommerceConfig.android ? CommerceConfig.androidMode : null);
+        _paymentMode ?? CommerceConfig.defaultMode;
     if (mode == null) {
       rollback?.call();
       notifyListeners();

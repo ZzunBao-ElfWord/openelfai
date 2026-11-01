@@ -8,6 +8,7 @@ import '../auth/remote_auth_repository.dart';
 import '../config/commerce_config.dart';
 import '../state/app_state.dart';
 import 'commerce_repository.dart';
+import 'web_url_stub.dart' if (dart.library.html) 'web_url_web.dart';
 
 typedef AlipayRequest = Future<Map<String, dynamic>> Function(String path,
     {Map<String, dynamic>? body});
@@ -30,8 +31,11 @@ class AlipayService extends ChangeNotifier {
         _applyResponse =
             applyResponse ?? AppState.instance.applyPaymentResponse,
         _nativePay = nativePay ?? _payNative,
-        supported = enabled ?? CommerceConfig.android,
-        mode = mode ?? CommerceConfig.androidMode,
+        supported = enabled ?? CommerceConfig.alipay,
+        mode = mode ??
+            (CommerceConfig.web
+                ? CommerceConfig.webMode
+                : CommerceConfig.androidMode),
         _pollDelay = pollDelay ??
             (() => Future<void>.delayed(const Duration(seconds: 1)));
   static final instance = AlipayService();
@@ -53,6 +57,9 @@ class AlipayService extends ChangeNotifier {
   bool loading = false;
   String? error;
   Future<void>? _loading;
+
+  /// Web 与 Android 各有一套成对的钻石接口；订单与账本互不串用。
+  String get _base => CommerceConfig.web ? '/api/v1/web' : '/api/v1/android';
   String _key(String user) => 'openelf.alipay.pending.$user.$mode';
   void _checkOwner(String user) {
     if (_currentUser() != user)
@@ -80,7 +87,7 @@ class AlipayService extends ChangeNotifier {
     notifyListeners();
     try {
       if (user == null) throw StateError('请先登录');
-      final catalog = await _request('/api/v1/android/alipay/products');
+      final catalog = await _request('$_base/alipay/products');
       _checkOwner(user);
       if (catalog['protocol'] != 2 || catalog['mode'] != mode)
         throw StateError('支付宝环境或协议不匹配');
@@ -101,7 +108,7 @@ class AlipayService extends ChangeNotifier {
           : Map<String, dynamic>.from(jsonDecode(raw) as Map);
       // Recover server orders even after lost local storage; never create a second order automatically.
       if (_pending?['id'] == null) {
-        final result = await _request('/api/v1/android/alipay/pending');
+        final result = await _request('$_base/alipay/pending');
         _checkOwner(user);
         if (result['mode'] != mode) throw StateError('订单环境不符');
         final orders = result['orders'] as List;
@@ -126,7 +133,7 @@ class AlipayService extends ChangeNotifier {
     if (!supported || user == null) return;
     final response = _realBackend
         ? await CommerceRepository.instance.snapshot(user, mode)
-        : await _request('/api/v1/android/wallet?environment=$mode');
+        : await _request('$_base/wallet?environment=$mode');
     _apply(user, response);
   }
 
@@ -186,10 +193,10 @@ class AlipayService extends ChangeNotifier {
         await _persist(user);
       }
       final order = _pending!['id'] == null
-          ? await _request('/api/v1/android/alipay/orders',
+          ? await _request('$_base/alipay/orders',
               body: {'tierId': tierId, 'requestId': _pending!['requestId']})
           : await _request(
-              '/api/v1/android/alipay/orders/${_pending!['id']}/pay',
+              '$_base/alipay/orders/${_pending!['id']}/pay',
               body: {});
       _checkOwner(user);
       if (order['mode'] != mode ||
@@ -198,6 +205,14 @@ class AlipayService extends ChangeNotifier {
         throw StateError('支付订单无效');
       _pending = {..._pending!, 'id': order['id']};
       await _persist(user);
+      // Web 返回网页收银台链接，Android 返回可直接拉起 SDK 的签名串。
+      final payUrl = order['payUrl'];
+      if (payUrl is String && payUrl.isNotEmpty) {
+        _checkOwner(user);
+        openExternalUrl(payUrl);
+        // 收银台在另一个页面完成支付，回跳后由 initialize 确认，不做本地轮询。
+        return;
+      }
       final signedOrder = order['orderString'];
       if (signedOrder is String && signedOrder.isNotEmpty) {
         _checkOwner(user);
@@ -220,7 +235,7 @@ class AlipayService extends ChangeNotifier {
   Future<bool> _confirm(String user) async {
     final id = _pending?['id'];
     if (id == null) return false;
-    final response = await _request('/api/v1/android/alipay/orders/$id');
+    final response = await _request('$_base/alipay/orders/$id');
     _apply(user, response);
     final order = response['order'] as Map;
     if (order['id'] != id) throw StateError('订单编号不匹配');
