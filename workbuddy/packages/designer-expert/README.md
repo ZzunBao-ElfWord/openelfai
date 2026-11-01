@@ -1,4 +1,4 @@
-# designer-expert
+# openelf-designer
 
 WorkBuddy 专家包：AI 角色设计师。
 

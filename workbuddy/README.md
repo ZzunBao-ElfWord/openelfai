@@ -12,8 +12,11 @@ OpenElf 面向 WorkBuddy 开放平台交付的专家与技能包。每个包独�
 | `image-studio-skill` | 技能 | 1.1.0 | `openelf-character` | 形象工坊：四条场景配方、成本确认与验收清单 |
 | `influencer-manager` | 专家 | 1.1.0 | 无 | AI 网红经纪人：四维选题打分、文案骨架、复盘单变量验证 |
 | `smart-cut` | 技能 | 1.1.0 | `openelf-video` | 爆款二次剪辑：处理上限口径、场景配方、气口规则与验收清单 |
+| `mass-character-generator` | 技能 | 1.0.0 | `openelf-generator` | 千人千面生成器：图层权重、预览、批量生成（≤100/次）、打包下载与作品收单 |
 
 连接器 `openelf-character` 已在 WorkBuddy 上架。连接器 `openelf-video` 的源码在 `integrations/workbuddy/connector-video/`，服务端端点为 `/mcp/video`，转写走阿里云百炼异步文件转写（`ASR_PROVIDER=dashscope`），需与技能一起提交审核。
+
+连接器 `openelf-generator` 的源码在 `integrations/workbuddy/connector-generator/`，服务端端点为 `/mcp/generator`，渲染走服务端自研 PNG 画布，需与 `mass-character-generator` 技能同批提交审核。
 
 ## 目录结构
 

@@ -1,0 +1,13 @@
+{
+  "pages": [
+    {
+      "id": "workspace",
+      "entry": "index.html",
+      "assets": [
+        "assets/style.css",
+        "assets/app.js",
+        "assets/logo.svg"
+      ]
+    }
+  ]
+}

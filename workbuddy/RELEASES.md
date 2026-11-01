@@ -11,6 +11,7 @@
 | image-studio-skill | 1.1.0 | 2026-11-01 | 待提交 | 内容深化：四条场景配方、成本确认、验收清单，修正 batch 只产缩略图与 refine 返回结构 |
 | influencer-manager | 1.1.0 | 2026-11-01 | 待提交 | 内容深化：四维选题打分、文案骨架、本周计划表与复盘表、平台差异 |
 | smart-cut | 1.1.0 | 2026-11-01 | 待提交 | 修正事实错误：单素材默认 30 分钟/200MB、单片段 60 秒、拼接 2–10 段且 ≤300 秒；补场景配方与验收清单；必须与 connector-video（openelf-video）同批提交，否则审核将因依赖缺失被驳回 |
+| mass-character-generator | 1.0.0 | 2026-11-01 | 待提交 | 首版，千人千面生成器技能（图层权重、预览、批量生成 ≤100/次、zip 打包下载、作品收单）；必须与 connector-generator（openelf-generator）同批提交，且服务端 /mcp/generator 端点需先部署上线 |
 
 ## 状态说明
 

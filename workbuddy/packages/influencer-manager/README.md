@@ -1,4 +1,4 @@
-# influencer-manager
+# openelf-influencer
 
 WorkBuddy 专家包：AI 网红经纪人。
 

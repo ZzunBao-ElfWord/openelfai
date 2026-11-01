@@ -1,0 +1,240 @@
+:root {
+  --brand-purple: #7A42DE;
+  --brand-blue: #6C9AF6;
+  --brand-cyan: #5FCEFB;
+  --bg: #f7f8fc;
+  --card-bg: #ffffff;
+  --text-primary: #1a1a2e;
+  --text-secondary: #6b7280;
+  --border: #e5e7eb;
+  --shadow: 0 2px 12px rgba(122, 66, 222, 0.08);
+  --shadow-hover: 0 8px 24px rgba(122, 66, 222, 0.16);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f0f1a;
+    --card-bg: #1a1a2e;
+    --text-primary: #f0f0f5;
+    --text-secondary: #9ca3af;
+    --border: #2a2a3e;
+    --shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+    --shadow-hover: 0 8px 24px rgba(122, 66, 222, 0.25);
+  }
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  background: var(--bg);
+  color: var(--text-primary);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+.app {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 32px 24px 48px;
+}
+
+/* 头部 */
+.header {
+  margin-bottom: 32px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.logo {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  flex-shrink: 0;
+}
+
+.brand-text .title {
+  font-size: 22px;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--brand-purple), var(--brand-cyan));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.brand-text .subtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+/* 能力卡片 */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-bottom: 36px;
+}
+
+.card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 18px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow);
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-hover);
+  border-color: var(--brand-blue);
+}
+
+.card-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #fff;
+}
+
+.card-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.icon-character {
+  background: linear-gradient(135deg, #7A42DE, #9B6FE8);
+}
+
+.icon-generator {
+  background: linear-gradient(135deg, #6C9AF6, #8FB4F8);
+}
+
+.icon-video {
+  background: linear-gradient(135deg, #5FCEFB, #7FDCFB);
+}
+
+.icon-influencer {
+  background: linear-gradient(135deg, #F59E0B, #FBBF24);
+}
+
+.card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.card-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.card-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.card-arrow {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  opacity: 0.5;
+  transition: opacity 0.2s;
+}
+
+.card:hover .card-arrow {
+  opacity: 1;
+  color: var(--brand-purple);
+}
+
+.card-arrow svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* 快速开始 */
+.section-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 14px;
+}
+
+.quickstart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.quick-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.quick-item:hover {
+  border-color: var(--brand-blue);
+  background: linear-gradient(135deg, rgba(122, 66, 222, 0.04), rgba(95, 206, 251, 0.04));
+}
+
+.quick-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--brand-purple);
+}
+
+.quick-text {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+/* 页脚 */
+.footer {
+  margin-top: 36px;
+  text-align: center;
+}
+
+.footer p {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* 响应式 */
+@media (max-width: 640px) {
+  .app {
+    padding: 20px 16px 32px;
+  }
+
+  .cards,
+  .quickstart-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .brand-text .title {
+    font-size: 18px;
+  }
+}
