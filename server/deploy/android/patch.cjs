@@ -10,26 +10,40 @@ function section(source, start, end) {
   if (stop < 0) throw new Error('无法匹配更新片段');
   return source.slice(begin, stop);
 }
+/// 交付源码统一按 LF 切片，插入时再对齐目标文件的换行，避免不同行尾叠加累积。
+function readSource(relative) {
+  return fs.readFileSync(path.join(payload, relative), 'utf8').replace(/\r\n/g, '\n');
+}
+function eolOf(source) {
+  const total = source.split('\n').length - 1;
+  const crlf = source.split('\r\n').length - 1;
+  return total > 0 && crlf * 2 >= total ? '\r\n' : '\n';
+}
+function alignEol(text, source) {
+  const normalized = text.replace(/\r\n/g, '\n');
+  return eolOf(source) === '\r\n' ? normalized.replace(/\n/g, '\r\n') : normalized;
+}
 function prepare(original) {
   const updated = prepareApple(original);
-  const desiredApp = fs.readFileSync(path.join(payload, 'src/app.js'), 'utf8');
-  const desiredConfig = fs.readFileSync(path.join(payload, 'src/config.js'), 'utf8');
+  const desiredApp = readSource('src/app.js');
+  const desiredConfig = readSource('src/config.js');
   let { app, config } = updated;
   for (const [file, symbol] of [['alipay_gateway', 'createAlipayGateway'], ['alipay', 'createAlipayService']]) {
     if (!app.includes(`require('./${file}')`)) app = app.replace("const config = require('./config');", `const config = require('./config');\nconst { ${symbol} } = require('./${file}');`);
   }
-  const setup = section(desiredApp, '  const androidCommerce =', '\n\n  const app = Fastify');
+  const setup = alignEol(section(desiredApp, '  const androidCommerce =', '\n\n  const app = Fastify'), app);
   if (app.includes('  const androidCommerce =')) {
-    const pattern = /  const androidCommerce = createCommerceService\([\s\S]*?\n    gateway: options\.alipayGateway \|\| createAlipayGateway\(config\.alipay\) }\);/g;
+    // 兼容旧版单行网关初始化与当前拆分后的支付宝/充值初始化。
+    const pattern = /  const androidCommerce = createCommerceService\([\s\S]*?(?:gateway: options\.alipayGateway \|\| createAlipayGateway\(config\.alipay\) }\);|const platformTopup = createTopupService\([\s\S]*?\n  \}\);)/g;
     if ([...app.matchAll(pattern)].length !== 1) throw new Error('已有安卓初始化无法识别');
     app = app.replace(pattern, setup);
   } else {
     const pattern = /  const appleIap = createAppleIapService\([\s\S]*?\n  }\);/g;
     if ([...app.matchAll(pattern)].length !== 1) throw new Error('无法定位共享钱包初始化');
-    app = app.replace(pattern, match => match + '\n' + setup);
+    app = app.replace(pattern, match => match + eolOf(app) + setup);
   }
   const marker = '  // Android Alipay:';
-  const routes = section(desiredApp, marker, '  // —— 发送验证码 ——');
+  const routes = alignEol(section(desiredApp, marker, '  // —— 发送验证码 ——'), app);
   if (app.includes(marker)) {
     app = app.replace(section(app, marker, '  // —— 发送验证码 ——'), routes);
   } else {
@@ -38,7 +52,7 @@ function prepare(original) {
     }
     app = app.replace('  // —— 发送验证码 ——', routes + '  // —— 发送验证码 ——');
   }
-  const block = section(desiredConfig, '  androidCommerce: {', '  appleIap: {');
+  const block = alignEol(section(desiredConfig, '  androidCommerce: {', '  appleIap: {'), config);
   if (config.includes('  androidCommerce: {')) {
     const previous = section(config, '  androidCommerce: {', '  appleIap: {');
     if (!previous.includes('  alipay: {')) throw new Error('已有支付宝配置无法识别');
