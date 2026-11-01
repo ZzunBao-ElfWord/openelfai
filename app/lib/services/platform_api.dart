@@ -666,7 +666,8 @@ class PlatformApi {
       return TopupOrder.fromJson(body);
     } on PlatformApiException catch (error) {
       if (error.code == 'TOPUP_PENDING_ORDER' || error.code == 'HTTP_409') {
-        final rawOrderId = error.details?['order_id'];
+        final rawOrderId =
+            error.details?['order_id'] ?? error.details?['orderId'];
         final orderId = rawOrderId?.toString();
         throw PendingTopupException(
           error.message,
