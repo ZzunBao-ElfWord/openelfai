@@ -41,6 +41,41 @@ jobs:
           DB_NAME: openelf_test
         run: node --test --test-concurrency=1 test/
 
+  payment:
+    name: payment (Web 支付宝充值链路)
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: ci-root-password-0123
+          MYSQL_DATABASE: openelf_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -pci-root-password-0123"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+        working-directory: server
+      - name: Run web payment tests (Alipay topup chain)
+        working-directory: server
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_USER: root
+          DB_PASSWORD: ci-root-password-0123
+          DB_NAME: openelf_test
+        run: npm run test:payments:web
+
   admin-bff:
     name: admin-bff (Go)
     runs-on: ubuntu-latest
