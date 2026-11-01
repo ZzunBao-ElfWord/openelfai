@@ -13,6 +13,8 @@ const { createAppleIapService, createAppleVerifier } = require('./apple_iap');
 const { createPaymentStore, changeBalance } = require('./payment_store');
 const { createCommerceService } = require('./commerce');
 const { createComplianceService, moderateText } = require('./compliance');
+// 社区规范发布门禁与社区审核队列（wrapStore 装饰 store，registerCommunity 挂路由）。
+const { wrapStore, registerCommunity } = require('./community');
 const { createRealnameVerifier } = require('./realname');
 const { createAlipayGateway } = require('./alipay_gateway');
 const { createAlipayService } = require('./alipay');
@@ -37,10 +39,22 @@ const { decrypt, keyHint } = require('./platform/secret');
 const { createConsoleHandlers } = require('./platform/console');
 const { createTopupService } = require('./platform/topup');
 const { createUpstream } = require('./platform/upstream');
+const { createTelemetry } = require('./platform/telemetry');
 const { ensureVendorAgents, createWorldAgentService } = require('./world_agents');
 const { createArkVideoClient, createWorldVideoService } = require('./world_videos');
 const { createWorldUploadService } = require('./world_uploads');
 const { createKnowledgeService, buildContextBlock } = require('./knowledge');
+const { createElfMemory } = require('./elf_memory');
+const { createMcpClient } = require('./mcp/client');
+const { createMcpServerService } = require('./mcp/servers');
+const { registerMcpServerRoutes } = require('./mcp/routes');
+const { createTtsService } = require('./media/tts');
+const { createComfyService } = require('./media/comfy');
+const { createMediaUsage } = require('./media/usage');
+const { registerMediaRoutes } = require('./media/routes');
+const { createCivitaiService } = require('./media/civitai');
+const { createCivitaiFavorites } = require('./media/civitai_favorites');
+const { registerCivitaiRoutes } = require('./media/civitai_routes');
 
 const PHONE_RE = /^1[3-9]\d{9}$/;
 const DEVICE_RE = /^[A-Za-z0-9_-]{8,80}$/;
@@ -200,7 +214,10 @@ async function buildApp(options = {}) {
   const captcha = options.captcha || createCaptchaVerifier(config.captcha);
   const appleVerifier = options.appleVerifier || (config.appleIap.enabled
     ? await createAppleVerifier(config.appleIap) : null);
-  const paymentStore = options.paymentStore || createPaymentStore(db);
+  const communityReviewStore = options.paymentStore || createPaymentStore(db);
+  // 社区规范门禁：首次发帖/评论前校验已同意条款，被制裁账号或 AI 禁止发布。
+  // 未包装实例保留给 /internal/community/* 审核通道，审核动作不走同意校验。
+  const paymentStore = wrapStore(communityReviewStore);
   // 举报、拉黑与账号注销：独立于交易环境，跨 iOS / 安卓共享。
   const compliance = options.compliance || createComplianceService({ db, store: paymentStore });
   // 实名核验：服务端对接阿里云实人认证，客户端只上传原始要素与证件照。
@@ -255,10 +272,18 @@ async function buildApp(options = {}) {
 
   app.decorate('db', db);
 
+  // LLM 可观测（Langfuse）：未配置密钥时为无操作实现，不影响业务链路。
+  const telemetry = options.telemetry || createTelemetry({
+    ...platformConfig.langfuse,
+    release: process.env.APP_VERSION || undefined,
+    logger: app.log,
+  });
+
   const worldUpstream = options.worldUpstream || createUpstream({
     baseUrl: platformConfig.litellm.baseUrl,
     masterKey: platformConfig.litellm.masterKey,
     timeoutMs: platformConfig.litellm.timeoutMs,
+    telemetry,
   });
   const worldAgents = createWorldAgentService({
     store: paymentStore,
@@ -310,6 +335,39 @@ async function buildApp(options = {}) {
   const consoleHandlers = createConsoleHandlers({ db });
   // 知识库默认关闭，只有 elf_knowledge_config 里显式开启的 AI 才会注入检索片段。
   const knowledge = createKnowledgeService({ db });
+  // 精灵记忆：平台买单的廉价模型抽取，受单精灵日配额与单对容量上限约束。
+  const elfMemory = options.elfMemory || createElfMemory({
+    db,
+    upstream: worldUpstream,
+    logger: app.log,
+    recordCost: (elfId, tokens) => commerce.recordElfCost(elfId, 'memory', tokens),
+  });
+  // 入向 MCP：用户注册的外部 MCP Server 供精灵对话调用，默认禁止指向内网。
+  const mcpClient = options.mcpClient || createMcpClient({
+    timeoutMs: config.inboundMcp.timeoutMs,
+    allowPrivateHosts: config.inboundMcp.allowPrivateHosts,
+    logger: app.log,
+  });
+  const mcpServers = options.mcpServers || createMcpServerService({ db, client: mcpClient, logger: app.log });
+  // 媒体能力：语音落 assets/world/audio，ComfyUI 图片与生成器共用 assets/world。
+  // 未配置上游时 isEnabled() 为 false，接口直接返回未启用，不产生调用。
+  const mediaAudioDir = options.mediaAudioDir || path.join(worldAssetDir, 'audio');
+  const tts = options.tts || createTtsService({
+    settings: config.media.tts,
+    mediaDir: mediaAudioDir,
+    assetBaseUrl: config.worldVideos.assetBaseUrl,
+    logger: app.log,
+  });
+  const comfy = options.comfy || createComfyService({
+    settings: config.media.comfy,
+    mediaDir: worldAssetDir,
+    assetBaseUrl: config.worldVideos.assetBaseUrl,
+    logger: app.log,
+  });
+  const mediaUsage = options.mediaUsage || createMediaUsage({ db });
+  // Civitai 闭环：搜索资源 → 收藏 → 出图引用，模型文件由运维装到 ComfyUI。
+  const civitai = options.civitai || createCivitaiService({ logger: app.log });
+  const civitaiFavorites = options.civitaiFavorites || createCivitaiFavorites({ db });
 
   // 跨域：只允许白名单来源携带 CORS 头；预检请求统一 204。
   app.addHook('onRequest', async (request, reply) => {
@@ -326,7 +384,12 @@ async function buildApp(options = {}) {
     }
   });
 
-  await app.register(require('./platform'));
+  await app.register(require('./platform'), { telemetry });
+
+  // 进程退出前把缓冲的遥测事件冲刷出去，避免丢 trace。
+  app.addHook('onClose', async () => {
+    await telemetry.shutdown();
+  });
 
   app.register(rateLimit, {
     global: true,
@@ -658,6 +721,10 @@ async function buildApp(options = {}) {
     });
   });
 
+  // 社区规范：条款同意状态、社区快照、举报/屏蔽与内部审核队列（/api/v1/community/*）。
+  registerCommunity(app, { store: paymentStore, reviewStore: communityReviewStore,
+    authenticate, reviewToken: process.env.COMMUNITY_REVIEW_TOKEN || '' });
+
   require('./push_routes').registerPush(app, { db, authenticate });
 
   // 官方账号头像：静态资源体积小，直接按文件名白名单读取，避免额外挂静态目录。
@@ -725,15 +792,55 @@ async function buildApp(options = {}) {
     });
   });
 
+  // 生成器产出（图片与 zip 包）也走这一层目录，文件名由服务端生成。
   app.get('/api/v1/world-assets/:file', async (request, reply) => {
     const file = String(request.params?.file || '');
-    if (!/^[a-z0-9_-]+\.(png|jpg|jpeg|webp)$/i.test(file)) {
+    if (!/^[a-z0-9_-]+\.(png|jpg|jpeg|webp|zip)$/i.test(file)) {
       return reply.code(404).send({ error: { code: 'NOT_FOUND', message: '资源不存在' } });
     }
     try {
       const buf = await fs.readFile(path.join(worldAssetDir, file));
       reply.header('cache-control', 'public, max-age=86400');
-      reply.type(file.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg');
+      const lower = file.toLowerCase();
+      if (lower.endsWith('.zip')) {
+        reply.type('application/zip');
+      } else {
+        reply.type(lower.endsWith('.png') ? 'image/png' : 'image/jpeg');
+      }
+      return reply.send(buf);
+    } catch {
+      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: '资源不存在' } });
+    }
+  });
+
+  // 媒体能力产出的语音：与视频同一套 Range 逻辑，供播放器拖动与首帧加载。
+  app.get('/api/v1/world-assets/audio/:file', async (request, reply) => {
+    const file = String(request.params?.file || '');
+    if (!/^[a-z0-9_-]+\.(mp3|m4a|wav)$/i.test(file)) {
+      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: '资源不存在' } });
+    }
+    try {
+      const target = path.join(mediaAudioDir, file);
+      const stat = await fs.stat(target);
+      const buf = await fs.readFile(target);
+      reply.header('cache-control', 'public, max-age=86400');
+      reply.header('accept-ranges', 'bytes');
+      reply.type(file.toLowerCase().endsWith('.wav') ? 'audio/wav' : 'audio/mpeg');
+      const range = String(request.headers.range || '');
+      const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+      if (match && (match[1] || match[2])) {
+        const size = buf.length;
+        let start = match[1] ? Number(match[1]) : size - Number(match[2]);
+        let end = match[1] && match[2] ? Number(match[2]) : size - 1;
+        start = Math.max(0, Math.min(start, size - 1));
+        end = Math.max(start, Math.min(end, size - 1));
+        const slice = buf.subarray(start, end + 1);
+        reply.code(206);
+        reply.header('content-range', `bytes ${start}-${end}/${size}`);
+        reply.header('content-length', String(slice.length));
+        return reply.send(slice);
+      }
+      reply.header('content-length', String(stat.size));
       return reply.send(buf);
     } catch {
       return reply.code(404).send({ error: { code: 'NOT_FOUND', message: '资源不存在' } });
@@ -1385,6 +1492,22 @@ async function buildApp(options = {}) {
   // MCP 连接器：WorkBuddy 等外部客户端用用户自己的 API Key 调用形象工具（/mcp）。
   require('./mcp/server').registerMcpRoutes(app, { db });
 
+  // 入向 MCP：用户注册外部 MCP Server（App 登录态），对话中由精灵调用其工具。
+  registerMcpServerRoutes(app, { authenticate, mcpServers });
+
+  // 媒体能力：语音合成与 ComfyUI 出图（App 登录态，按用户日配额限流）。
+  registerMediaRoutes(app, { authenticate, tts, comfy, usage: mediaUsage, favorites: civitaiFavorites });
+
+  // Civitai 资源库：搜索、详情与收藏（收藏可在出图时作为 LoRA 引用）。
+  registerCivitaiRoutes(app, {
+    authenticate,
+    civitai,
+    favorites: civitaiFavorites,
+    usage: mediaUsage,
+    dailyLimit: config.media.civitai.dailySearchLimit,
+    enabled: config.media.civitai.enabled,
+  });
+
   // 视频剪辑连接器：独立端点 /mcp/video，剪辑走本机 ffmpeg，转写走可配置 ASR。
   if (config.videoMcp.enabled) {
     const { createVideoTools } = require('./mcp/video_tools');
@@ -1411,6 +1534,26 @@ async function buildApp(options = {}) {
       tools: videoTools,
     });
   }
+
+  // 千人千面生成器连接器：独立端点 /mcp/generator，图片落 worldAssetDir 根目录。
+  if (config.generatorMcp.enabled) {
+    const { createGeneratorTools } = require('./generator/tools');
+    const generatorTools = createGeneratorTools({
+      db,
+      mediaDir: worldAssetDir,
+      logger: app.log,
+    });
+    require('./mcp/server').registerMcpRoutes(app, {
+      db,
+      routePath: '/mcp/generator',
+      serverInfo: { name: 'openelf-generator', version: '1.0.0' },
+      tools: generatorTools,
+    });
+  }
+
+  // 生成器作品的 App 端只读接口：发现页画廊（公开）+ 我的作品（登录态）。
+  // 与连接器开关解耦：即使生成入口关闭，已有作品仍可浏览。
+  require('./generator/routes').registerGeneratorRoutes(app, { db, authenticate });
 
   app.get('/api/v1/platform/console/overview', async (request) => {
     const { user } = await authenticate(request);
@@ -1535,13 +1678,19 @@ async function buildApp(options = {}) {
 
   /// 带技能的一轮对话：模型多次调用工具，直到给出最终文本。
   /// messages 已含入参里的当前用户提问，此处不再重复追加。
-  async function chatWithSkills({ baseUrl, apiKey, model, messages, skills = [], maxRounds = 4 }) {
-    const tools = await fetchChatTools(baseUrl, apiKey);
+  /// extraTools / callExtraTool：用户外部 MCP 工具，与内置工具合并后同一轮循环分发。
+  async function chatWithSkills({
+    baseUrl, apiKey, model, messages, skills = [],
+    extraTools = [], callExtraTool = null, extraPrompt = '', maxRounds = 4,
+  }) {
+    const builtinTools = await fetchChatTools(baseUrl, apiKey);
+    const tools = [...builtinTools, ...extraTools];
+    const extraNames = new Set(extraTools.map((tool) => tool?.function?.name).filter(Boolean));
     const history = [...messages];
     // 技能说明紧跟人设之后，避免覆盖 AI 自己的语气设定。
-    const skillPrompts = skills.map((id) => SKILL_PROMPTS[id]).filter(Boolean);
-    if (skillPrompts.length) {
-      history.splice(1, 0, { role: 'system', content: skillPrompts.join('\n') });
+    const prompts = [...skills.map((id) => SKILL_PROMPTS[id]), extraPrompt].filter(Boolean);
+    if (prompts.length) {
+      history.splice(1, 0, { role: 'system', content: prompts.join('\n') });
     }
     const images = [];
     const steps = [];
@@ -1583,7 +1732,9 @@ async function buildApp(options = {}) {
         } catch (_) {
           args = {};
         }
-        const result = await callChatTool(baseUrl, apiKey, name, args);
+        const result = callExtraTool && extraNames.has(name)
+          ? await callExtraTool(name, args)
+          : await callChatTool(baseUrl, apiKey, name, args);
         for (const image of result.images) {
           if (!images.includes(image)) images.push(image);
         }
@@ -1673,6 +1824,17 @@ async function buildApp(options = {}) {
       } catch (error) {
         app.log?.warn?.({ err: error, elfId }, 'elf knowledge retrieval failed');
       }
+      // 记忆召回只服务纯对话场景：技能「干活」对话不注入，避免干扰工具循环。
+      // 召回失败只记日志，不阻断对话。
+      if (!skillRequest) {
+        try {
+          const memoryFacts = await elfMemory.recall(elfId, user.id, text);
+          const memoryBlock = elfMemory.buildMemoryBlock(memoryFacts);
+          if (memoryBlock) messages.push({ role: 'system', content: memoryBlock });
+        } catch (error) {
+          app.log?.warn?.({ err: error, elfId }, 'elf memory recall failed');
+        }
+      }
     }
     messages.push(...history.slice(-CHAT_HISTORY_WINDOW), { role: 'user', content: text });
     const baseUrl = process.env.PLATFORM_SELF_URL || `http://127.0.0.1:${config.port}`;
@@ -1681,12 +1843,27 @@ async function buildApp(options = {}) {
     const skills = Array.isArray(request.body?.skills)
       ? request.body.skills.filter((item) => typeof item === 'string' && CHAT_SKILLS.has(item.trim()))
       : [];
-    if (skills.length) {
+    // 外部 MCP 工具：只允许调用者本人的 Server，世界对话（访客场景）一律不注入。
+    // 工具清单拉取失败只记日志，不阻断本轮对话。
+    let externalToolset = { tools: [], call: null, prompts: '' };
+    if (!worldChatElf && Array.isArray(request.body?.mcpServerIds) && request.body.mcpServerIds.length) {
+      try {
+        externalToolset = await mcpServers.buildToolset(user.id, request.body.mcpServerIds);
+      } catch (error) {
+        app.log?.warn?.({ err: error }, 'external mcp toolset build failed');
+      }
+    }
+    if (skills.length || externalToolset.tools.length) {
       const model = elfId === 'off_workbuddy'
         ? (process.env.ELF_WORKBUDDY_MODEL || 'hunyuan/hunyuan-turbos-latest')
         : (process.env.PLATFORM_CHAT_MODEL || 'deepseek/deepseek-chat');
       try {
-        const result = await chatWithSkills({ baseUrl, apiKey, model, messages, skills });
+        const result = await chatWithSkills({
+          baseUrl, apiKey, model, messages, skills,
+          extraTools: externalToolset.tools,
+          callExtraTool: externalToolset.call,
+          extraPrompt: externalToolset.prompts,
+        });
         // 模型只返回了图片、正文被清理空时，给一句兜底话术，避免整轮失败。
         const replyText = result.reply ||
           (result.images.length ? `已生成 ${result.images.length} 版形象，点开图片可以看大图。` : '');
@@ -1743,6 +1920,11 @@ async function buildApp(options = {}) {
 
       // 世界对话拿到真实回复后才记一笔成本；固定话术与失败均不计费。
       if (worldChatElf) await commerce.recordWorldChatUsage(elfId, payload?.usage?.total_tokens);
+      // 异步抽取记忆：不等待、不阻断回复；平台买单，受单精灵日配额约束，失败仅记日志。
+      if (elfId) {
+        elfMemory.extractAndStore({ elfId, userId: user.id, text, reply: content })
+          .catch((error) => app.log?.warn?.({ err: error, elfId }, 'elf memory extract failed'));
+      }
       // balance_micro 始终回调用者自己的余额，不把持有人的财务信息透给访客。
       const after = await readPlatformWallet(db, user.id);
       const result = {

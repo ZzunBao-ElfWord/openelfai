@@ -5,7 +5,12 @@ const { PAYMENT_TABLES } = require('./payment_store');
 const { PLATFORM_TABLES } = require('./platform/tables');
 const { DEV_TABLES, DEV_COLUMN_MIGRATIONS } = require('./developer/tables');
 const { CHARACTER_TABLES, CHARACTER_COLUMN_MIGRATIONS } = require('./character/tables');
+const { GENERATOR_TABLES } = require('./generator/tables');
 const { KNOWLEDGE_TABLES } = require('./knowledge');
+const { ELF_MEMORY_TABLES } = require('./elf_memory');
+const { MCP_SERVER_TABLES } = require('./mcp/servers');
+const { MEDIA_TABLES } = require('./media/usage');
+const { CIVITAI_FAVORITE_TABLES } = require('./media/civitai_favorites');
 const { APP_CONTENT_TABLES } = require('./app_content');
 const { COMPLIANCE_TABLES } = require('./compliance');
 
@@ -91,7 +96,12 @@ const TABLES = [
   ...PLATFORM_TABLES,
   ...DEV_TABLES,
   ...CHARACTER_TABLES,
+  ...GENERATOR_TABLES,
   ...KNOWLEDGE_TABLES,
+  ...ELF_MEMORY_TABLES,
+  ...MCP_SERVER_TABLES,
+  ...MEDIA_TABLES,
+  ...CIVITAI_FAVORITE_TABLES,
   ...APP_CONTENT_TABLES,
   ...COMPLIANCE_TABLES,
 ];
