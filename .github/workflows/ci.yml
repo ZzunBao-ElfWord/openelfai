@@ -39,7 +39,7 @@ jobs:
           DB_USER: root
           DB_PASSWORD: ci-root-password-0123
           DB_NAME: openelf_test
-        run: node --test --test-concurrency=1 test/
+        run: node --test --test-concurrency=1 test/*.test.js
 
   payment:
     name: payment (Web 支付宝充值链路)
