@@ -2,6 +2,8 @@
 
 r2 修正：开放平台根路径发布标识会按现有 Nginx 规则重定向到官网，r1 因此触发哈希校验失败并回滚。发布标识现置于两站点的 /console/openelf-site-release.json；保留 HTTPS 哈希校验和全部回滚检查，不改 Nginx。不要重跑 r1；保留旧包与回滚备份。
 
+r3 包含 Web 验证码桥接的绝对 API 地址修复及 HTML 响应防护，同时恢复两个控制台的登录资源；增加 /var/www/openelf-webapp 为第三个备份/回滚目标。Flutter main.dart.js 必须与线上哈希一致，否则拒绝覆盖，以免回退另一版应用。只改验证码静态桥接及缓存标识，不重新编译或替换移动包。r2 曾公网验证成功，但 14:44 再检查时两站的发布标识及登录资源均404，HTML修改时间为14:37左右；只能确认内容变化，不能认定具体操作者或发布任务。应先暂停并发发布再安装。
+
 - 先前 console-auth 仅在 Z 目录的独立部署补丁中；Next 官网源码未集成。已将适配器、真实验证码 SDK 和回归纳入 web/public/console/auth，由根布局 beforeInteractive 加载；首页进入控制台也可用。
 - API 仅追加 https://open.openelfai.com 到既有精确 CORS 白名单，不使用星号，不移除既有环境配置或 web 域名。
 - 分别构建 site/open 两种静态导出，目标为 /var/www/openelf 和 /var/www/openelf-open。web.openelfai.com 的 Flutter 站已单独验证，不重复覆盖。

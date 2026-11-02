@@ -34,10 +34,14 @@
         const timer = setTimeout(() => controller.abort(), 15000);
         let config;
         try {
-          const response = await fetch('/api/v1/auth/captcha/config', {
+          // Flutter is hosted separately; /api on web.openelfai.com serves HTML, not the API.
+          const response = await fetch('https://openelfai.com/api/v1/auth/captcha/config', {
             cache: 'no-store', credentials: 'omit', signal: controller.signal
           });
           if (!response.ok) throw new Error('无法读取图形验证配置');
+          if (!String(response.headers.get('content-type') || '').includes('application/json')) {
+            throw new Error('图形验证接口返回格式异常，请联系管理员');
+          }
           config = await response.json();
         } finally { clearTimeout(timer); }
         if (!config.enabled || config.platform !== 'web' ||

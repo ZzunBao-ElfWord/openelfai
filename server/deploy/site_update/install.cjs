@@ -10,6 +10,7 @@ const apiFile = '/opt/openelf-api/src/app.js';
 const targets = [
   ['site', '/var/www/openelf', 'openelfai.com'],
   ['open', '/var/www/openelf-open', 'open.openelfai.com'],
+  ['web', '/var/www/openelf-webapp', 'web.openelfai.com'],
 ];
 const digest = data => crypto.createHash('sha256').update(data).digest('hex');
 function run(command, args) {
@@ -63,8 +64,21 @@ async function main() {
   }
   for (const [source, target] of targets) {
     safeDir(target);
-    if (!fs.existsSync(path.join(target, 'console/index.html'))) throw Error('Unknown site root: ' + target);
+    if (!fs.existsSync(path.join(target, source === 'web' ? 'main.dart.js' : 'console/index.html'))) throw Error('Unknown site root: ' + target);
     checkTree(path.join(root, source));
+    if (source === 'web') {
+      const html = fs.readFileSync(path.join(root, source, 'index.html'), 'utf8');
+      const bridge = fs.readFileSync(path.join(root, source, 'auth-assets/captcha-bridge.js'), 'utf8');
+      if (!html.includes('captcha-bridge.js?v=20261102-api-origin') ||
+          !bridge.includes("fetch('https://openelfai.com/api/v1/auth/captcha/config'")) {
+        throw Error('Flutter captcha origin fix missing');
+      }
+      if (digest(fs.readFileSync(path.join(target, 'main.dart.js'))) !==
+          digest(fs.readFileSync(path.join(root, source, 'main.dart.js')))) {
+        throw Error('Live Flutter main changed; stop instead of replacing a different app version');
+      }
+      continue;
+    }
     const html = fs.readFileSync(path.join(root, source, 'console/index.html'), 'utf8');
     if (!html.includes('/console/auth/console-auth.js?v=20261102-source-v2') || !html.includes('beforeInteractive')) {
       throw Error('Compiled login safety missing');
@@ -85,7 +99,7 @@ async function main() {
   if (run('systemctl', ['is-active', 'openelf-api']) !== 'active') throw Error('API not active');
   const before = apiState();
   const originalHash = digest(original);
-  console.log('Preflight passed: two sites, actual auth assets, payment authentication, captcha enforce.');
+  console.log('Preflight passed: three sites, actual auth assets, payment authentication, captcha enforce.');
   console.log('Original app.js SHA256=' + originalHash);
   if (mode === '--check') { console.log('Read-only check complete. No SMS/orders/changes/restarts.'); return; }
   const backup = fs.mkdtempSync('/opt/openelf-sites-backup-');
@@ -121,10 +135,13 @@ async function main() {
       fs.renameSync(target, old);
       switched.push({ target, old });
       fs.renameSync(stage, target);
-      for (const asset of ['console/index.html', 'console/auth/console-auth.js',
-        'console/auth/web-captcha.js', 'console/auth/ct4.js', 'console/openelf-site-release.json']) {
+      const assets = source === 'web'
+        ? ['index.html', 'main.dart.js', 'auth-assets/captcha-bridge.js', 'console/openelf-site-release.json']
+        : ['console/index.html', 'console/auth/console-auth.js',
+          'console/auth/web-captcha.js', 'console/auth/ct4.js', 'console/openelf-site-release.json'];
+      for (const asset of assets) {
         const bytes = cp.spawnSync('curl', ['--noproxy', '*', '-fsS', '--connect-timeout', '5', '--max-time', '20',
-          '--resolve', domain + ':443:127.0.0.1', 'https://' + domain + '/' + asset + '?verify=sites-20261102-r2'],
+          '--resolve', domain + ':443:127.0.0.1', 'https://' + domain + '/' + asset + '?verify=sites-20261102-r3'],
         { timeout: 25000, maxBuffer: 8 * 1024 * 1024 });
         if (bytes.error || bytes.status !== 0 || digest(bytes.stdout) !== digest(fs.readFileSync(path.join(root, source, asset)))) {
           throw Error('HTTPS site verification failed: ' + domain + '/' + asset);
@@ -135,7 +152,7 @@ async function main() {
     if (!/access-control-allow-origin:\s*https:\/\/open\.openelfai\.com\s*\r?$/im.test(allowed)) throw Error('CORS still blocked');
     if (/access-control-allow-origin:/i.test(preflight('https://untrusted.example'))) throw Error('Untrusted origin allowed');
     if (apiState() !== before) throw Error('Captcha configuration changed');
-    console.log('Installed and verified both websites + exact CORS origin. Backup: ' + backup);
+    console.log('Installed and verified three sites + exact CORS origin. Backup: ' + backup);
     console.log('No env/keys/database/Nginx/mobile packages/payment flags changed. No SMS, orders or chain calls.');
   } catch (error) {
     for (const { target, old } of switched.reverse()) {
