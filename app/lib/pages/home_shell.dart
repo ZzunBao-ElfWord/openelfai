@@ -10,6 +10,7 @@ import '../config/runtime_platform.dart';
 import '../models/elf.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/pet_overlay.dart';
 import 'create_elf_page.dart';
 import 'create_post_sheet.dart';
 import 'elf_chat_page.dart';
@@ -188,18 +189,28 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     if (wide) {
       return Scaffold(
         backgroundColor: AppColors.bg,
-        body: Row(
+        body: Stack(
           children: [
-            _SideRail(current: _current, onTap: _onNavTap),
-            Container(width: 1, color: AppColors.strokeSoft),
-            Expanded(child: IndexedStack(index: _current, children: _pages)),
+            Row(
+              children: [
+                _SideRail(current: _current, onTap: _onNavTap),
+                Container(width: 1, color: AppColors.strokeSoft),
+                Expanded(child: IndexedStack(index: _current, children: _pages)),
+              ],
+            ),
+            const PetOverlay(),
           ],
         ),
       );
     }
     return Scaffold(
       backgroundColor: AppColors.bg,
-      body: IndexedStack(index: _current, children: _pages),
+      body: Stack(
+        children: [
+          IndexedStack(index: _current, children: _pages),
+          const PetOverlay(),
+        ],
+      ),
       bottomNavigationBar: _BottomBar(current: _current, onTap: _onNavTap),
     );
   }
