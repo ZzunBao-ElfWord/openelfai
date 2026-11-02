@@ -283,8 +283,7 @@ class AppState extends ChangeNotifier {
     unawaited(refreshPlatformBalance());
     unawaited(loadFeed(reset: true));
     // 单一真源：登录后即拉取服务端权益快照（AI/技能书/挂单/钱包）。
-    if (CommerceConfig.android || CommerceConfig.initialMode == 'production')
-      unawaited(_ensureCommerceReady());
+    if (CommerceConfig.alipay) unawaited(_ensureCommerceReady());
   }
 
   /// 从服务端刷新真实钱包余额。失败静默，保留已有值。
@@ -305,7 +304,7 @@ class AppState extends ChangeNotifier {
   Future<String?> refreshEarnings() async {
     final user = currentUser;
     if (user == null) return '请先登录';
-    final mode = _paymentMode ?? (CommerceConfig.initialMode);
+    final mode = _paymentMode ?? CommerceConfig.defaultMode;
     if (mode == null) return '请先打开钱包，刷新服务端权益';
     try {
       final response =
@@ -668,15 +667,17 @@ class AppState extends ChangeNotifier {
 
   /// 拉取一页信息流。reset 用于下拉刷新/首次进入，否则追加下一页。
   /// 排序、分页、去重都由服务端决定，客户端不再重排或拼装种子内容。
+  /// 全端可看：已登录的商业端（Android/iOS）走带权益的私有流，
+  /// 其余情况（桌面/Web/游客）走公开流，数据同源。
   Future<String?> loadFeed(
       {String channel = 'world',
       String sort = 'recommend',
       bool reset = false,
       CommunityRepository? repository}) async {
-    if (!CommerceConfig.enabled) return null;
     final user = currentUser;
-    if (user == null) return '请先登录';
     sort = _effectiveSort(sort);
+    // 「我的 AI」流是私有数据，必须登录。
+    if (user == null && sort == 'mine') return '请先登录';
     final key = '$channel:$sort';
     if (_feedLoading.contains(key)) return null;
     if (!reset && !(_feedHasMore[key] ?? true)) return null;
@@ -686,9 +687,14 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     try {
       final page = reset ? 0 : (_feedPage[key] ?? -1) + 1;
-      final response = await (repository ?? CommunityRepository.instance)
-          .feed(channel: channel, sort: sort, page: page);
-      if (currentUser?.id != user.id || epoch != _feedEpoch) return null;
+      // Both guest browsing and authenticated community use Production content,
+      // independently of a StoreKit/Alipay wallet or its payment environment.
+      final response = user == null && repository == null
+          ? await CommerceRepository.instance
+              .publicFeed(channel: channel, sort: sort, page: page)
+          : await (repository ?? CommunityRepository.instance)
+              .feed(channel: channel, sort: sort, page: page);
+      if (currentUser?.id != user?.id || epoch != _feedEpoch) return null;
       if (response['protocol'] != 1 ||
           response['contentEnvironment'] != 'production' ||
           response['community'] is! Map ||
@@ -714,18 +720,18 @@ class AppState extends ChangeNotifier {
       notifyListeners();
       return null;
     } on AuthException catch (error) {
-      if (currentUser?.id == user.id && epoch == _feedEpoch) {
+      if (currentUser?.id == user?.id && epoch == _feedEpoch) {
         _feedErrors[key] =
             error.code == 'NOT_FOUND' ? '公共内容接口尚未部署，请联系管理员' : error.message;
       }
       return error.message;
     } catch (_) {
-      if (currentUser?.id == user.id && epoch == _feedEpoch) {
+      if (currentUser?.id == user?.id && epoch == _feedEpoch) {
         _feedErrors[key] = '信息流加载失败，请检查网络后重试';
       }
       return '信息流加载失败，请稍后重试';
     } finally {
-      if (currentUser?.id == user.id && epoch == _feedEpoch) {
+      if (currentUser?.id == user?.id && epoch == _feedEpoch) {
         _feedLoading.remove(key);
         notifyListeners();
       }
@@ -845,7 +851,13 @@ class AppState extends ChangeNotifier {
 
   // —— 技能学习 ——
 
-  AbilityModule? module(String id) => WorldData.module(id);
+  /// 技能目录以服务端快照为准（modules 字段），本地种子只作兜底。
+  AbilityModule? module(String id) {
+    for (final m in modules) {
+      if (m.id == id) return m;
+    }
+    return WorldData.module(id);
+  }
 
   /// 这只 AI 已学会的技能模块。
   List<AbilityModule> modulesOf(String elfId) {
@@ -1341,7 +1353,7 @@ class AppState extends ChangeNotifier {
   Future<int?> countReferral(String elfId) async {
     if (CommerceConfig.enabled) {
       final user = currentUser;
-      final mode = _paymentMode ?? (CommerceConfig.initialMode);
+      final mode = _paymentMode ?? CommerceConfig.defaultMode;
       if (user == null || mode == null) return null;
       try {
         final response = await CommerceRepository.instance.action(
@@ -1541,6 +1553,22 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// 开关自有 AI 的世界对话。成功时把服务端状态写回模型并刷新；
+  /// 失败返回可展示的文案（前置条件不满足 / 非本人 / 网络异常）。
+  Future<String?> setWorldChatOpen(Elf target, bool open) async {
+    try {
+      final applied = await PlatformApi.instance
+          .setWorldChatOpen(elfId: target.id, open: open);
+      target.worldChatOpen = applied;
+      notifyListeners();
+      return null;
+    } on PlatformApiException catch (error) {
+      return error.message;
+    } catch (_) {
+      return '设置失败，请稍后重试';
+    }
+  }
+
   /// 拉黑一只 AI：服务端立即生效，本地先隐藏它的内容，避免刷新前仍可见。
   Future<String?> blockElf(String elfId) async {
     try {
@@ -1609,7 +1637,7 @@ class AppState extends ChangeNotifier {
   Future<void> loadChat(String elfId) async {
     if (!CommerceConfig.enabled) return;
     final user = currentUser;
-    final mode = _paymentMode ?? (CommerceConfig.initialMode);
+    final mode = _paymentMode ?? CommerceConfig.defaultMode;
     if (user == null || mode == null) return;
     try {
       final response =
@@ -1642,8 +1670,10 @@ class AppState extends ChangeNotifier {
   }
 
   /// 人类发一条，AI 回一条（真实对话）。休眠的精灵不回复。
+  /// skills 非空时挂载技能（如形象工坊），由模型自行调用工具后再回复。
   /// 网络异常或服务端 502 时插入本地兜底文案，不向 UI 抛异常。
-  Future<void> sendChat(String elfId, String text) async {
+  Future<void> sendChat(String elfId, String text,
+      {List<String> skills = const []}) async {
     final list = chatOf(elfId);
     list.add(ChatMsg(text: text, fromElf: false, time: _now()));
     notifyListeners();
@@ -1673,6 +1703,7 @@ class AppState extends ChangeNotifier {
         persona: target.persona,
         text: text,
         history: history,
+        skills: skills,
       );
     } catch (_) {
       // 网络异常 / 服务端 502 都走兜底文案。
@@ -1688,6 +1719,19 @@ class AppState extends ChangeNotifier {
     if (saved != null && saved.isNotEmpty) {
       final decoded = _decodeChat(saved);
       if (decoded.isNotEmpty) {
+        // 落库的消息不含图片，把本次技能产出的图片挂到末尾的 AI 气泡上。
+        if (result.images.isNotEmpty) {
+          final last = decoded.lastIndexWhere((msg) => msg.fromElf);
+          if (last >= 0) {
+            decoded[last] = ChatMsg(
+              id: decoded[last].id,
+              text: decoded[last].text,
+              fromElf: true,
+              time: decoded[last].time,
+              images: result.images,
+            );
+          }
+        }
         chatOf(elfId);
         _chats[elfId] = decoded;
         notifyListeners();
@@ -1699,6 +1743,7 @@ class AppState extends ChangeNotifier {
       fromElf: true,
       time: _now(),
       fixedReason: result.mode == 'fixed' ? result.reason : null,
+      images: result.images,
     ));
     notifyListeners();
   }
@@ -1835,7 +1880,7 @@ class AppState extends ChangeNotifier {
   /// 创建并归属于自己的一只 AI。返回 null 表示成功，否则是失败原因。
   ///
   /// 合规顺序：登录 → 长度 → 敏感词初筛 → 扣费 → 生成专属地址 → 归入「我的 AI」。
-  /// 形象图暂由 [avatarUrl] 留空（客户端用首字头像），接入形象生成模型后填真实图。
+  /// 头像唯一来源是服务端铸造形象图（imageUrl/imageThumbUrl），无图时客户端回落首字色块。
   Future<String?> createElf({
     required String name,
     required String prompt,
@@ -1917,6 +1962,35 @@ class AppState extends ChangeNotifier {
     _spend(createElfCost, 'create_elf', '创建 ${elf.name}（UGC 形象）');
     notifyListeners();
     return null;
+  }
+
+  /// 角色卡铸造成功：把服务端返回的 AI 并入本地并切为当前 AI。
+  /// 调用方随后会拉一次服务端快照（refreshEarnings），校正余额与 activeElfId。
+  Elf? adoptMintedElf(Map<String, dynamic>? raw) {
+    if (raw == null) return null;
+    try {
+      // 铸造接口返回的是平台 elf 原始结构，补上服务端快照才会带的所有权标记。
+      final elf = _data.decodePaymentElf({
+        ...raw,
+        'isMine': true,
+        'status': 'active',
+      });
+      _ensureChainAddress(elf);
+      final at = elves.indexWhere((e) => e.id == elf.id);
+      if (at >= 0) {
+        elves[at] = elf;
+      } else {
+        elves.insert(0, elf);
+        seats.add(
+            Seat(elfId: elf.id, days: 0, edition: elf.edition, injected: 0));
+      }
+      activeElfId = elf.id;
+      notifyListeners();
+      return elf;
+    } catch (_) {
+      // 解析失败不影响「铸造已成功」这一事实：快照刷新会把 AI 补回来。
+      return null;
+    }
   }
 
   /// 把某只 AI 免费转赠给另一个人类（AI 唯一的流转方式）。
@@ -2044,12 +2118,12 @@ class AppState extends ChangeNotifier {
     _clearFeedCache();
   }
 
-  /// 拉取服务端快照。Android 钱包环境固定，可直接同步，无需先打开钱包页。
+  /// 拉取服务端快照。Android / Web 钱包环境固定，可直接同步，无需先打开钱包页。
   Future<String?> _ensureCommerceReady() async {
     if (_commerceReady) return null;
     final user = currentUser;
     if (user == null) return '请先登录';
-    final mode = _paymentMode ?? (CommerceConfig.initialMode);
+    final mode = _paymentMode ?? CommerceConfig.defaultMode;
     if (mode == null) return '请先打开钱包，刷新服务端权益';
     try {
       final response =
@@ -2103,7 +2177,7 @@ class AppState extends ChangeNotifier {
       notifyListeners();
       return '当前测试环境仅浏览正式公共内容，互动尚未开放';
     }
-    final mode = _paymentMode ?? (CommerceConfig.initialMode);
+    final mode = _paymentMode ?? CommerceConfig.defaultMode;
     if (mode == null) {
       rollback?.call();
       notifyListeners();

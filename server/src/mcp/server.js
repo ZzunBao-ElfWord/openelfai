@@ -26,15 +26,20 @@ function toolResult(payload, isError = false) {
   return result;
 }
 
-function registerMcpRoutes(app, { db } = {}) {
-  const tools = createCharacterTools({ db });
+function registerMcpRoutes(app, {
+  db,
+  routePath = '/mcp',
+  serverInfo = SERVER_INFO,
+  tools: providedTools,
+} = {}) {
+  const tools = providedTools || createCharacterTools({ db });
 
-  app.get('/mcp', async (request, reply) => {
+  app.get(routePath, async (request, reply) => {
     reply.header('allow', 'POST');
     return reply.code(405).send({ error: { code: 'METHOD_NOT_ALLOWED', message: 'MCP 端点仅支持 POST' } });
   });
 
-  app.post('/mcp', { bodyLimit: 1024 * 1024 }, async (request, reply) => {
+  app.post(routePath, { bodyLimit: 1024 * 1024 }, async (request, reply) => {
     const body = request.body && typeof request.body === 'object' ? request.body : {};
     const id = body.id === undefined ? null : body.id;
 
@@ -65,7 +70,7 @@ function registerMcpRoutes(app, { db } = {}) {
       return jsonRpcResult(id, {
         protocolVersion: PROTOCOL_VERSION,
         capabilities: { tools: {} },
-        serverInfo: { ...SERVER_INFO },
+        serverInfo: { ...serverInfo },
       });
     }
 

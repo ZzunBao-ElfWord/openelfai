@@ -1,0 +1,11 @@
+{
+  "name": "smart-cut",
+  "kind": "skill",
+  "version": "1.1.0",
+  "displayName": "爆款二次剪辑 OpenElf",
+  "dependencies": {
+    "connectors": [
+      "openelf-video"
+    ]
+  }
+}

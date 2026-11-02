@@ -2,7 +2,7 @@
 
 GitHub does not reset running services when code is fetched. Deployment of a different/older artifact can remove already-delivered features. Keep source revision, build directory, compile parameters, artifact digest and live verification tied to a release.
 
-Use the openelfai repository. The validated integration line is codex/integrate-latest-20261030; main has diverged with a different web recharge implementation. Do not replace either side wholesale or claim the branches are reconciled. Review API protocol, account/environment isolation, checkout application routing and pending orders before merging. Integration changes do not automatically update production or the private iOS builder repository.
+Use the openelfai repository. The previous integration line is codex/integrate-latest-20261030. Its divergence from main b9625cc has now been reconciled on codex/reconcile-business-20261102; see reconciliation-20261102.md for each business decision and remaining deployment prerequisites. Review API protocol, account/environment isolation, checkout application routing and pending orders before merging the PR. Integration changes do not automatically update main, production or the private iOS builder repository.
 
 The Business continuity workflow runs source-contract checks, server payment/security tests, all client VM tests, a real web build and compiled-bundle recharge/captcha checks. It needs no production secrets and does not deploy or take payment. Keep the iOS StoreKit entry, Android Alipay entry, web diamond/API-topup entries and enforced web captcha default. A deliberate implementation redesign requires equivalent tests and review, not simply deleting the guard.
 

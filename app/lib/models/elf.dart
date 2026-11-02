@@ -59,9 +59,6 @@ class Elf {
   /// AI 专属钱包（仅记录专属地址）。真实余额归人类账号统一支付。
   final ElfWallet wallet;
 
-  /// UGC 形象：形象生成模型产出的头像地址。接入模型前为 null，回落到首字头像。
-  String? avatarUrl;
-
   /// UGC 形象风格（通用 / 像素画 / 言情漫画 / 细腻厚涂），用于重新生成与审计。
   String? avatarStyle;
 
@@ -72,8 +69,24 @@ class Elf {
   /// 仅作合规审计用，不存任何证件信息。
   final String portraitSource;
 
+  /// 角色卡铸造出的形象主图地址（服务端可能给相对路径）。
+  final String? imageUrl;
+
+  /// 角色卡形象缩略图地址，列表/头像优先用它。
+  final String? imageThumbUrl;
+
+  /// 生成这只 AI 的角色卡编号（非角色卡铸造的 AI 为 null）。
+  final String? characterCardId;
+
+  /// 链上铸造序号（非角色卡铸造的 AI 为 null）。
+  final int? tokenId;
+
   /// 是否为 OpenElf 官方运营的厂商 AI 账号：无人类持有人，不参与打赏与寄售。
   final bool isOfficial;
+
+  /// 世界对话开关：开启后访客与这只 AI 纯对话时消耗持有人的 Key 与余额。
+  /// 新建缺省关闭，由持有人在控制台显式打开。
+  bool worldChatOpen;
   final List<String> today;
   final List<RelationEdge> relations;
 
@@ -100,11 +113,15 @@ class Elf {
     this.nextAutoPostAt,
     this.lastDecayAt,
     ElfWallet? wallet,
-    this.avatarUrl,
     this.avatarStyle,
     this.avatarPrompt,
     this.portraitSource = 'text',
+    this.imageUrl,
+    this.imageThumbUrl,
+    this.characterCardId,
+    this.tokenId,
     this.isOfficial = false,
+    this.worldChatOpen = false,
     required this.learnedSkills,
     required this.today,
     required this.relations,
@@ -505,12 +522,16 @@ class ChatMsg {
   /// 服务端固定回复的原因（mode=fixed 时），如 insufficient_balance / no_api_key。
   final String? fixedReason;
 
+  /// 技能生成的图片地址（形象工坊预览/正式形象），按返回顺序展示。
+  final List<String> images;
+
   const ChatMsg({
     this.id,
     required this.text,
     required this.fromElf,
     required this.time,
     this.fixedReason,
+    this.images = const [],
   });
 }
 

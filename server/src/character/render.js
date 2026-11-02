@@ -1,13 +1,25 @@
 'use strict';
 
-const { createCanvas, parseColor } = require('./png');
+const { createCanvas, encodePng, parseColor } = require('./png');
 const { sha256Hex, createRng } = require('./rng');
 const parts = require('./parts');
+
+// 风格归一化：客户端中文名与服务端别名统一映射到内部风格键。
+function normalizeStyle(style) {
+  const key = String(style || 'general').trim().toLowerCase();
+  if (key === '像素画' || key === 'pixel') return 'pixel';
+  if (key === '言情漫画' || key === 'manga' || key === 'romance') return 'manga';
+  if (key === '细腻厚涂' || key === 'impasto' || key === 'oil') return 'impasto';
+  return 'general';
+}
 
 const DEFAULT_WIDTH = 1024;
 const DEFAULT_HEIGHT = 1536;
 const THUMB_WIDTH = 256;
 const THUMB_HEIGHT = 384;
+// 预览图按 2x 输出：高分屏手机网格/放大查看才不虚。
+const PREVIEW_WIDTH = 512;
+const PREVIEW_HEIGHT = 768;
 
 function normalizeTraits(raw, catalog) {
   if (!raw) return {};
@@ -82,7 +94,7 @@ function withAlpha(color, alpha) {
 
 // —— 各图层绘制：全部是几何图形 + 颜色参数，保证风格统一且可确定性复现 ——
 
-function drawBackground(canvas, draw, W, H, rng) {
+function drawBackground(canvas, draw, W, H, rng, style) {
   canvas.fillLinearGradient(0, 0, W, H, draw.from, draw.to);
   const ink = 'rgba(255,255,255,0.14)';
   const soft = 'rgba(255,255,255,0.07)';
@@ -118,6 +130,28 @@ function drawBackground(canvas, draw, W, H, rng) {
     for (let i = 0; i < 4; i += 1) {
       const y = H * (0.66 + i * 0.09);
       canvas.fillEllipse(W * 0.5, y, W * 0.62, H * 0.045, soft);
+    }
+  }
+  // 风格化装饰：言情漫画撒四角星闪光，细腻厚涂叠暖色光斑。
+  if (style === 'manga') {
+    for (let i = 0; i < 7; i += 1) {
+      const x = rng.next() * W;
+      const y = rng.next() * H * 0.6;
+      const r = W * (0.014 + rng.next() * 0.02);
+      const arm = r * 0.26;
+      const color = i % 3 === 0 ? 'rgba(255,255,255,0.38)' : 'rgba(255,255,255,0.18)';
+      canvas.fillPolygon(
+        [[x, y - r], [x + arm, y - arm], [x + r, y], [x + arm, y + arm],
+          [x, y + r], [x - arm, y + arm], [x - r, y], [x - arm, y - arm]],
+        color,
+      );
+    }
+  } else if (style === 'impasto') {
+    for (let i = 0; i < 3; i += 1) {
+      const x = rng.next() * W;
+      const y = H * (0.2 + rng.next() * 0.5);
+      const r = W * (0.12 + rng.next() * 0.14);
+      canvas.fillEllipse(x, y, r, r * 0.7, 'rgba(255,214,160,0.08)');
     }
   }
   // 底部暗角，让角色与背景分离。
@@ -536,7 +570,7 @@ function drawExpression(canvas, draw, W, H, g) {
   canvas.fillRect(cx - W * 0.006, cy + g.headRy * 0.36, W * 0.012, W * 0.018, withAlpha(ink, 130));
 }
 
-function drawScene(canvas, { traits, rngSeed, catalog }) {
+function drawScene(canvas, { traits, rngSeed, catalog, style }) {
   const W = canvas.width;
   const H = canvas.height;
   const rng = createRng(rngSeed);
@@ -550,7 +584,7 @@ function drawScene(canvas, { traits, rngSeed, catalog }) {
   const accessory = parts.getTrait('accessory', traits.accessory, catalog);
   const expression = parts.getTrait('expression', traits.expression, catalog);
 
-  if (background) drawBackground(canvas, background.draw, W, H, rng);
+  if (background) drawBackground(canvas, background.draw, W, H, rng, style);
   const geometry = buildGeometry(W, H, body ? body.draw : {}, rng);
   if (body) drawBody(canvas, body.draw, W, H, geometry);
   if (bottom) drawBottom(canvas, bottom.draw, W, H, geometry);
@@ -562,11 +596,81 @@ function drawScene(canvas, { traits, rngSeed, catalog }) {
   if (expression) drawExpression(canvas, expression.draw, W, H, geometry);
 }
 
+function clampPixel(value) {
+  return Math.max(0, Math.min(255, Math.round(value)));
+}
+
+// 最近邻放大：把 1:1 小画布逐像素复制成 factor×factor 色块，保留硬边像素格。
+function nearestNeighborPng(canvas, factor) {
+  const srcW = canvas.deviceWidth;
+  const srcH = canvas.deviceHeight;
+  const outW = srcW * factor;
+  const outH = srcH * factor;
+  const out = Buffer.alloc(outW * outH * 4);
+  for (let y = 0; y < outH; y += 1) {
+    const sy = Math.floor(y / factor);
+    for (let x = 0; x < outW; x += 1) {
+      const si = (sy * srcW + Math.floor(x / factor)) * 4;
+      const di = (y * outW + x) * 4;
+      out[di] = canvas.data[si];
+      out[di + 1] = canvas.data[si + 1];
+      out[di + 2] = canvas.data[si + 2];
+      out[di + 3] = canvas.data[si + 3];
+    }
+  }
+  return encodePng(outW, outH, out);
+}
+
+// 厚涂后处理：横向短笔触拖尾 + 颜料颗粒噪点 + 暖色调。
+function impastoPost(canvas, rng) {
+  const { deviceWidth, deviceHeight, data } = canvas;
+  for (let y = 0; y < deviceHeight; y += 1) {
+    for (let x = 1; x < deviceWidth; x += 1) {
+      const i = (y * deviceWidth + x) * 4;
+      const j = i - 4;
+      data[i] = Math.round(data[i] * 0.82 + data[j] * 0.18);
+      data[i + 1] = Math.round(data[i + 1] * 0.82 + data[j + 1] * 0.18);
+      data[i + 2] = Math.round(data[i + 2] * 0.82 + data[j + 2] * 0.18);
+    }
+  }
+  for (let i = 0; i < data.length; i += 4) {
+    const n = (rng.next() - 0.5) * 22;
+    data[i] = clampPixel(data[i] + n + 4);
+    data[i + 1] = clampPixel(data[i + 1] + n);
+    data[i + 2] = clampPixel(data[i + 2] + n - 4);
+  }
+}
+
+// 言情漫画后处理：暖粉玫瑰色调 + 轻微提亮，配合背景四角星闪光。
+function mangaPost(canvas) {
+  const { data } = canvas;
+  for (let i = 0; i < data.length; i += 4) {
+    data[i] = clampPixel(data[i] * 1.1 + 14);
+    data[i + 1] = clampPixel(data[i + 1] * 0.99 + 2);
+    data[i + 2] = clampPixel(data[i + 2] * 1.06 + 16);
+  }
+}
+
 function renderPng({ traits, seed, style, width = DEFAULT_WIDTH, height = DEFAULT_HEIGHT, scale = 2, catalog }) {
   const resolved = parts.pickTraits(seed, style, normalizeTraits(traits, catalog), catalog);
   const hash = compositionHash({ traits: resolved, seed, style });
+  const styleKey = normalizeStyle(style);
+  const rngSeed = `character-render:${hash}`;
+  if (styleKey === 'pixel') {
+    // 像素画：低逻辑分辨率无抗锯齿渲染，最近邻放大出像素格。
+    const factor = width >= 512 ? 8 : 4;
+    const small = createCanvas(
+      Math.max(16, Math.round(width / factor)),
+      Math.max(24, Math.round(height / factor)),
+      { scale: 1 },
+    );
+    drawScene(small, { traits: resolved, rngSeed, catalog, style: styleKey });
+    return nearestNeighborPng(small, factor);
+  }
   const canvas = createCanvas(width, height, { scale });
-  drawScene(canvas, { traits: resolved, rngSeed: `character-render:${hash}`, catalog });
+  drawScene(canvas, { traits: resolved, rngSeed, catalog, style: styleKey });
+  if (styleKey === 'impasto') impastoPost(canvas, createRng(`${rngSeed}:post`));
+  else if (styleKey === 'manga') mangaPost(canvas);
   return canvas.toPng();
 }
 
@@ -611,8 +715,8 @@ function renderPreview(card, options = {}) {
     traits,
     seed,
     style,
-    width: options.width || THUMB_WIDTH,
-    height: options.height || THUMB_HEIGHT,
+    width: options.width || PREVIEW_WIDTH,
+    height: options.height || PREVIEW_HEIGHT,
     scale,
     catalog,
   });
@@ -624,7 +728,10 @@ module.exports = {
   DEFAULT_HEIGHT,
   THUMB_WIDTH,
   THUMB_HEIGHT,
+  PREVIEW_WIDTH,
+  PREVIEW_HEIGHT,
   compositionHash,
+  normalizeStyle,
   normalizeTraits,
   normalizeSeed,
   resolveTraits,

@@ -15,6 +15,7 @@ import '../services/stage_bind_service.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import 'content_safety_page.dart';
 import 'identity_verify_page.dart';
 import 'stage_bind_page.dart';
 import 'wallet_page.dart';
@@ -119,6 +120,15 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                     const SizedBox(height: 18),
                     _section('法律与政策'),
+                    _tile(
+                      icon: Icons.shield_outlined,
+                      label: '内容安全',
+                      subtitle: '发布内容前需阅读并同意《社区规范》',
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                            builder: (_) => const ContentSafetyPage()),
+                      ),
+                    ),
                     _tile(
                       icon: Icons.privacy_tip_outlined,
                       label: '隐私政策',

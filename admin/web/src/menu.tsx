@@ -14,7 +14,9 @@ import AppCopyConfig from './pages/AppCopyConfig';
 import PlatformModels from './pages/PlatformModels';
 import PlatformVendors from './pages/PlatformVendors';
 import PlatformDevelopers from './pages/PlatformDevelopers';
+import PlatformCapabilities from './pages/PlatformCapabilities';
 import PlatformRequests from './pages/PlatformRequests';
+import WorkBuddy from './pages/WorkBuddy';
 import ModerationReports from './pages/ModerationReports';
 import CharacterStudio from './pages/CharacterStudio';
 import WalletAdjust from './pages/WalletAdjust';
@@ -173,12 +175,28 @@ export const menuItems: MenuItem[] = [
     element: <PlatformDevelopers />,
   },
   {
+    path: '/platform/capabilities',
+    group: '开放平台',
+    label: '能力审核',
+    glyph: '🧩',
+    roles: mods,
+    element: <PlatformCapabilities />,
+  },
+  {
     path: '/platform/requests',
     group: '开放平台',
     label: '调用日志',
     glyph: '📈',
     roles: mods,
     element: <PlatformRequests />,
+  },
+  {
+    path: '/platform/workbuddy',
+    group: '开放平台',
+    label: 'WorkBuddy 上架',
+    glyph: '🤝',
+    roles: mods,
+    element: <WorkBuddy />,
   },
   {
     path: '/wallet/adjust',

@@ -143,6 +143,56 @@ module.exports = {
     failureCooldownMs: Number(process.env.WORLD_VIDEOS_FAILURE_COOLDOWN_MS || 30 * 60000),
     assetBaseUrl: process.env.WORLD_ASSET_BASE_URL || 'https://openelfai.com',
   },
+  // 视频剪辑连接器：ffmpeg 本地处理，转写走可配置的 ASR（openai 兼容或阿里云百炼异步文件转写）。
+  videoMcp: {
+    enabled: bool('VIDEO_MCP_ENABLED', true),
+    workDir: process.env.VIDEO_MCP_WORK_DIR || '',
+    ffmpegPath: process.env.FFMPEG_PATH || 'ffmpeg',
+    ffprobePath: process.env.FFPROBE_PATH || 'ffprobe',
+    asrProvider: process.env.ASR_PROVIDER || '',
+    asrUrl: process.env.ASR_TRANSCRIBE_URL || '',
+    asrBaseUrl: process.env.ASR_BASE_URL || '',
+    asrApiKey: process.env.ASR_API_KEY || '',
+    asrModel: process.env.ASR_MODEL || '',
+    asrTimeoutMs: Number(process.env.ASR_TIMEOUT_MS || 8 * 60 * 1000),
+  },
+  // 千人千面生成器连接器：图层权重 + 批量生成，渲染走自研 PNG 画布，无外部依赖。
+  generatorMcp: {
+    enabled: bool('GENERATOR_MCP_ENABLED', true),
+  },
+  // 入向 MCP：用户自带的外部 MCP Server 在对话里供精灵调用。
+  // allowPrivateHosts 仅供本地联调，生产必须保持 false，避免 SSRF 打到内网。
+  inboundMcp: {
+    timeoutMs: Number(process.env.INBOUND_MCP_TIMEOUT_MS || 15000),
+    allowPrivateHosts: bool('INBOUND_MCP_ALLOW_PRIVATE_HOSTS', false),
+  },
+  // 媒体能力：ComfyUI 出图 + OpenAI 兼容 TTS，未配置时对应接口返回未启用。
+  media: {
+    comfy: {
+      enabled: bool('COMFY_ENABLED', false),
+      baseUrl: process.env.COMFY_BASE_URL || '',
+      checkpoint: process.env.COMFY_CHECKPOINT || '',
+      workflowPath: process.env.COMFY_WORKFLOW_PATH || '',
+      timeoutMs: Number(process.env.COMFY_TIMEOUT_MS || 180000),
+      pollMs: Number(process.env.COMFY_POLL_MS || 1500),
+      dailyLimit: Number(process.env.COMFY_DAILY_LIMIT || 100),
+    },
+    tts: {
+      enabled: bool('TTS_ENABLED', false),
+      baseUrl: process.env.TTS_BASE_URL || '',
+      apiKey: process.env.TTS_API_KEY || '',
+      model: process.env.TTS_MODEL || 'tts-1',
+      voice: process.env.TTS_VOICE || 'alloy',
+      maxChars: Number(process.env.TTS_MAX_CHARS || 1000),
+      dailyLimit: Number(process.env.TTS_DAILY_LIMIT || 50),
+      timeoutMs: Number(process.env.TTS_TIMEOUT_MS || 60000),
+    },
+    // Civitai 资源库：搜索与收藏模型，出图时通过收藏引用 LoRA。
+    civitai: {
+      enabled: bool('CIVITAI_ENABLED', true),
+      dailySearchLimit: Number(process.env.CIVITAI_DAILY_SEARCH_LIMIT || 200),
+    },
+  },
   // 收益提现审核：内部接口只认这个令牌，未配置时审核接口整体关闭。
   withdrawReviewToken: process.env.WITHDRAW_REVIEW_TOKEN || '',
   alipay: {

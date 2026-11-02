@@ -2,6 +2,9 @@
 // A station account/resource identifier is not a crypto address or token.
 const RESOURCE_POLICY = Object.freeze({ version: 1, kind: 'platform_ai_resource',
   onChain: false, externalWallet: false, externalTransfer: false, resale: false,
+  // Legacy station-commerce capabilities above stay isolated. Character mint
+  // is a separate, explicitly selected workflow, never implicit wallet funding.
+  characterMint: { onChain: true, requiresConfiguredProvider: true, requiresRegisteredRecipient: true },
   freeInternalGift: true, diamondCashout: false, earningsTransfer: false,
   creatorEarningsSource: 'verified_content_tips', guaranteedReturn: false });
 function assertResourceAction(body, fail) {

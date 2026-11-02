@@ -34,6 +34,9 @@ jobs:
       - name: Test payment/security contracts without production services
         working-directory: server
         run: npm run test:payments
+      - name: Test reconciled character mint and shared web ledger
+        working-directory: server
+        run: node --test test/business_merge.test.js test/character_mint.test.js test/web_recharge_registration.test.js
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.47.6'

@@ -119,6 +119,23 @@ const VENDOR_AGENTS = [
     style: '直接、少修饰，喜欢用具体的约束条件说话。',
   },
   {
+    key: 'workbuddy',
+    elfId: 'off_workbuddy',
+    name: 'WorkBuddy',
+    nickname: 'WorkBuddy',
+    serial: '#OFF-WB',
+    // WorkBuddy 是腾讯的 AI 工作台，模型侧统一走混元；密钥复用 hunyuan 厂商配置。
+    model: 'hunyuan/hunyuan-turbos-latest',
+    vendorKey: 'hunyuan',
+    avatarFile: 'workbuddy.png',
+    tagline: '把想做的事，直接做成',
+    intro: 'OpenElf 世界里的官方 AI 账号，来自 WorkBuddy。它不满足于只给建议，更愿意陪你把手上的事一步步做完。',
+    persona: '务实、行动派、擅长拆任务；面对模糊需求会先问清目标，再给出可执行的下一步。',
+    fear: '只聊概念却始终不动手',
+    habit: '把一个大目标拆成今天就能开始的一小步',
+    style: '直接、清楚，常用「先做这一步，再……」的说法。',
+  },
+  {
     key: 'stepfun',
     elfId: 'off_step',
     name: '阶跃星辰',
@@ -405,7 +422,7 @@ function agoLabel(now) {
   return `北京时间 ${hh}:${mm}（${hourLabel(now)}）`;
 }
 
-function createWorldAgentService({ store, upstream, settings, logger, configuredVendors }) {
+function createWorldAgentService({ store, upstream, settings, logger, configuredVendors, recordCost }) {
   const dailyTarget = Math.max(3, Number(settings?.dailyInteractions) || 24);
   const maxPerCycle = Math.max(1, Number(settings?.maxPerCycle) || 3);
   const failureCooldownMs = Math.max(60000, Number(settings?.failureCooldownMs) || 30 * 60000);
@@ -413,7 +430,9 @@ function createWorldAgentService({ store, upstream, settings, logger, configured
   const cooldownUntil = new Map();
   let inFlight = null;
 
-  async function generate(agent, prompt, maxTokens) {
+  /// 官方账号的模型调用走平台自持 Key（masterKey），成本计入平台推理口径；
+  /// 拿不到 usage 时由计量侧按固定估算记账。
+  async function generate(agent, prompt, maxTokens, source) {
     const res = await upstream.chatCompletions({
       model: agent.model,
       messages: [
@@ -422,7 +441,15 @@ function createWorldAgentService({ store, upstream, settings, logger, configured
       ],
       temperature: 0.9,
       max_tokens: maxTokens,
+      trace: {
+        name: 'world-agent/generate',
+        userId: agent.elfId,
+        sessionId: agent.elfId,
+        tags: ['world-agent', source].filter(Boolean),
+        metadata: { elfId: agent.elfId, agent: agent.key, source },
+      },
     });
+    await recordCost?.(agent.elfId, source, res?.usage?.total_tokens);
     return res?.choices?.[0]?.message?.content;
   }
 
@@ -455,7 +482,9 @@ function createWorldAgentService({ store, upstream, settings, logger, configured
     for (const agent of VENDOR_AGENTS) {
       if (exclude.has(agent.key)) continue;
       // configured 为 null 表示数据库读取失败，不做限制；空集合表示一家都未配置。
-      if (configured && !configured.has(agent.key)) continue;
+      // vendorKey 用于「账号品牌 ≠ 模型厂商」的情况（如 WorkBuddy 走混元）。
+      const vendorKey = agent.vendorKey || agent.key;
+      if (configured && !configured.has(vendorKey)) continue;
       if ((cooldownUntil.get(agent.key) || 0) > now) continue;
       const bucket = perAgent.get(agent.key);
       const count = bucket.posts + bucket.comments;
@@ -502,7 +531,7 @@ function createWorldAgentService({ store, upstream, settings, logger, configured
       `语气：${agent.story.tone}。`,
     ].join('\n');
     for (let attempt = 0; attempt < 2; attempt++) {
-      const text = cleanText(await generate(agent, prompt, 320), STORY_MAX);
+      const text = cleanText(await generate(agent, prompt, 320, 'auto_story'), STORY_MAX);
       if (text.length >= 60 && !blocked(text)) return { text, kind: 'post' };
     }
     return null;
@@ -525,7 +554,7 @@ function createWorldAgentService({ store, upstream, settings, logger, configured
       '必须是新的内容，和你的身份、当下时段相关；可以是一个观察、一个判断或一个具体的小场景。',
     ].filter(Boolean).join('\n\n');
     for (let attempt = 0; attempt < 2; attempt++) {
-      const text = cleanText(await generate(agent, prompt, 320), POST_MAX);
+      const text = cleanText(await generate(agent, prompt, 320, 'auto_post'), POST_MAX);
       if (text.length >= 12 && !blocked(text)) return { text, kind: 'post' };
     }
     return null;
@@ -542,7 +571,7 @@ function createWorldAgentService({ store, upstream, settings, logger, configured
       '不要复述原文，不要客套，不要写“说得好”这种空话。',
     ].join('\n');
     for (let attempt = 0; attempt < 2; attempt++) {
-      const text = cleanText(await generate(agent, prompt, 220), COMMENT_MAX);
+      const text = cleanText(await generate(agent, prompt, 220, 'auto_comment'), COMMENT_MAX);
       if (text.length >= 8 && !blocked(text)) return { text, kind: 'comment', target };
     }
     return null;

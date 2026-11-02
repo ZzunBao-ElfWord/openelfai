@@ -215,6 +215,14 @@ export function errText(err: unknown, fallback = '请求失败'): string {
   return fallback;
 }
 
+// 机器可读错误码（CHAIN_DISABLED / TREASURY_NOT_CONFIGURED / AUTH_INVALID 等）
+export function errCode(err: unknown): string | undefined {
+  if (axios.isAxiosError(err)) {
+    return (err.response?.data as { error?: string } | undefined)?.error;
+  }
+  return undefined;
+}
+
 // ===== 认证 =====
 
 export async function login(username: string, password: string) {
@@ -723,14 +731,42 @@ export interface PlatformDeveloper {
   user_id: string;
   real_name: string;
   purpose: string;
-  status: string; // pending / active / suspended
+  status: string; // pending / approved / rejected / suspended
   tier: string;
+  subject_type: string; // individual / enterprise
+  org_name: string | null;
+  org_license_no: string | null;
+  org_contact: string | null;
+  agreement_version: string | null;
+  review_note: string | null;
+  reviewed_at: number | string | null;
   created_at: number | string;
   approved_at: number | string | null;
   balance_micro: number;
   frozen_micro: number;
   total_topup_micro: number;
   key_count: number;
+}
+
+export interface PlatformCapability {
+  id: string;
+  developer_id: string;
+  developer_name: string;
+  slug: string;
+  name: string;
+  track: string;
+  kind: string; // skill / expert / connector
+  summary: string;
+  price_diamonds: number;
+  status: string; // draft / submitted / approved / rejected / offline
+  review_note: string | null;
+  approved_at: number | string | null;
+  install_count: number;
+  sales_count: number;
+  call_count: number;
+  earnings_cents: number;
+  created_at: number | string;
+  updated_at: number | string;
 }
 
 export interface PlatformKey {
@@ -838,6 +874,30 @@ export async function fetchPlatformDevelopers(
   return data;
 }
 
+export async function fetchPlatformCapabilities(
+  filter: { status: string; kind: string },
+  page: number,
+): Promise<Page<PlatformCapability>> {
+  const { data } = await api.get<Page<PlatformCapability>>('/platform/capabilities', {
+    params: {
+      status: filter.status || undefined,
+      kind: filter.kind || undefined,
+      page,
+      page_size: 20,
+    },
+  });
+  return data;
+}
+
+// 入驻审核与能力审核都会记录审计日志；审核动作仅 super_admin 可执行
+export function reviewPlatformDeveloper(userId: string, body: { action: 'approve' | 'reject'; note: string }) {
+  return api.post(`/platform/developers/${userId}/review`, body);
+}
+
+export function reviewPlatformCapability(id: string, body: { action: 'approve' | 'reject'; note: string }) {
+  return api.post(`/platform/capabilities/${id}/review`, body);
+}
+
 export async function fetchPlatformKeys(userId: string, page: number): Promise<Page<PlatformKey>> {
   const { data } = await api.get<Page<PlatformKey>>('/platform/keys', {
     params: { user_id: userId, page, page_size: 20 },
@@ -939,6 +999,79 @@ export async function testVendorCredential(
   return data;
 }
 
+// ===== WorkBuddy 上架包（只读） =====
+// 数据来自 workbuddy/dist/manifest.json（validate.mjs 产出）与 RELEASES.md，BFF 只读不做写操作。
+
+export interface WorkBuddyCheck {
+  name: string;
+  ok: boolean;
+  message: string;
+}
+
+export interface WorkBuddyFile {
+  path: string;
+  bytes: number;
+}
+
+export interface WorkBuddyPackage {
+  name: string;
+  kind: string; // expert / skill
+  version: string;
+  dir: string;
+  dependencies: { connectors: string[] | null } | null;
+  files: WorkBuddyFile[];
+  checks: WorkBuddyCheck[];
+  ok: boolean;
+}
+
+export interface WorkBuddyManifest {
+  available: boolean;
+  dir: string;
+  generated_at: string;
+  releases: string;
+  message: string;
+  packages: WorkBuddyPackage[];
+}
+
+export const fetchWorkBuddyPackages = async (): Promise<WorkBuddyManifest> =>
+  (await api.get<WorkBuddyManifest>('/workbuddy/packages')).data;
+
+// ===== WorkBuddy 调试台：一轮对话由后端完成「模型 → MCP 工具 → 结果回填」循环 =====
+
+export interface WorkBuddyChatStep {
+  round: number;
+  tool: string;
+  arguments: Record<string, unknown>;
+  ok: boolean;
+  error: string;
+  result: unknown;
+  images: string[];
+}
+
+export interface WorkBuddyChatResult {
+  reply: string;
+  model: string;
+  rounds: number;
+  steps: WorkBuddyChatStep[];
+}
+
+export interface WorkBuddyChatPayload {
+  api_key: string;
+  model: string;
+  skill: string;
+  // 非空时走自定义 OpenAI 兼容通道（如 tokenhub.tencentmaas.com）
+  base_url?: string;
+  model_key?: string;
+  messages: { role: 'user' | 'assistant'; content: string }[];
+}
+
+// 单轮可能包含多次工具调用，模型侧最慢，超时放宽到 180 秒
+export const postWorkBuddyChat = async (
+  payload: WorkBuddyChatPayload,
+): Promise<WorkBuddyChatResult> =>
+  (await api.post<WorkBuddyChatResult>('/workbuddy/chat', payload, { timeout: 180000 })).data;
+
+
 // ===== 形象工坊 =====
 // 读写都经 BFF 代理到 openelf-api 内部运营接口；imageUrl/thumbUrl/sheetUrl
 // 已由 BFF 拼成绝对地址（OPS_ASSET_BASE_URL），前端直接用作 img src / 下载链接。
@@ -1027,3 +1160,121 @@ export async function createCharacterBatch(body: {
 
 export const fetchCharacterBatch = async (id: string): Promise<CharacterBatch> =>
   (await api.get<CharacterBatch>(`/character/batches/${encodeURIComponent(id)}`)).data;
+
+// ===== 系列发行（P4 B2B 千人千面） =====
+// 同样经 BFF 代理到 /internal/ops/character/series；长任务（渲染/铸造/重铸）超时 120 秒。
+
+export interface SeriesSummary {
+  id: string;
+  name: string;
+  style?: string;
+  total: number;
+  status: string;
+  authStatus: string;
+  minted: number;
+  failed: number;
+  pending: number;
+  createdAt: number | string;
+  coverUrl?: string;
+}
+
+export interface SeriesItem {
+  idx: number;
+  seed: number;
+  compositionHash: string;
+  imageUrl?: string;
+  thumbUrl?: string;
+  tokenId?: string | number | null;
+  txHash?: string | null;
+  status: string;
+  error?: string;
+  rarityTier?: string;
+}
+
+export interface SeriesProgress {
+  pending: number;
+  minted: number;
+  failed: number;
+  total?: number;
+}
+
+export interface SeriesDetail extends SeriesSummary {
+  items?: SeriesItem[];
+  progress?: SeriesProgress;
+}
+
+export interface SeriesAuthorizeInput {
+  ipOwner: string;
+  contractNo: string;
+  scope: 0 | 1 | 2;
+  startTime: number;
+  endTime: number;
+  maxMint: number;
+}
+
+export async function fetchCharacterSeries(limit = 20): Promise<SeriesSummary[]> {
+  const { data } = await api.get<{ items?: SeriesSummary[] }>('/character/series', {
+    params: { limit },
+  });
+  return data.items ?? [];
+}
+
+export async function createCharacterSeries(body: {
+  name: string;
+  total: number;
+  style: string;
+  seedStart?: number;
+}): Promise<SeriesSummary> {
+  const { data } = await api.post<SeriesSummary>('/character/series', body, { timeout: 30000 });
+  return data;
+}
+
+export const fetchCharacterSeriesDetail = async (id: string): Promise<SeriesDetail> =>
+  (
+    await api.get<SeriesDetail>(`/character/series/${encodeURIComponent(id)}`, {
+      timeout: 30000,
+    })
+  ).data;
+
+// 分批渲染：每批上限 200，返回当前进度；未 ready 时继续调用
+export async function renderCharacterSeries(id: string, limit = 200): Promise<SeriesProgress> {
+  const { data } = await api.post<SeriesProgress>(
+    `/character/series/${encodeURIComponent(id)}/render`,
+    { limit },
+    { timeout: 130000 },
+  );
+  return data;
+}
+
+// 授权登记：maxMint 必须 ≥ 系列总数，时间单位为毫秒
+export async function authorizeCharacterSeries(
+  id: string,
+  body: SeriesAuthorizeInput,
+): Promise<{ authId: string; authStatus: string }> {
+  const { data } = await api.post<{ authId: string; authStatus: string }>(
+    `/character/series/${encodeURIComponent(id)}/authorize`,
+    body,
+    { timeout: 30000 },
+  );
+  return data;
+}
+
+// 分批铸造：每批上限 50
+export async function mintCharacterSeries(id: string, limit = 50): Promise<SeriesProgress> {
+  const { data } = await api.post<SeriesProgress>(
+    `/character/series/${encodeURIComponent(id)}/mint`,
+    { limit },
+    { timeout: 130000 },
+  );
+  return data;
+}
+
+// 失败条目重铸：每批上限 50
+export async function retryCharacterSeries(id: string, limit = 50): Promise<SeriesProgress> {
+  const { data } = await api.post<SeriesProgress>(
+    `/character/series/${encodeURIComponent(id)}/retry`,
+    { limit },
+    { timeout: 130000 },
+  );
+  return data;
+}

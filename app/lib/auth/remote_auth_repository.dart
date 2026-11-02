@@ -242,6 +242,12 @@ class RemoteAuthRepository implements AuthRepository {
     }
   }
 
+  /// 公开 API 访问：不要求登录；已有会话时附带 token，服务端可做个性化（如拉黑过滤）。
+  Future<Map<String, dynamic>> publicRequest(String path) async {
+    final token = await _secure.read(key: _kAccessToken);
+    return _get(path, accessToken: token);
+  }
+
   /// 原始二进制上传（视频等大文件）：与 JSON 请求同样保留一次续期重试。
   Future<Map<String, dynamic>> authenticatedUpload(
     String path, {
@@ -405,10 +411,15 @@ class RemoteAuthRepository implements AuthRepository {
   /// 对外暴露设备标识：回流计分等服务端去重依赖它。
   Future<String> deviceId() => _deviceId();
 
+  /// 与服务端 DEVICE_RE 保持一致：只接受字母、数字、下划线和连字符。
+  static final RegExp _deviceIdPattern = RegExp(r'^[A-Za-z0-9_-]{8,80}$');
+
   Future<String> _deviceId() async {
     final prefs = await _prefs;
     final existing = prefs.getString(_kDeviceId);
-    if (existing != null && existing.length >= 8) return existing;
+    // 历史版本可能写入带非法字符的标识；继续沿用会被服务端判定为设备信息缺失，
+    // 导致登录永远 400，这里校验不过就重新生成并覆盖。
+    if (existing != null && _deviceIdPattern.hasMatch(existing)) return existing;
 
     final random = Random.secure();
     const chars = '0123456789abcdef';

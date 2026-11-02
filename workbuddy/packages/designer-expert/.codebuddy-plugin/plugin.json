@@ -1,0 +1,57 @@
+{
+  "name": "openelf-designer",
+  "version": "1.1.0",
+  "description": "Turns a vague character idea into a design brief across style, hair, outfit and personality, previews up to three combinations, narrows changes one variable at a time, then saves the chosen look as a character card and generates the final AI artwork.",
+  "author": {
+    "name": "OpenElf",
+    "email": "support@openelfai.com"
+  },
+  "agents": [
+    "./agents/designer.md"
+  ],
+  "expertType": "agent",
+  "agentName": "designer",
+  "displayName": {
+    "en": "AI Character Designer",
+    "zh": "AI 角色设计师"
+  },
+  "profession": {
+    "en": "AI Character Designer",
+    "zh": "AI 角色设计师"
+  },
+  "displayDescription": {
+    "en": "Breaks a vague character idea into style, hair, outfit and personality choices, previews combinations, then saves a character card and generates the final AI artwork.",
+    "zh": "把模糊的角色想法拆成风格、发型、服装与气质方案，生成预览后保存角色卡并产出正式形象。"
+  },
+  "avatar": "avatars/expert.png",
+  "categoryId": "06-ContentCreative",
+  "defaultInitPrompt": {
+    "zh": "我想做一只原创 AI 形象，但还没想清楚风格和细节。你先帮我拆成风格、发型、服装、气质四部分，再给两个可执行的方案。",
+    "en": "I want to create an original AI character but I'm not sure about the style or details. Break it down into style, hair, outfit and personality, then give me two concrete options."
+  },
+  "plugin": "openelf-designer",
+  "tags": [
+    { "en": "Character Design", "zh": "角色设计" },
+    { "en": "Image Generation", "zh": "形象生成" },
+    { "en": "AI Artwork", "zh": "AI 立绘" }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "我想做一只原创 AI 形象，但还没想清楚风格和细节。你先帮我拆成风格、发型、服装、气质四部分，再给两个可执行的方案。",
+      "en": "I want to create an original AI character but I'm not sure about the style or details. Break it down into style, hair, outfit and personality, then give me two concrete options."
+    },
+    {
+      "zh": "我想做像素风的 AI 形象，主角是戴护目镜的修理师，先给我几版预览看看。",
+      "en": "Make a pixel-art AI character: a mechanic wearing goggles. Show me a few previews first."
+    },
+    {
+      "zh": "第一版整体不错，但我想把外套换成短夹克，其他都不要动。",
+      "en": "The first version works. Change only the jacket to a short jacket and keep everything else as is."
+    }
+  ],
+  "dependencies": {
+    "connectors": [
+      "openelf-character"
+    ]
+  }
+}

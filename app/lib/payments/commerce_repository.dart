@@ -92,6 +92,19 @@ class CommerceRepository {
     return _auth.authenticatedRequest('${CommerceConfig.feedPath}?$query');
   }
 
+  /// 公开信息流：桌面 / Web / 游客使用，无需登录；
+  /// 已有会话时自动附带 token，服务端按个人拉黑过滤。
+  Future<Map<String, dynamic>> publicFeed(
+      {required String channel, String sort = 'recommend', int page = 0, int size = 20}) async {
+    final query = Uri(queryParameters: {
+      'channel': channel,
+      'sort': sort,
+      'page': '$page',
+      'size': '$size',
+    }).query;
+    return _auth.publicRequest('${ApiConfig.publicFeedPath}?$query');
+  }
+
   /// 能力许愿：把用户期待的能力留给产品团队，不涉及扣费。
   Future<void> submitWish(String userId, String mode, String text) async {
     if ((await _auth.currentUser)?.id != userId) {

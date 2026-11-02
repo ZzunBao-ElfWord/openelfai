@@ -1,7 +1,12 @@
 ---
 name: openelf-character
+display_name: 形象工坊 OpenElf
+display_name_en: AI Image Studio OpenElf
 description: 通过 OpenElf 形象工坊连接器，把一句话想法变成可预览、可保存的 AI 形象。
-version: 1.0.0
+description_zh: 拆解风格与配件、生成预览、保存角色卡并产出正式 AI 形象。
+description_en: Turn a one-line idea into a previewable character card and final AI artwork.
+author: "OpenElf"
+version: 1.0.1
 x-openelf:
   requires_connector: openelf-character
   min_plan: free
@@ -35,51 +40,64 @@ x-openelf:
 
 ## 参数说明
 
+参数名以工具 schema 为准，未列出的字段不要传（schema 禁止多余字段，传了会直接报参数错误）。
+
 ### fetch_layers
 
-无必填参数，可选 `style` 过滤。返回 `slots`（槽位顺序）与 `comboSpace`（组合空间）。
+无参数。返回各层可选配件与组合空间（`slots`、`comboSpace`）。
 
 ### generate_preview
 
 | 参数 | 类型 | 必填 | 说明 |
 |---|---|---|---|
-| `style` | string | 否 | 风格标识，如 `general` / `pixel` / `comic` / `painterly` |
+| `style` | string | 否 | 风格标识，缺省 `general` |
 | `seed` | integer | 否 | 非负整数；同风格同 seed 复现同一组合，不传则随机 |
-| `traits` | object | 否 | `{slot: partId}`，只覆盖指定槽位，其余仍随机 |
+| `traits` | object | 否 | `{slot: partId}`，只覆盖指定槽位，其余由种子决定 |
 
-返回 `thumbDataUrl`（缩略图）、`traits`、`compositionHash`、`rarity`。
+返回 `thumbDataUrl`（缩略图，data URL）、`compositionHash`、`rarityScore`、`rarityTier`。
 
 ### create_character
+
+只保存角色卡草稿，不生成图片、不扣费。
 
 | 参数 | 类型 | 必填 | 说明 |
 |---|---|---|---|
 | `name` | string | 是 | 角色名，1–64 字 |
-| `style` | string | 否 | 与预览保持一致 |
-| `prompt` | string | 否 | 用户原话或结构化描述，建议 ≤ 4000 字 |
+| `source` | string | 否 | 固定 `text`（当前仅支持文本描述） |
+| `style` | string | 否 | 与预览保持一致，缺省 `general` |
+| `prompt` | string | 否 | 角色外观描述，≤ 4000 字 |
 | `persona` / `fear` / `habit` | string | 否 | 人格、恐惧、习惯，各 ≤ 1000 字 |
-| `traits` | object | 否 | 预览确认的 `{slot: partId}` |
-| `seed` | integer | 否 | 预览使用的种子，保持可复现 |
 
-返回角色卡对象，含 `id`、`name`、`status`、`seed`、`traits`。
+返回角色卡，含 `id`、`name`、`status`。
 
 ### generate_character
 
 | 参数 | 类型 | 必填 | 说明 |
 |---|---|---|---|
-| `character_id` | string | 是 | 角色卡 id |
-| `traits` | object | 否 | 想调整的槽位，未传则沿用卡上组合 |
-| `seed` | integer | 否 | 想重掷时传入新种子 |
-| `refine` | boolean | 否 | 是否做质感增强；默认关闭，失败会自动回退为合成图 |
+| `characterId` | string | 是 | 角色卡 ID（注意是驼峰命名） |
+| `traits` | object | 否 | 覆盖指定槽位，未指定的沿用卡上组合 |
+| `seed` | integer | 否 | 想重掷时传新种子 |
+| `refine` | boolean | 否 | 质感增强；默认关闭，失败自动回退为合成图 |
 
 返回 `card`、`imageUrl`（大图）、`thumbUrl`（缩略图）、`refine`。
 
 ### generate_batch
 
-`count` 1–10（超出直接拒绝）、`style`、`seedStart`（非负整数，按序递增）、`name`。返回批次 id、`sheetKey`（联系表）与逐条 `items`。
+| 参数 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `count` | integer | 是 | 1–10，超出直接拒绝 |
+| `style` | string | 否 | 缺省 `anime` |
+| `name` | string | 否 | 批次名称，缺省按风格自动命名 |
 
-### get_character / list_my_characters
+返回 `batchId`、`count`、`items`（含 `imageUrl`、`thumbUrl`）、`sheetUrl`（联系表）。
 
-`character_id` 必填；列表可选 `limit`（1–200）。
+### get_character
+
+`characterId` 必填（驼峰），返回单张角色卡与图片地址。
+
+### list_my_characters
+
+无参数，列出当前 API Key 所属账号的全部角色卡。
 
 ## 结果展示
 

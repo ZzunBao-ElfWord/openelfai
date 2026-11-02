@@ -12,6 +12,7 @@ async function platformPlugin(fastify, opts) {
     baseUrl: config.litellm.baseUrl,
     masterKey: config.litellm.masterKey,
     timeoutMs: config.litellm.timeoutMs,
+    telemetry: opts?.telemetry,
   });
   const gateway = createGateway({ db, billing, upstream });
 

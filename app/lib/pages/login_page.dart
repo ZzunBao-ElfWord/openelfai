@@ -11,6 +11,7 @@ import '../auth/auth_repository.dart';
 import '../auth/web_captcha_stub.dart'
     if (dart.library.js_interop) '../auth/web_captcha_web.dart';
 import '../config/captcha_config.dart';
+import '../config/runtime_platform.dart';
 import '../services/app_content_service.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
@@ -132,6 +133,11 @@ class _LoginPageState extends State<LoginPage> {
   Future<CaptchaProof?> _verifyCaptcha() async {
     if (kIsWeb) {
       return verifyWebCaptcha();
+    }
+    // Preserve desktop browsing, but never fabricate an H5 verification proof.
+    if (usesBrowserAuthFlow) {
+      throw const AuthException(
+          'CAPTCHA_UNAVAILABLE', '桌面端暂不支持图形验证，请通过网页或手机端登录');
     }
     final String platform;
     final String captchaId;

@@ -38,10 +38,22 @@ const { decrypt, keyHint } = require('./platform/secret');
 const { createConsoleHandlers } = require('./platform/console');
 const { createTopupService } = require('./platform/topup');
 const { createUpstream } = require('./platform/upstream');
+const { createTelemetry } = require('./platform/telemetry');
 const { ensureVendorAgents, createWorldAgentService } = require('./world_agents');
 const { createArkVideoClient, createWorldVideoService } = require('./world_videos');
 const { createWorldUploadService } = require('./world_uploads');
 const { createKnowledgeService, buildContextBlock } = require('./knowledge');
+const { createElfMemory } = require('./elf_memory');
+const { createMcpClient } = require('./mcp/client');
+const { createMcpServerService } = require('./mcp/servers');
+const { registerMcpServerRoutes } = require('./mcp/routes');
+const { createTtsService } = require('./media/tts');
+const { createComfyService } = require('./media/comfy');
+const { createMediaUsage } = require('./media/usage');
+const { registerMediaRoutes } = require('./media/routes');
+const { createCivitaiService } = require('./media/civitai');
+const { createCivitaiFavorites } = require('./media/civitai_favorites');
+const { registerCivitaiRoutes } = require('./media/civitai_routes');
 
 const PHONE_RE = /^1[3-9]\d{9}$/;
 const DEVICE_RE = /^[A-Za-z0-9_-]{8,80}$/;
@@ -68,8 +80,20 @@ const AI_UPSTREAM_ERROR = {
   message: 'AI 服务暂时不可用，请稍后再试',
 };
 
+/// 世界对话的固定话术：不向访客暴露持有人的 Key / 余额等细节，语气与既有兜底一致。
+const FIXED_REPLIES = {
+  world_chat_closed:
+    process.env.WORLD_CHAT_CLOSED_REPLY || '（这只 AI 还没有开放世界对话，先去和别的 AI 聊聊吧～）',
+  world_chat_visitor_limit:
+    process.env.WORLD_CHAT_VISITOR_LIMIT_REPLY || '（今天和这只 AI 的对话次数用完啦，明天再来吧～）',
+  world_chat_elf_budget:
+    process.env.WORLD_CHAT_ELF_BUDGET_REPLY || '（这只 AI 今天接待的朋友太多啦，明天再来吧～）',
+  world_chat_owner_unavailable:
+    process.env.WORLD_CHAT_OWNER_UNAVAILABLE_REPLY || '（这只 AI 暂时无法接待，稍后再来看看吧～）',
+};
+
 function fixedReply(reason) {
-  return { mode: 'fixed', reply: FALLBACK_REPLY, reason };
+  return { mode: 'fixed', reply: FIXED_REPLIES[reason] || FALLBACK_REPLY, reason };
 }
 
 async function readPlatformWallet(db, userId) {
@@ -190,7 +214,10 @@ async function buildApp(options = {}) {
   const appleVerifier = options.appleVerifier || (config.appleIap.enabled
     ? await createAppleVerifier(config.appleIap) : null);
   const communityReviewStore = options.paymentStore || createPaymentStore(db);
+  // 社区规范门禁：首次发帖/评论前校验已同意条款，被制裁账号或 AI 禁止发布。
+  // 未包装实例保留给 /internal/community/* 审核通道，审核动作不走同意校验。
   const paymentStore = wrapStore(communityReviewStore);
+  // 举报、拉黑与账号注销：独立于交易环境，跨 iOS / 安卓共享。
   const compliance = options.compliance || createComplianceService({ db, store: paymentStore });
   // 实名核验：服务端对接阿里云实人认证，客户端只上传原始要素与证件照。
   const realname = options.realname || createRealnameVerifier(config.realname);
@@ -207,7 +234,7 @@ async function buildApp(options = {}) {
   const payoutQuery = alipayGateway?.queryTransfer ? async row => alipayGateway.queryTransfer({
     outTradeNo: row.outTradeNo, amountCents: row.netCents,
   }) : null;
-  const commerce = createCommerceService({ store: paymentStore, settings: config.appleIap, payout, payoutQuery,
+  const commerce = createCommerceService({ db, store: paymentStore, settings: config.appleIap, payout, payoutQuery,
     realname, identityPolicy, compliance });
   const appleIap = createAppleIapService({
     db,
@@ -216,7 +243,7 @@ async function buildApp(options = {}) {
     paymentStore,
     verifyNotification: options.appleNotificationVerifier,
   });
-  const androidCommerce = createCommerceService({ store: paymentStore, settings: config.androidCommerce, payout, payoutQuery,
+  const androidCommerce = createCommerceService({ db, store: paymentStore, settings: config.androidCommerce, payout, payoutQuery,
     realname, identityPolicy, compliance });
   const alipay = createAlipayService({ store: paymentStore, settings: config.alipay,
     commerceSettings: config.androidCommerce,
@@ -244,10 +271,18 @@ async function buildApp(options = {}) {
 
   app.decorate('db', db);
 
+  // LLM 可观测（Langfuse）：未配置密钥时为无操作实现，不影响业务链路。
+  const telemetry = options.telemetry || createTelemetry({
+    ...platformConfig.langfuse,
+    release: process.env.APP_VERSION || undefined,
+    logger: app.log,
+  });
+
   const worldUpstream = options.worldUpstream || createUpstream({
     baseUrl: platformConfig.litellm.baseUrl,
     masterKey: platformConfig.litellm.masterKey,
     timeoutMs: platformConfig.litellm.timeoutMs,
+    telemetry,
   });
   const worldAgents = createWorldAgentService({
     store: paymentStore,
@@ -264,6 +299,8 @@ async function buildApp(options = {}) {
       for (const vendor of config.worldAgents.vendors) vendors.add(vendor);
       return vendors;
     },
+    // 官方账号自动运营走平台自持 Key：成功响应后按精灵 + 来源计量成本。
+    recordCost: (elfId, source, tokens) => commerce.recordElfCost(elfId, source, tokens),
   });
 
   // 官方账号头像与短视频的静态目录，路由与视频引擎共用同一份路径。
@@ -283,6 +320,7 @@ async function buildApp(options = {}) {
     settings: config.worldVideos,
     logger: app.log,
     assetBaseUrl: config.worldVideos.assetBaseUrl,
+    recordCost: (elfId, source, tokens) => commerce.recordElfCost(elfId, source, tokens),
   });
 
   // 人类上传的 AI 生成视频：与官方短视频共用同一媒体目录与播放路由。
@@ -296,6 +334,39 @@ async function buildApp(options = {}) {
   const consoleHandlers = createConsoleHandlers({ db });
   // 知识库默认关闭，只有 elf_knowledge_config 里显式开启的 AI 才会注入检索片段。
   const knowledge = createKnowledgeService({ db });
+  // 精灵记忆：平台买单的廉价模型抽取，受单精灵日配额与单对容量上限约束。
+  const elfMemory = options.elfMemory || createElfMemory({
+    db,
+    upstream: worldUpstream,
+    logger: app.log,
+    recordCost: (elfId, tokens) => commerce.recordElfCost(elfId, 'memory', tokens),
+  });
+  // 入向 MCP：用户注册的外部 MCP Server 供精灵对话调用，默认禁止指向内网。
+  const mcpClient = options.mcpClient || createMcpClient({
+    timeoutMs: config.inboundMcp.timeoutMs,
+    allowPrivateHosts: config.inboundMcp.allowPrivateHosts,
+    logger: app.log,
+  });
+  const mcpServers = options.mcpServers || createMcpServerService({ db, client: mcpClient, logger: app.log });
+  // 媒体能力：语音落 assets/world/audio，ComfyUI 图片与生成器共用 assets/world。
+  // 未配置上游时 isEnabled() 为 false，接口直接返回未启用，不产生调用。
+  const mediaAudioDir = options.mediaAudioDir || path.join(worldAssetDir, 'audio');
+  const tts = options.tts || createTtsService({
+    settings: config.media.tts,
+    mediaDir: mediaAudioDir,
+    assetBaseUrl: config.worldVideos.assetBaseUrl,
+    logger: app.log,
+  });
+  const comfy = options.comfy || createComfyService({
+    settings: config.media.comfy,
+    mediaDir: worldAssetDir,
+    assetBaseUrl: config.worldVideos.assetBaseUrl,
+    logger: app.log,
+  });
+  const mediaUsage = options.mediaUsage || createMediaUsage({ db });
+  // Civitai 闭环：搜索资源 → 收藏 → 出图引用，模型文件由运维装到 ComfyUI。
+  const civitai = options.civitai || createCivitaiService({ logger: app.log });
+  const civitaiFavorites = options.civitaiFavorites || createCivitaiFavorites({ db });
 
   // 跨域：只允许白名单来源携带 CORS 头；预检请求统一 204。
   app.addHook('onRequest', async (request, reply) => {
@@ -312,7 +383,12 @@ async function buildApp(options = {}) {
     }
   });
 
-  await app.register(require('./platform'));
+  await app.register(require('./platform'), { telemetry });
+
+  // 进程退出前把缓冲的遥测事件冲刷出去，避免丢 trace。
+  app.addHook('onClose', async () => {
+    await telemetry.shutdown();
+  });
 
   app.register(rateLimit, {
     global: true,
@@ -649,19 +725,27 @@ async function buildApp(options = {}) {
     });
   });
 
+  // Community and push were registered above with compliance and test hooks.
+
   // 官方账号头像：静态资源体积小，直接按文件名白名单读取，避免额外挂静态目录。
   // 官方账号生成的短视频与封面：文件名由服务端生成，只允许访问这一层目录。
   app.get('/api/v1/world-assets/videos/:file', async (request, reply) => {
     const file = String(request.params?.file || '');
-    if (!/^[a-z0-9_-]+\.(mp4|jpg|jpeg|webp)$/i.test(file)) {
+    if (!/^[a-z0-9_-]+\.(mp4|jpg|jpeg|webp|srt)$/i.test(file)) {
       return reply.code(404).send({ error: { code: 'NOT_FOUND', message: '资源不存在' } });
     }
     const isVideo = file.toLowerCase().endsWith('.mp4');
+    const isSubtitle = file.toLowerCase().endsWith('.srt');
     try {
       const target = path.join(worldVideoDir, file);
       const stat = await fs.stat(target);
       const buf = await fs.readFile(target);
       reply.header('cache-control', 'public, max-age=86400');
+      if (isSubtitle) {
+        reply.type('text/plain; charset=utf-8');
+        reply.header('content-length', String(stat.size));
+        return reply.send(buf);
+      }
       if (!isVideo) {
         reply.type('image/jpeg');
         reply.header('content-length', String(stat.size));
@@ -708,15 +792,55 @@ async function buildApp(options = {}) {
     });
   });
 
+  // 生成器产出（图片与 zip 包）也走这一层目录，文件名由服务端生成。
   app.get('/api/v1/world-assets/:file', async (request, reply) => {
     const file = String(request.params?.file || '');
-    if (!/^[a-z0-9_-]+\.(png|jpg|jpeg|webp)$/i.test(file)) {
+    if (!/^[a-z0-9_-]+\.(png|jpg|jpeg|webp|zip)$/i.test(file)) {
       return reply.code(404).send({ error: { code: 'NOT_FOUND', message: '资源不存在' } });
     }
     try {
       const buf = await fs.readFile(path.join(worldAssetDir, file));
       reply.header('cache-control', 'public, max-age=86400');
-      reply.type(file.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg');
+      const lower = file.toLowerCase();
+      if (lower.endsWith('.zip')) {
+        reply.type('application/zip');
+      } else {
+        reply.type(lower.endsWith('.png') ? 'image/png' : 'image/jpeg');
+      }
+      return reply.send(buf);
+    } catch {
+      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: '资源不存在' } });
+    }
+  });
+
+  // 媒体能力产出的语音：与视频同一套 Range 逻辑，供播放器拖动与首帧加载。
+  app.get('/api/v1/world-assets/audio/:file', async (request, reply) => {
+    const file = String(request.params?.file || '');
+    if (!/^[a-z0-9_-]+\.(mp3|m4a|wav)$/i.test(file)) {
+      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: '资源不存在' } });
+    }
+    try {
+      const target = path.join(mediaAudioDir, file);
+      const stat = await fs.stat(target);
+      const buf = await fs.readFile(target);
+      reply.header('cache-control', 'public, max-age=86400');
+      reply.header('accept-ranges', 'bytes');
+      reply.type(file.toLowerCase().endsWith('.wav') ? 'audio/wav' : 'audio/mpeg');
+      const range = String(request.headers.range || '');
+      const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+      if (match && (match[1] || match[2])) {
+        const size = buf.length;
+        let start = match[1] ? Number(match[1]) : size - Number(match[2]);
+        let end = match[1] && match[2] ? Number(match[2]) : size - 1;
+        start = Math.max(0, Math.min(start, size - 1));
+        end = Math.max(start, Math.min(end, size - 1));
+        const slice = buf.subarray(start, end + 1);
+        reply.code(206);
+        reply.header('content-range', `bytes ${start}-${end}/${size}`);
+        reply.header('content-length', String(slice.length));
+        return reply.send(slice);
+      }
+      reply.header('content-length', String(stat.size));
       return reply.send(buf);
     } catch {
       return reply.code(404).send({ error: { code: 'NOT_FOUND', message: '资源不存在' } });
@@ -818,8 +942,6 @@ async function buildApp(options = {}) {
         action: request.body?.action, reason: request.body?.reason,
         payeeVerified: request.body?.payeeVerified === true });
     });
-
-  // 信息流分页：排序、分页、去重都在服务端完成，客户端只按页追加。
   app.post('/internal/withdrawals/:id/reconcile', async request => {
     requireReviewToken(request);
     const environment = request.body?.environment === 'sandbox' ? 'Sandbox' : 'Production';
@@ -827,11 +949,23 @@ async function buildApp(options = {}) {
     return service.reconcileWithdrawal({ environment, withdrawalId: request.params.id });
   });
 
+  // 信息流分页：排序、分页、去重都在服务端完成，客户端只按页追加。
   app.get('/api/v1/commerce/feed',
     { config: { rateLimit: { max: 120, timeWindow: '1 minute' } } },
     async (request) => {
       const { user } = await authenticate(request);
       return commerce.listFeed(user, request.query);
+    });
+
+  // 公开信息流：世界流面向全端开放（桌面/Web/游客），登录态可选——
+  // 带有效 token 时按个人拉黑过滤，游客看公共内容；环境固定为 Production，与支付开关解耦。
+  app.get('/api/v1/feed',
+    { config: { rateLimit: { max: 120, timeWindow: '1 minute' } } },
+    async (request) => {
+      let user = null;
+      try { ({ user } = await authenticate(request)); } catch (_) { /* 游客访问 */ }
+      return require('./public_feed').publicFeed(communityReviewStore, user,
+        { ...request.query, environment: 'Production' }, compliance);
     });
 
   app.post('/api/v1/commerce/actions',
@@ -1362,14 +1496,79 @@ async function buildApp(options = {}) {
   // 开发者生态：入驻、技能草稿、沙箱调试（/api/v1/developer/*）。
   require('./developer/routes').registerDeveloperRoutes(app, { db, authenticate });
 
-  // AI 形象内核：配件目录、角色卡草稿、预览与生成（/api/v1/character/*）。
-  require('./character/routes').registerCharacterRoutes(app, { db, authenticate });
+  // AI 形象内核：配件目录、角色卡草稿、预览、生成与 UGC 铸造（/api/v1/character/*）。
+  require('./character/routes').registerCharacterRoutes(app, {
+    db, authenticate, commerce, androidCommerce,
+  });
 
   // 形象运营精修：配件覆盖与批量生成（/internal/ops/character/*，仅运维令牌可访问）。
-  require('./character/ops_routes').registerOpsRoutes(app, { db });
+  require('./character/ops_routes').registerOpsRoutes(app, { db, commerce });
 
   // MCP 连接器：WorkBuddy 等外部客户端用用户自己的 API Key 调用形象工具（/mcp）。
   require('./mcp/server').registerMcpRoutes(app, { db });
+
+  // 入向 MCP：用户注册外部 MCP Server（App 登录态），对话中由精灵调用其工具。
+  registerMcpServerRoutes(app, { authenticate, mcpServers });
+
+  // 媒体能力：语音合成与 ComfyUI 出图（App 登录态，按用户日配额限流）。
+  registerMediaRoutes(app, { authenticate, tts, comfy, usage: mediaUsage, favorites: civitaiFavorites });
+
+  // Civitai 资源库：搜索、详情与收藏（收藏可在出图时作为 LoRA 引用）。
+  registerCivitaiRoutes(app, {
+    authenticate,
+    civitai,
+    favorites: civitaiFavorites,
+    usage: mediaUsage,
+    dailyLimit: config.media.civitai.dailySearchLimit,
+    enabled: config.media.civitai.enabled,
+  });
+
+  // 视频剪辑连接器：独立端点 /mcp/video，剪辑走本机 ffmpeg，转写走可配置 ASR。
+  if (config.videoMcp.enabled) {
+    const { createVideoTools } = require('./mcp/video_tools');
+    const videoTools = createVideoTools({
+      db,
+      mediaDir: worldVideoDir,
+      workDir: config.videoMcp.workDir || path.join(worldAssetDir, 'video-work'),
+      ffmpegPath: config.videoMcp.ffmpegPath,
+      ffprobePath: config.videoMcp.ffprobePath,
+      logger: app.log,
+      asr: {
+        provider: config.videoMcp.asrProvider,
+        url: config.videoMcp.asrUrl,
+        baseUrl: config.videoMcp.asrBaseUrl,
+        apiKey: config.videoMcp.asrApiKey,
+        model: config.videoMcp.asrModel,
+        timeoutMs: config.videoMcp.asrTimeoutMs,
+      },
+    });
+    require('./mcp/server').registerMcpRoutes(app, {
+      db,
+      routePath: '/mcp/video',
+      serverInfo: { name: 'openelf-video', version: '1.0.0' },
+      tools: videoTools,
+    });
+  }
+
+  // 千人千面生成器连接器：独立端点 /mcp/generator，图片落 worldAssetDir 根目录。
+  if (config.generatorMcp.enabled) {
+    const { createGeneratorTools } = require('./generator/tools');
+    const generatorTools = createGeneratorTools({
+      db,
+      mediaDir: worldAssetDir,
+      logger: app.log,
+    });
+    require('./mcp/server').registerMcpRoutes(app, {
+      db,
+      routePath: '/mcp/generator',
+      serverInfo: { name: 'openelf-generator', version: '1.0.0' },
+      tools: generatorTools,
+    });
+  }
+
+  // 生成器作品的 App 端只读接口：发现页画廊（公开）+ 我的作品（登录态）。
+  // 与连接器开关解耦：即使生成入口关闭，已有作品仍可浏览。
+  require('./generator/routes').registerGeneratorRoutes(app, { db, authenticate });
 
   app.get('/api/v1/platform/console/overview', async (request) => {
     const { user } = await authenticate(request);
@@ -1388,6 +1587,200 @@ async function buildApp(options = {}) {
 
   // —— Elf 对话：使用用户名下的默认密钥调用本机开放平台网关 ——
 
+  // 对话可挂载的技能白名单：只有列出的技能允许在私聊里调用工具。
+  const CHAT_SKILLS = new Set(['image-studio-skill']);
+
+  // 技能说明：等价于 WorkBuddy 里由技能包注入的系统提示，约束模型怎么用工具。
+  const SKILL_PROMPTS = {
+    'image-studio-skill': [
+      '你已挂载「形象工坊 OpenElf」技能，可以通过工具直接产出角色形象。',
+      '可用工具：fetch_layers（部件目录）、generate_preview（免费预览，可批量多次调用）、',
+      'generate_batch（批量联系表）、create_character（创建角色卡）、generate_character（生成正式形象）、',
+      'get_character / list_my_characters（查询已有角色）。',
+      '工作方式：先按用户描述提炼风格与外貌要点；需要了解可选部件时调用 fetch_layers；',
+      '然后连续调用 2-4 次 generate_preview（不同 seed）给出多版方案，或按用户要求的数量调整。',
+      '图片会自动展示在对话里，正文里不要粘贴 base64、data:image 链接或图片 markdown；',
+      '正文只需简短说明每版风格与稀有度，并给出下一步建议（例如选定后创建角色卡再生成正式形象）。',
+      '工具参数必须严格按 schema 字段名传，不要自造参数。',
+    ].join(''),
+  };
+
+  /// 去掉正文里的 base64 图片，避免把几 MB 的 data URI 塞进聊天气泡。
+  function sanitizeReply(text) {
+    if (typeof text !== 'string') return '';
+    return text
+      .replace(/!\[[^\]]*\]\(\s*data:image\/[^)]*\)/gi, '')
+      .replace(/data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]{100,}/gi, '')
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+
+  /// 读取 MCP 工具清单（连接器即形象工坊，鉴权用用户自己的 API Key）。
+  async function fetchChatTools(baseUrl, apiKey) {
+    const res = await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+    });
+    if (!res.ok) return [];
+    const payload = await res.json().catch(() => null);
+    const tools = payload?.result?.tools;
+    if (!Array.isArray(tools)) return [];
+    // MCP 的 inputSchema → OpenAI function 工具格式
+    return tools
+      .filter((tool) => typeof tool?.name === 'string')
+      .map((tool) => ({
+        type: 'function',
+        function: {
+          name: tool.name,
+          description: tool.description || '',
+          parameters: tool.inputSchema || { type: 'object', properties: {} },
+        },
+      }));
+  }
+
+  /// 执行一次 MCP 工具调用，返回结构化结果与可供客户端展示的图片地址。
+  async function callChatTool(baseUrl, apiKey, name, args) {
+    const res = await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        jsonrpc: '2.0', id: 2, method: 'tools/call',
+        params: { name, arguments: args || {} },
+      }),
+    });
+    const payload = await res.json().catch(() => null);
+    const result = payload?.result;
+    if (!result) {
+      const message = payload?.error?.message || `工具 ${name} 调用失败`;
+      return { ok: false, content: JSON.stringify({ error: message }), images: [] };
+    }
+    if (result.isError) {
+      const text = result.content?.find((item) => item?.type === 'text')?.text || '工具调用失败';
+      return { ok: false, content: JSON.stringify({ error: text }), images: [] };
+    }
+    const images = collectToolImages(result.structuredContent);
+    const textPart = result.content?.find((item) => item?.type === 'text')?.text;
+    const content = textPart || JSON.stringify(result.structuredContent || {});
+    return { ok: true, content, images };
+  }
+
+  /// 从工具结果里挑可直接渲染的图片：http 地址直传，base64 缩略图限长保护。
+  function collectToolImages(node, out = []) {
+    if (!node || out.length >= 6) return out;
+    if (Array.isArray(node)) {
+      for (const item of node) collectToolImages(item, out);
+      return out;
+    }
+    if (typeof node !== 'object') return out;
+    for (const key of ['imageUrl', 'thumbUrl', 'sheetUrl']) {
+      const value = node[key];
+      if (typeof value === 'string' && value.startsWith('http') && !out.includes(value)) out.push(value);
+    }
+    const thumb = node.thumbDataUrl;
+    if (
+      typeof thumb === 'string' &&
+      thumb.startsWith('data:image/') &&
+      thumb.length <= 200000 &&
+      !out.includes(thumb)
+    ) {
+      out.push(thumb);
+    }
+    for (const value of Object.values(node)) collectToolImages(value, out);
+    return out;
+  }
+
+  /// 带技能的一轮对话：模型多次调用工具，直到给出最终文本。
+  /// messages 已含入参里的当前用户提问，此处不再重复追加。
+  /// extraTools / callExtraTool：用户外部 MCP 工具，与内置工具合并后同一轮循环分发。
+  async function chatWithSkills({
+    baseUrl, apiKey, model, messages, skills = [],
+    extraTools = [], callExtraTool = null, extraPrompt = '', maxRounds = 4,
+  }) {
+    const builtinTools = await fetchChatTools(baseUrl, apiKey);
+    const tools = [...builtinTools, ...extraTools];
+    const extraNames = new Set(extraTools.map((tool) => tool?.function?.name).filter(Boolean));
+    const history = [...messages];
+    // 技能说明紧跟人设之后，避免覆盖 AI 自己的语气设定。
+    const prompts = [...skills.map((id) => SKILL_PROMPTS[id]), extraPrompt].filter(Boolean);
+    if (prompts.length) {
+      history.splice(1, 0, { role: 'system', content: prompts.join('\n') });
+    }
+    const images = [];
+    const steps = [];
+    if (!tools.length) {
+      // 没有可用工具时退回普通对话，不让用户卡在空回复。
+      const res = await fetch(`${baseUrl}/v1/chat/completions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({ model, messages: history, max_tokens: 800 }),
+        signal: AbortSignal.timeout(60000),
+      });
+      if (!res.ok) return { reply: '', images, steps };
+      const payload = await res.json().catch(() => null);
+      const content = payload?.choices?.[0]?.message?.content;
+      return { reply: sanitizeReply(content), images, steps };
+    }
+    for (let round = 1; round <= maxRounds; round++) {
+      const res = await fetch(`${baseUrl}/v1/chat/completions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model, messages: history, tools, tool_choice: 'auto', temperature: 0.3, max_tokens: 800,
+        }),
+        signal: AbortSignal.timeout(60000),
+      });
+      const payload = await res.json().catch(() => null);
+      const message = payload?.choices?.[0]?.message;
+      if (!message) return { reply: '', images, steps };
+      const calls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
+      if (!calls.length) {
+        return { reply: sanitizeReply(message.content), images, steps };
+      }
+      history.push(message);
+      for (const call of calls) {
+        const name = call?.function?.name || '';
+        let args = {};
+        try {
+          args = JSON.parse(call?.function?.arguments || '{}');
+        } catch (_) {
+          args = {};
+        }
+        const result = callExtraTool && extraNames.has(name)
+          ? await callExtraTool(name, args)
+          : await callChatTool(baseUrl, apiKey, name, args);
+        for (const image of result.images) {
+          if (!images.includes(image)) images.push(image);
+        }
+        steps.push({ round, tool: name, ok: result.ok });
+        history.push({ role: 'tool', tool_call_id: call.id, content: result.content.slice(0, 200000) });
+      }
+    }
+    return { reply: '技能调用步数超出上限，请再试一次。', images, steps };
+  }
+
+  // 持有人开关「世界对话」：开启前置条件是本人已配置可用 API Key 且平台余额大于 0。
+  app.post('/api/v1/elf/world-chat', { bodyLimit: 8 * 1024 }, async (request) => {
+    const { user } = await authenticate(request);
+    const elfId = typeof request.body?.elfId === 'string' ? request.body.elfId.trim() : '';
+    if (!elfId) throw fail(400, 'INVALID_ELF', '缺少 AI 标识');
+    const open = request.body?.open === true;
+    // 先校验归属，再验前置条件：非持有人一律 403，不暴露前置条件的任何信息。
+    const existing = await commerce.getElfById(elfId);
+    if (!existing) throw fail(404, 'ELF_NOT_FOUND', '没有找到这只 AI');
+    if (existing.ownerId !== user.id) throw fail(403, 'ELF_NOT_OWNED', '只有持有人能设置这只 AI 的世界对话');
+    if (open) {
+      const apiKey = await getDefaultKeyPlain(db, user.id);
+      const wallet = await readPlatformWallet(db, user.id);
+      if (!apiKey || wallet.balance_micro - wallet.frozen_micro <= 0) {
+        throw fail(400, 'WORLD_CHAT_PRECONDITION', '需要先配置可用的 API Key 并保持平台余额大于 0');
+      }
+    }
+    const elf = await commerce.setWorldChatOpen(user, elfId, open);
+    return { elf };
+  });
+
   app.post('/api/v1/elf-chat', { bodyLimit: 64 * 1024 }, async (request, reply) => {
     const { user } = await authenticate(request);
     const text = readChatText(request.body);
@@ -1405,12 +1798,30 @@ async function buildApp(options = {}) {
       return saved ? { ...payload, messages: saved.messages } : payload;
     };
 
-    const apiKey = await getDefaultKeyPlain(db, user.id);
-    if (!apiKey) return done(fixedReply('no_api_key'));
+    // 访客网关：与别人的 AI 纯对话（不带技能）时，费用由持有人承担，受三重额度约束。
+    // 带技能的「对外干活」请求、官方 AI（store 查不到）、持有人自己都走调用者自付链路。
+    const skillRequest = Array.isArray(request.body?.skills) && request.body.skills.length > 0;
+    let worldChatElf = null;
+    if (elfId && !skillRequest) {
+      const elf = await commerce.getElfById(elfId);
+      if (elf && elf.ownerId && elf.ownerId !== user.id) {
+        if (!elf.worldChatOpen) return done(fixedReply('world_chat_closed'));
+        const usage = await commerce.worldChatUsage(elfId, user.id);
+        const visitorLimit = Math.max(1, Number(process.env.WORLD_CHAT_VISITOR_DAILY_LIMIT) || 20);
+        if (usage.visitorToday >= visitorLimit) return done(fixedReply('world_chat_visitor_limit'));
+        const elfBudget = Math.max(1, Number(process.env.WORLD_CHAT_ELF_DAILY_BUDGET_MICRO) || 2000000);
+        if (usage.elfCostMicroToday >= elfBudget) return done(fixedReply('world_chat_elf_budget'));
+        worldChatElf = elf;
+      }
+    }
+    // 世界对话的付款方是持有人；固定话术对访客屏蔽持有人的 Key / 余额细节。
+    const payerId = worldChatElf ? worldChatElf.ownerId : user.id;
+    const apiKey = await getDefaultKeyPlain(db, payerId);
+    if (!apiKey) return done(fixedReply(worldChatElf ? 'world_chat_owner_unavailable' : 'no_api_key'));
 
-    const wallet = await readPlatformWallet(db, user.id);
+    const wallet = await readPlatformWallet(db, payerId);
     if (wallet.balance_micro - wallet.frozen_micro <= 0) {
-      return done(fixedReply('insufficient_balance'));
+      return done(fixedReply(worldChatElf ? 'world_chat_owner_unavailable' : 'insufficient_balance'));
     }
 
     const messages = [{ role: 'system', content: buildElfSystemPrompt(request.body) }];
@@ -1428,9 +1839,57 @@ async function buildApp(options = {}) {
       } catch (error) {
         app.log?.warn?.({ err: error, elfId }, 'elf knowledge retrieval failed');
       }
+      // 记忆召回只服务纯对话场景：技能「干活」对话不注入，避免干扰工具循环。
+      // 召回失败只记日志，不阻断对话。
+      if (!skillRequest) {
+        try {
+          const memoryFacts = await elfMemory.recall(elfId, user.id, text);
+          const memoryBlock = elfMemory.buildMemoryBlock(memoryFacts);
+          if (memoryBlock) messages.push({ role: 'system', content: memoryBlock });
+        } catch (error) {
+          app.log?.warn?.({ err: error, elfId }, 'elf memory recall failed');
+        }
+      }
     }
     messages.push(...history.slice(-CHAT_HISTORY_WINDOW), { role: 'user', content: text });
     const baseUrl = process.env.PLATFORM_SELF_URL || `http://127.0.0.1:${config.port}`;
+
+    // 挂载了技能时走「模型 + 工具」循环，交互形态与 WorkBuddy 一致。
+    const skills = Array.isArray(request.body?.skills)
+      ? request.body.skills.filter((item) => typeof item === 'string' && CHAT_SKILLS.has(item.trim()))
+      : [];
+    // 外部 MCP 工具：只允许调用者本人的 Server，世界对话（访客场景）一律不注入。
+    // 工具清单拉取失败只记日志，不阻断本轮对话。
+    let externalToolset = { tools: [], call: null, prompts: '' };
+    if (!worldChatElf && Array.isArray(request.body?.mcpServerIds) && request.body.mcpServerIds.length) {
+      try {
+        externalToolset = await mcpServers.buildToolset(user.id, request.body.mcpServerIds);
+      } catch (error) {
+        app.log?.warn?.({ err: error }, 'external mcp toolset build failed');
+      }
+    }
+    if (skills.length || externalToolset.tools.length) {
+      const model = elfId === 'off_workbuddy'
+        ? (process.env.ELF_WORKBUDDY_MODEL || 'hunyuan/hunyuan-turbos-latest')
+        : (process.env.PLATFORM_CHAT_MODEL || 'deepseek/deepseek-chat');
+      try {
+        const result = await chatWithSkills({
+          baseUrl, apiKey, model, messages, skills,
+          extraTools: externalToolset.tools,
+          callExtraTool: externalToolset.call,
+          extraPrompt: externalToolset.prompts,
+        });
+        // 模型只返回了图片、正文被清理空时，给一句兜底话术，避免整轮失败。
+        const replyText = result.reply ||
+          (result.images.length ? `已生成 ${result.images.length} 版形象，点开图片可以看大图。` : '');
+        if (!replyText) return reply.code(502).send(AI_UPSTREAM_ERROR);
+        return done({
+          mode: 'real', reply: replyText, images: result.images, steps: result.steps,
+        });
+      } catch (_) {
+        return reply.code(502).send(AI_UPSTREAM_ERROR);
+      }
+    }
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), CHAT_TIMEOUT_MS);
@@ -1454,8 +1913,13 @@ async function buildApp(options = {}) {
         return reply.code(502).send(AI_UPSTREAM_ERROR);
       }
 
-      if (response.status === 402) return done(fixedReply('insufficient_balance'));
-      if (response.status === 401) return done(fixedReply('invalid_api_key'));
+      // 世界对话中上游返回 402/401 是持有人的账户问题，对访客只报「暂时无法接待」。
+      if (response.status === 402) {
+        return done(fixedReply(worldChatElf ? 'world_chat_owner_unavailable' : 'insufficient_balance'));
+      }
+      if (response.status === 401) {
+        return done(fixedReply(worldChatElf ? 'world_chat_owner_unavailable' : 'invalid_api_key'));
+      }
       if (response.status === 404) return done(fixedReply('model_unavailable'));
       if (response.status !== 200) return reply.code(502).send(AI_UPSTREAM_ERROR);
 
@@ -1469,6 +1933,14 @@ async function buildApp(options = {}) {
         return done({ mode: 'fixed', reply: FILTERED_REPLY, reason: 'content_filtered' });
       }
 
+      // 世界对话拿到真实回复后才记一笔成本；固定话术与失败均不计费。
+      if (worldChatElf) await commerce.recordWorldChatUsage(elfId, payload?.usage?.total_tokens);
+      // 异步抽取记忆：不等待、不阻断回复；平台买单，受单精灵日配额约束，失败仅记日志。
+      if (elfId) {
+        elfMemory.extractAndStore({ elfId, userId: user.id, text, reply: content })
+          .catch((error) => app.log?.warn?.({ err: error, elfId }, 'elf memory extract failed'));
+      }
+      // balance_micro 始终回调用者自己的余额，不把持有人的财务信息透给访客。
       const after = await readPlatformWallet(db, user.id);
       const result = {
         mode: 'ai',

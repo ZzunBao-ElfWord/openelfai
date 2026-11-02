@@ -35,11 +35,33 @@ const VIEW_META = {
   developer: {
     label: '开发者',
     title: '开发者',
-    note: '入驻、创建技能、沙箱调试，提交后进入平台审核。'
+    note: '发布管理、运营数据、收益与入驻设置；能力提交后进入平台审核。'
   }
 };
 
 const VIEW_ORDER = ['usage', 'keys', 'topup', 'billing', 'developer'];
+
+// 开发者分区（控制台内部二级导航）
+const DEV_SECTIONS = {
+  publish: {
+    label: '发布管理',
+    note: '创建与维护技能 / 专家 / 连接器，调试通过后提交平台审核。'
+  },
+  stats: {
+    label: '运营数据',
+    note: '能力安装、售出与调用次数，按 UTC+8 统计。'
+  },
+  earnings: {
+    label: '收益',
+    note: '能力销售分成明细与结算状态。'
+  },
+  settings: {
+    label: '设置',
+    note: '认证信息、开发者信息与服务协议。'
+  }
+};
+
+const DEV_SECTION_ORDER = ['publish', 'stats', 'earnings', 'settings'];
 
 const LEDGER_TYPES = {
   topup: '充值',
@@ -904,12 +926,19 @@ function BillingPanel({ items, loading, error, hasMore, onLoadMore }) {
 
 /* ── 开发者面板 ─────────────────────────────────────────── */
 
-const SKILL_STATUS = {
+const CAP_STATUS = {
   draft: '草稿',
   testing: '调试中',
   submitted: '待审核',
   approved: '已上架',
+  rejected: '已驳回',
   offline: '已下架'
+};
+
+const CAP_KIND_LABELS = {
+  skill: '技能',
+  expert: '专家',
+  connector: '连接器'
 };
 
 const TRACK_LABELS = {
@@ -921,6 +950,13 @@ const TRACK_LABELS = {
   social: '社交'
 };
 
+const SUBJECT_LABELS = {
+  individual: '个人',
+  enterprise: '企业'
+};
+
+const AGREEMENT_VERSION = '2026-10-30';
+
 const SKILL_SAMPLE_SOURCE = `// event.input 是调用方传入的 JSON；ctx.llm.chat 调用平台大模型（计入单次调用上限）
 exports.handler = async function (event, ctx) {
   const text = String((event.input && event.input.text) || '');
@@ -931,23 +967,43 @@ exports.handler = async function (event, ctx) {
   return { text: reply.content };
 };`;
 
-function newEditor() {
+function newEditor(kind = 'skill') {
   return {
+    kind,
     name: '',
     slug: '',
     track: 'writing',
     summary: '',
-    bookDiamonds: '68',
-    source: SKILL_SAMPLE_SOURCE
+    priceDiamonds: '68',
+    source: SKILL_SAMPLE_SOURCE,
+    prompt: '',
+    greeting: '',
+    endpoint: '',
+    method: 'POST',
+    auth: 'none',
+    description: ''
   };
 }
 
+function formatCents(cents) {
+  return formatCny(Number(cents || 0) * 10000);
+}
+
 function DeveloperPanel({
+  section,
   profile,
   loading,
   error,
-  skills,
-  skillsLoading,
+  capabilities,
+  capsLoading,
+  kindTab,
+  onKindTab,
+  stats,
+  statsLoading,
+  statsError,
+  earnings,
+  earningsLoading,
+  earningsError,
   applyForm,
   applying,
   applyError,
@@ -958,9 +1014,10 @@ function DeveloperPanel({
   editorError,
   saving,
   onOpenEditor,
+  onEditCapability,
   onCloseEditor,
   onEditorChange,
-  onCreateSkill,
+  onSaveCapability,
   testSkillId,
   testing,
   testInput,
@@ -971,7 +1028,9 @@ function DeveloperPanel({
   onTestInputChange,
   onRunTest,
   submittingId,
-  onSubmitReview
+  onSubmitReview,
+  onOffline,
+  offlineId
 }) {
   if (loading && !profile) {
     return (
@@ -996,6 +1055,177 @@ function DeveloperPanel({
   const pricing = profile?.pricing || {};
   const tracks = profile?.tracks || Object.keys(TRACK_LABELS);
 
+  // 企业主体待审核 / 被驳回 / 被停用：只展示状态，不开放发布入口。
+  if (developer && developer.status !== 'approved') {
+    const statusText = {
+      pending: '审核中',
+      rejected: '未通过',
+      suspended: '已停用'
+    }[developer.status] || developer.status;
+    return (
+      <div className="console-view">
+        <section className="console-panel">
+          <div className="console-panel-head">
+            <div>
+              <h2>入驻状态：{statusText}</h2>
+              <p>
+                {developer.real_name} · {SUBJECT_LABELS[developer.subject_type] || developer.subject_type}
+              </p>
+            </div>
+          </div>
+
+          {developer.status === 'pending' ? (
+            <p className="console-hint">
+              企业主体资料已提交，平台会在 1-3 个工作日内完成审核；通过后即可创建技能、专家与连接器。
+            </p>
+          ) : null}
+
+          {developer.status === 'rejected' ? (
+            <>
+              <div className="console-alert">
+                审核未通过：{developer.review_note || '请联系平台了解详情'}
+              </div>
+              <p className="console-hint">
+                修改下列资料后重新提交，将再次进入审核队列。审核依据：主体资质真实、用途合规、无侵权风险。
+              </p>
+            </>
+          ) : null}
+
+          {developer.status === 'suspended' ? (
+            <p className="console-hint">账号已被平台暂停发布权限，请联系平台处理。</p>
+          ) : null}
+
+          <dl className="console-key-meta">
+            <div>
+              <dt>主体类型</dt>
+              <dd>{SUBJECT_LABELS[developer.subject_type] || developer.subject_type}</dd>
+            </div>
+            <div>
+              <dt>企业名称</dt>
+              <dd>{developer.org_name || '—'}</dd>
+            </div>
+            <div>
+              <dt>统一社会信用代码</dt>
+              <dd className="mono">{developer.org_license_no || '—'}</dd>
+            </div>
+            <div>
+              <dt>企业联系人</dt>
+              <dd>{developer.org_contact || '—'}</dd>
+            </div>
+            <div>
+              <dt>服务协议</dt>
+              <dd className="mono">
+                {profile?.agreement?.accepted ? `已同意 ${developer.agreement_version || ''}` : '未同意'}
+              </dd>
+            </div>
+          </dl>
+
+          {developer.status !== 'pending' ? (
+            <>
+              <p className="console-hint">修改下列资料后重新提交，将再次进入审核队列。</p>
+              <div className="dev-apply-actions">
+                <button
+                  type="button"
+                  className={
+                    applyForm.subjectType === 'individual'
+                      ? 'console-btn console-btn--primary'
+                      : 'console-btn console-btn--ghost'
+                  }
+                  onClick={() => onApplyChange('subjectType', 'individual')}
+                >
+                  个人主体
+                </button>
+                <button
+                  type="button"
+                  className={
+                    applyForm.subjectType === 'enterprise'
+                      ? 'console-btn console-btn--primary'
+                      : 'console-btn console-btn--ghost'
+                  }
+                  onClick={() => onApplyChange('subjectType', 'enterprise')}
+                >
+                  企业主体
+                </button>
+              </div>
+              <label className="console-field">
+                <span>姓名</span>
+                <input
+                  type="text"
+                  value={applyForm.realName}
+                  maxLength={32}
+                  onChange={(event) => onApplyChange('realName', event.target.value)}
+                />
+              </label>
+              {applyForm.subjectType === 'enterprise' ? (
+                <>
+                  <label className="console-field">
+                    <span>企业名称</span>
+                    <input
+                      type="text"
+                      value={applyForm.orgName}
+                      maxLength={128}
+                      onChange={(event) => onApplyChange('orgName', event.target.value)}
+                    />
+                  </label>
+                  <label className="console-field">
+                    <span>统一社会信用代码</span>
+                    <input
+                      type="text"
+                      value={applyForm.orgLicenseNo}
+                      maxLength={18}
+                      onChange={(event) => onApplyChange('orgLicenseNo', event.target.value)}
+                    />
+                  </label>
+                  <label className="console-field">
+                    <span>企业联系人</span>
+                    <input
+                      type="text"
+                      value={applyForm.orgContact}
+                      maxLength={64}
+                      onChange={(event) => onApplyChange('orgContact', event.target.value)}
+                    />
+                  </label>
+                </>
+              ) : null}
+              <label className="console-field">
+                <span>入驻用途</span>
+                <textarea
+                  rows={3}
+                  value={applyForm.purpose}
+                  maxLength={255}
+                  onChange={(event) => onApplyChange('purpose', event.target.value)}
+                />
+              </label>
+              <label className="dev-agreement">
+                <input
+                  type="checkbox"
+                  checked={Boolean(applyForm.agreement)}
+                  onChange={(event) => onApplyChange('agreement', event.target.checked)}
+                />
+                <span>
+                  我已阅读并同意
+                  <Link href="/docs/developer-agreement/">《OpenElf 开发者服务协议》</Link>
+                  （版本 {AGREEMENT_VERSION}）
+                </span>
+              </label>
+              {applyError ? <div className="console-alert">{applyError}</div> : null}
+              <div className="dev-apply-actions">
+                <button
+                  type="button"
+                  className="console-btn console-btn--primary"
+                  onClick={onApply}
+                  disabled={applying}
+                >
+                  {applying ? '提交中…' : '重新提交'}
+                </button>
+              </div>
+            </>
+          ) : null}
+        </section>
+      </div>
+    );
+  }
+
   if (!developer) {
     return (
       <div className="console-view">
@@ -1003,11 +1233,36 @@ function DeveloperPanel({
           <div className="console-panel-head">
             <div>
               <h2>申请成为开发者</h2>
-              <p>使用 App 同一账号入驻，无需注册第二套账号</p>
+              <p>使用 App 同一账号入驻，无需注册第二套账号；个人自动通过，企业主体需人工审核</p>
             </div>
           </div>
 
           {applyError ? <div className="console-alert">{applyError}</div> : null}
+
+          <div className="dev-apply-actions">
+            <button
+              type="button"
+              className={
+                applyForm.subjectType === 'individual'
+                  ? 'console-btn console-btn--primary'
+                  : 'console-btn console-btn--ghost'
+              }
+              onClick={() => onApplyChange('subjectType', 'individual')}
+            >
+              个人主体
+            </button>
+            <button
+              type="button"
+              className={
+                applyForm.subjectType === 'enterprise'
+                  ? 'console-btn console-btn--primary'
+                  : 'console-btn console-btn--ghost'
+              }
+              onClick={() => onApplyChange('subjectType', 'enterprise')}
+            >
+              企业主体
+            </button>
+          </div>
 
           <label className="console-field">
             <span>姓名</span>
@@ -1020,15 +1275,63 @@ function DeveloperPanel({
             />
           </label>
 
+          {applyForm.subjectType === 'enterprise' ? (
+            <>
+              <label className="console-field">
+                <span>企业名称</span>
+                <input
+                  type="text"
+                  value={applyForm.orgName}
+                  maxLength={128}
+                  placeholder="与营业执照一致"
+                  onChange={(event) => onApplyChange('orgName', event.target.value)}
+                />
+              </label>
+              <label className="console-field">
+                <span>统一社会信用代码</span>
+                <input
+                  type="text"
+                  value={applyForm.orgLicenseNo}
+                  maxLength={18}
+                  placeholder="18 位统一社会信用代码"
+                  onChange={(event) => onApplyChange('orgLicenseNo', event.target.value)}
+                />
+              </label>
+              <label className="console-field">
+                <span>企业联系人</span>
+                <input
+                  type="text"
+                  value={applyForm.orgContact}
+                  maxLength={64}
+                  placeholder="手机号或邮箱"
+                  onChange={(event) => onApplyChange('orgContact', event.target.value)}
+                />
+              </label>
+            </>
+          ) : null}
+
           <label className="console-field">
             <span>入驻用途</span>
             <textarea
               rows={3}
               value={applyForm.purpose}
               maxLength={255}
-              placeholder="说明你计划开发的技能方向，例如：写作类技能，服务站内 AI 智能体"
+              placeholder="说明你计划开发的能力方向，例如：写作类技能与专家，服务站内 AI 智能体"
               onChange={(event) => onApplyChange('purpose', event.target.value)}
             />
+          </label>
+
+          <label className="dev-agreement">
+            <input
+              type="checkbox"
+              checked={Boolean(applyForm.agreement)}
+              onChange={(event) => onApplyChange('agreement', event.target.checked)}
+            />
+            <span>
+              我已阅读并同意
+              <Link href="/docs/developer-agreement/">《OpenElf 开发者服务协议》</Link>
+              （版本 {AGREEMENT_VERSION}）
+            </span>
           </label>
 
           <div className="dev-apply-actions">
@@ -1046,10 +1349,164 @@ function DeveloperPanel({
           </div>
 
           <ul className="console-topup-tips">
-            <li>技能书销售分成：开发者 70%、平台 30%。</li>
+            <li>能力销售分成：开发者 70%、平台 30%。</li>
             <li>技能被调用时按 token 从 AI 持有者钱包扣费，调用费 100% 归平台。</li>
-            <li>首版入驻自动通过；正式上架前仍需平台审核技能内容。</li>
+            <li>个人主体提交即通过；企业主体需人工审核资质后开通。</li>
           </ul>
+        </section>
+      </div>
+    );
+  }
+
+  if (section === 'stats') {
+    const items = stats?.items || [];
+    const totals = stats?.totals || {};
+    return (
+      <div className="console-view">
+        <section className="console-panel">
+          <div className="console-panel-head">
+            <div>
+              <h2>运营数据</h2>
+              <p>能力安装、售出与调用次数；数据按 UTC+8 统计，存在约 5 分钟延迟。</p>
+            </div>
+          </div>
+
+          {statsError ? <div className="console-alert">{statsError}</div> : null}
+          {statsLoading && !stats ? <div className="console-loading">加载中…</div> : null}
+
+          <dl className="console-key-meta">
+            <div>
+              <dt>已上架能力</dt>
+              <dd className="mono">{items.filter((item) => item.status === 'approved').length}</dd>
+            </div>
+            <div>
+              <dt>累计安装</dt>
+              <dd className="mono">{formatNumber(totals.installs)}</dd>
+            </div>
+            <div>
+              <dt>累计售出</dt>
+              <dd className="mono">{formatNumber(totals.sales)}</dd>
+            </div>
+            <div>
+              <dt>累计收益</dt>
+              <dd className="mono">{formatCents(totals.earnings_cents)}</dd>
+            </div>
+          </dl>
+
+          {!statsLoading && !items.length ? (
+            <div className="console-empty">还没有能力数据，先到「发布管理」创建一个吧</div>
+          ) : (
+            <div className="console-table-wrap">
+              <table className="console-table">
+                <thead>
+                  <tr>
+                    <th>能力</th>
+                    <th>类型</th>
+                    <th className="is-num">安装</th>
+                    <th className="is-num">售出</th>
+                    <th className="is-num">调用</th>
+                    <th className="is-num">收益</th>
+                    <th>状态</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item) => (
+                    <tr key={item.id}>
+                      <td>
+                        <div className="dev-skill-name">{item.name}</div>
+                        <code className="dev-skill-slug">{item.slug}</code>
+                      </td>
+                      <td>{CAP_KIND_LABELS[item.kind] || item.kind}</td>
+                      <td className="is-num mono">{formatNumber(item.install_count)}</td>
+                      <td className="is-num mono">{formatNumber(item.sales_count)}</td>
+                      <td className="is-num mono">{formatNumber(item.call_count)}</td>
+                      <td className="is-num mono">{formatCents(item.earnings_cents)}</td>
+                      <td>
+                        <span className={`dev-skill-status is-${item.status}`}>
+                          {CAP_STATUS[item.status] || item.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      </div>
+    );
+  }
+
+  if (section === 'earnings') {
+    const items = earnings?.items || [];
+    const totals = earnings?.totals || {};
+    return (
+      <div className="console-view">
+        <section className="console-panel">
+          <div className="console-panel-head">
+            <div>
+              <h2>收益</h2>
+              <p>能力销售按 70% 分成结算；收益先进入待结算，{earnings?.settle_days || 7} 天后转为可提现。</p>
+            </div>
+          </div>
+
+          {earningsError ? <div className="console-alert">{earningsError}</div> : null}
+          {earningsLoading && !earnings ? <div className="console-loading">加载中…</div> : null}
+
+          <dl className="console-key-meta">
+            <div>
+              <dt>待结算</dt>
+              <dd className="mono">{formatCents(totals.pending_cents)}</dd>
+            </div>
+            <div>
+              <dt>可提现</dt>
+              <dd className="mono">{formatCents(totals.available_cents)}</dd>
+            </div>
+            <div>
+              <dt>累计收益</dt>
+              <dd className="mono">{formatCents(totals.lifetime_cents)}</dd>
+            </div>
+          </dl>
+
+          <p className="console-hint">
+            收益由平台按劳务 / 服务协议以人民币结算，不是把收到的钻石兑换回钱；提现需完成实名、签署协议并达到
+            {formatCents(earnings?.min_withdraw_cents || 1000)} 起提额度，统一在 App「创作者收益」中操作。
+          </p>
+
+          {!earningsLoading && !items.length ? (
+            <div className="console-empty">还没有收益记录</div>
+          ) : (
+            <div className="console-table-wrap">
+              <table className="console-table">
+                <thead>
+                  <tr>
+                    <th>能力</th>
+                    <th>类型</th>
+                    <th className="is-num">钻石</th>
+                    <th className="is-num">收益</th>
+                    <th>状态</th>
+                    <th>结算时间</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item) => (
+                    <tr key={item.id}>
+                      <td>{item.capability_name || item.capability_id}</td>
+                      <td>{CAP_KIND_LABELS[item.capability_kind] || item.capability_kind || '—'}</td>
+                      <td className="is-num mono">{formatNumber(item.gross_diamonds)}</td>
+                      <td className="is-num mono">{formatCents(item.developer_cents)}</td>
+                      <td>
+                        <span className={`dev-skill-status is-${item.status}`}>
+                          {item.status === 'available' ? '可提现' : item.status === 'withdrawn' ? '已提现' : '待结算'}
+                        </span>
+                      </td>
+                      <td>{formatDateTime(item.settle_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
       </div>
     );
@@ -1057,6 +1514,7 @@ function DeveloperPanel({
 
   return (
     <div className="console-view">
+      {section === 'settings' ? (
       <section className="console-panel">
         <div className="console-panel-head">
           <div>
@@ -1092,26 +1550,111 @@ function DeveloperPanel({
             当前环境未启用技能沙箱，可以创建与编辑技能，但暂时无法调试执行。
           </p>
         ) : null}
-      </section>
 
+        <dl className="console-key-meta">
+          <div>
+            <dt>主体类型</dt>
+            <dd>{SUBJECT_LABELS[developer.subject_type] || developer.subject_type}</dd>
+          </div>
+          <div>
+            <dt>开发者状态</dt>
+            <dd>
+              {developer.status === 'approved'
+                ? '已通过'
+                : developer.status === 'pending'
+                  ? '审核中'
+                  : developer.status === 'rejected'
+                    ? '未通过'
+                    : '已停用'}
+            </dd>
+          </div>
+          <div>
+            <dt>服务协议</dt>
+            <dd className="mono">
+              {profile?.agreement?.accepted
+                ? `已同意 ${developer.agreement_version || ''}`
+                : '未同意'}
+            </dd>
+          </div>
+          <div>
+            <dt>开发者 ID</dt>
+            <dd className="mono">{developer.user_id}</dd>
+          </div>
+        </dl>
+
+        {developer.subject_type === 'enterprise' ? (
+          <dl className="console-key-meta">
+            <div>
+              <dt>企业名称</dt>
+              <dd>{developer.org_name || '—'}</dd>
+            </div>
+            <div>
+              <dt>统一社会信用代码</dt>
+              <dd className="mono">{developer.org_license_no || '—'}</dd>
+            </div>
+            <div>
+              <dt>联系人</dt>
+              <dd>{developer.org_contact || '—'}</dd>
+            </div>
+          </dl>
+        ) : null}
+
+        {developer.status === 'rejected' && developer.review_note ? (
+          <div className="console-alert">
+            审核未通过：{developer.review_note}
+            <br />
+            修改资料后重新提交即可再次进入审核。
+          </div>
+        ) : null}
+
+        {developer.status === 'pending' ? (
+          <p className="console-hint">
+            企业主体资料已提交，平台会在 1-3 个工作日内完成审核；通过前无法创建能力。
+          </p>
+        ) : null}
+      </section>
+      ) : null}
+
+      {section === 'publish' ? (
       <section className="console-panel">
         <div className="console-panel-head">
           <div>
-            <h2>我的技能</h2>
-            <p>单文件源码 + manifest，保存即生成新版本</p>
+            <h2>我的能力</h2>
+            <p>技能走沙箱调试后提交；专家与连接器为声明式配置，提交后由平台审核上架</p>
           </div>
           <div className="console-panel-actions">
-            <button type="button" className="console-btn console-btn--primary" onClick={onOpenEditor}>
-              新建技能
+            <button
+              type="button"
+              className="console-btn console-btn--primary"
+              onClick={() => onOpenEditor(kindTab)}
+            >
+              新建{CAP_KIND_LABELS[kindTab] || '能力'}
             </button>
           </div>
+        </div>
+
+        <div className="dev-apply-actions">
+          {Object.keys(CAP_KIND_LABELS).map((kind) => (
+            <button
+              type="button"
+              key={kind}
+              className={
+                kindTab === kind
+                  ? 'console-btn console-btn--primary'
+                  : 'console-btn console-btn--ghost'
+              }
+              onClick={() => onKindTab(kind)}
+            >
+              {CAP_KIND_LABELS[kind]}
+            </button>
+          ))}
         </div>
 
         {editorOpen ? (
           <div className="dev-editor">
             <div className="dev-editor-grid">
               <label className="console-field">
-                <span>技能名称</span>
+                <span>{CAP_KIND_LABELS[editor.kind] || '能力'}名称</span>
                 <input
                   type="text"
                   value={editor.name}
@@ -1144,15 +1687,39 @@ function DeveloperPanel({
                 </select>
               </label>
               <label className="console-field">
-                <span>技能书价格（钻石）</span>
+                <span>定价（钻石）</span>
                 <input
                   type="number"
                   min={pricing.min_diamonds || 18}
                   max={pricing.max_diamonds || 999}
-                  value={editor.bookDiamonds}
-                  onChange={(event) => onEditorChange('bookDiamonds', event.target.value)}
+                  value={editor.priceDiamonds}
+                  onChange={(event) => onEditorChange('priceDiamonds', event.target.value)}
                 />
               </label>
+              {editor.kind === 'connector' ? (
+                <>
+                  <label className="console-field">
+                    <span>请求方法</span>
+                    <select
+                      value={editor.method}
+                      onChange={(event) => onEditorChange('method', event.target.value)}
+                    >
+                      <option value="POST">POST</option>
+                      <option value="GET">GET</option>
+                    </select>
+                  </label>
+                  <label className="console-field">
+                    <span>鉴权方式</span>
+                    <select
+                      value={editor.auth}
+                      onChange={(event) => onEditorChange('auth', event.target.value)}
+                    >
+                      <option value="none">无鉴权</option>
+                      <option value="api_key">API Key（由平台统一保管）</option>
+                    </select>
+                  </label>
+                </>
+              ) : null}
             </div>
 
             <label className="console-field">
@@ -1161,21 +1728,74 @@ function DeveloperPanel({
                 type="text"
                 value={editor.summary}
                 maxLength={140}
-                placeholder="告诉用户这个技能能做什么"
+                placeholder="告诉用户这个能力能做什么"
                 onChange={(event) => onEditorChange('summary', event.target.value)}
               />
             </label>
 
-            <label className="console-field">
-              <span>源码（node20 单文件，必须导出 exports.handler）</span>
-              <textarea
-                className="dev-source"
-                rows={14}
-                spellCheck={false}
-                value={editor.source}
-                onChange={(event) => onEditorChange('source', event.target.value)}
-              />
-            </label>
+            {editor.kind === 'skill' ? (
+              <label className="console-field">
+                <span>源码（node20 单文件，必须导出 exports.handler）</span>
+                <textarea
+                  className="dev-source"
+                  rows={14}
+                  spellCheck={false}
+                  value={editor.source}
+                  onChange={(event) => onEditorChange('source', event.target.value)}
+                />
+              </label>
+            ) : null}
+
+            {editor.kind === 'expert' ? (
+              <>
+                <label className="console-field">
+                  <span>角色提示词（专家套用到 AI 后的人格与工作方式）</span>
+                  <textarea
+                    className="dev-source"
+                    rows={10}
+                    value={editor.prompt}
+                    placeholder="描述专家的身份、专业边界与输出格式要求"
+                    onChange={(event) => onEditorChange('prompt', event.target.value)}
+                  />
+                </label>
+                <label className="console-field">
+                  <span>开场白（可选）</span>
+                  <input
+                    type="text"
+                    value={editor.greeting}
+                    maxLength={200}
+                    placeholder="套用后 AI 对该用户说的第一句话"
+                    onChange={(event) => onEditorChange('greeting', event.target.value)}
+                  />
+                </label>
+              </>
+            ) : null}
+
+            {editor.kind === 'connector' ? (
+              <>
+                <label className="console-field">
+                  <span>服务地址（https:// 开头）</span>
+                  <input
+                    type="text"
+                    value={editor.endpoint}
+                    maxLength={255}
+                    placeholder="https://api.example.com/v1/query"
+                    onChange={(event) => onEditorChange('endpoint', event.target.value)}
+                  />
+                </label>
+                <label className="console-field">
+                  <span>接口说明</span>
+                  <textarea
+                    className="dev-source"
+                    rows={8}
+                    value={editor.description}
+                    placeholder="说明请求参数、返回结构，以及 AI 在什么场景下调用它"
+                    onChange={(event) => onEditorChange('description', event.target.value)}
+                  />
+                </label>
+                <p className="dev-test-note">连接器定义中不能包含真实密钥，密钥由平台统一配置下发。</p>
+              </>
+            ) : null}
 
             {editorError ? <div className="console-alert">{editorError}</div> : null}
 
@@ -1183,10 +1803,10 @@ function DeveloperPanel({
               <button
                 type="button"
                 className="console-btn console-btn--primary"
-                onClick={onCreateSkill}
+                onClick={onSaveCapability}
                 disabled={saving}
               >
-                {saving ? '保存中…' : '保存技能'}
+                {saving ? '保存中…' : '保存能力'}
               </button>
               <button
                 type="button"
@@ -1200,36 +1820,43 @@ function DeveloperPanel({
           </div>
         ) : null}
 
-        {skillsLoading ? (
+        {capsLoading ? (
           <div className="console-loading">加载中…</div>
-        ) : !skills.length ? (
-          <div className="console-empty">还没有技能，先新建一个吧</div>
+        ) : !capabilities.length ? (
+          <div className="console-empty">还没有{CAP_KIND_LABELS[kindTab] || '能力'}，先新建一个吧</div>
         ) : (
           <div className="console-table-wrap">
             <table className="console-table">
               <thead>
                 <tr>
-                  <th>技能</th>
+                  <th>能力</th>
+                  <th>类型</th>
                   <th>赛道</th>
-                  <th className="is-num">版本</th>
-                  <th className="is-num">调试</th>
+                  <th className="is-num">定价</th>
+                  <th className="is-num">版本 / 调试</th>
                   <th>状态</th>
                   <th>操作</th>
                 </tr>
               </thead>
               <tbody>
-                {skills.map((skill) => (
-                  <tr key={skill.id}>
+                {capabilities.map((cap) => (
+                  <tr key={cap.id}>
                     <td>
-                      <div className="dev-skill-name">{skill.name}</div>
-                      <code className="dev-skill-slug">{skill.slug}</code>
+                      <div className="dev-skill-name">{cap.name}</div>
+                      <code className="dev-skill-slug">{cap.slug}</code>
+                      {cap.review_note ? (
+                        <div className="dev-test-error">驳回：{cap.review_note}</div>
+                      ) : null}
                     </td>
-                    <td>{TRACK_LABELS[skill.track] || skill.track}</td>
-                    <td className="is-num mono">v{skill.latest_version || 0}</td>
-                    <td className="is-num mono">{skill.runs || 0}</td>
+                    <td>{CAP_KIND_LABELS[cap.kind] || cap.kind}</td>
+                    <td>{TRACK_LABELS[cap.track] || cap.track}</td>
+                    <td className="is-num mono">{cap.price_diamonds}</td>
+                    <td className="is-num mono">
+                      {cap.kind === 'skill' ? `v${cap.latest_version || 0} / ${cap.runs || 0}` : '—'}
+                    </td>
                     <td>
-                      <span className={`dev-skill-status is-${skill.status}`}>
-                        {SKILL_STATUS[skill.status] || skill.status}
+                      <span className={`dev-skill-status is-${cap.status}`}>
+                        {CAP_STATUS[cap.status] || cap.status}
                       </span>
                     </td>
                     <td>
@@ -1237,22 +1864,42 @@ function DeveloperPanel({
                         <button
                           type="button"
                           className="console-btn console-btn--ghost"
-                          onClick={() => onStartTest(skill)}
-                          disabled={!sandbox.enabled || ['submitted', 'approved'].includes(skill.status)}
+                          onClick={() => onEditCapability(cap)}
+                          disabled={['submitted', 'approved'].includes(cap.status)}
                         >
-                          调试
+                          编辑
                         </button>
+                        {cap.kind === 'skill' ? (
+                          <button
+                            type="button"
+                            className="console-btn console-btn--ghost"
+                            onClick={() => onStartTest(cap)}
+                            disabled={!sandbox.enabled || ['submitted', 'approved'].includes(cap.status)}
+                          >
+                            调试
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           className="console-btn console-btn--ghost"
-                          onClick={() => onSubmitReview(skill)}
+                          onClick={() => onSubmitReview(cap)}
                           disabled={
-                            submittingId === skill.id ||
-                            ['submitted', 'approved'].includes(skill.status)
+                            submittingId === cap.id ||
+                            ['submitted', 'approved'].includes(cap.status)
                           }
                         >
-                          {submittingId === skill.id ? '提交中…' : '提交审核'}
+                          {submittingId === cap.id ? '提交中…' : '提交审核'}
                         </button>
+                        {['submitted', 'approved'].includes(cap.status) ? (
+                          <button
+                            type="button"
+                            className="console-btn console-btn--ghost"
+                            onClick={() => onOffline(cap)}
+                            disabled={offlineId === cap.id}
+                          >
+                            {offlineId === cap.id ? '处理中…' : '下架'}
+                          </button>
+                        ) : null}
                       </div>
                     </td>
                   </tr>
@@ -1313,6 +1960,7 @@ function DeveloperPanel({
           </div>
         ) : null}
       </section>
+      ) : null}
     </div>
   );
 }
@@ -1361,15 +2009,32 @@ export default function ConsolePage() {
   const [ledgerError, setLedgerError] = useState('');
   const nextBeforeRef = useRef(null);
 
+  const [devSection, setDevSection] = useState('publish');
   const [devProfile, setDevProfile] = useState(null);
   const [devProfileLoading, setDevProfileLoading] = useState(false);
   const [devProfileError, setDevProfileError] = useState('');
-  const [devSkills, setDevSkills] = useState([]);
-  const [devSkillsLoading, setDevSkillsLoading] = useState(false);
-  const [applyForm, setApplyForm] = useState({ realName: '', purpose: '' });
+  const [devCapabilities, setDevCapabilities] = useState([]);
+  const [devCapsLoading, setDevCapsLoading] = useState(false);
+  const [devKindTab, setDevKindTab] = useState('skill');
+  const [devStats, setDevStats] = useState(null);
+  const [devStatsLoading, setDevStatsLoading] = useState(false);
+  const [devStatsError, setDevStatsError] = useState('');
+  const [devEarnings, setDevEarnings] = useState(null);
+  const [devEarningsLoading, setDevEarningsLoading] = useState(false);
+  const [devEarningsError, setDevEarningsError] = useState('');
+  const [applyForm, setApplyForm] = useState({
+    subjectType: 'individual',
+    realName: '',
+    purpose: '',
+    orgName: '',
+    orgLicenseNo: '',
+    orgContact: '',
+    agreement: false
+  });
   const [applying, setApplying] = useState(false);
   const [applyError, setApplyError] = useState('');
   const [devEditorOpen, setDevEditorOpen] = useState(false);
+  const [devEditorId, setDevEditorId] = useState('');
   const [devEditor, setDevEditor] = useState(newEditor);
   const [devEditorError, setDevEditorError] = useState('');
   const [devSaving, setDevSaving] = useState(false);
@@ -1379,6 +2044,7 @@ export default function ConsolePage() {
   const [devTestResult, setDevTestResult] = useState(null);
   const [devTestError, setDevTestError] = useState('');
   const [devSubmittingId, setDevSubmittingId] = useState('');
+  const [devOfflineId, setDevOfflineId] = useState('');
 
   /* 启动时读取本地登录态 */
   useEffect(() => {
@@ -1417,7 +2083,9 @@ export default function ConsolePage() {
     setTopupNotice(null);
     setPaying(false);
     setDevProfile(null);
-    setDevSkills([]);
+    setDevCapabilities([]);
+    setDevStats(null);
+    setDevEarnings(null);
     setDevEditorOpen(false);
     setDevEditorError('');
     setDevTestSkillId('');
@@ -1693,13 +2361,26 @@ export default function ConsolePage() {
     }
   };
 
-  /* 开发者：入驻档案与技能列表 */
+  /* 开发者：入驻档案、能力、运营数据与收益 */
   const loadDevProfile = useCallback(async () => {
     setDevProfileLoading(true);
     setDevProfileError('');
     try {
       const data = await fetchAuthed('/api/v1/developer/profile');
       setDevProfile(data);
+      // 已有入驻资料时把表单预填成当前值，便于被驳回后直接修改重提。
+      if (data?.developer) {
+        setApplyForm((prev) => (prev.realName ? prev : {
+          ...prev,
+          subjectType: data.developer.subject_type || 'individual',
+          realName: data.developer.real_name || '',
+          purpose: data.developer.purpose || '',
+          orgName: data.developer.org_name || '',
+          orgLicenseNo: data.developer.org_license_no || '',
+          orgContact: data.developer.org_contact || '',
+          agreement: Boolean(data.agreement?.accepted)
+        }));
+      }
       return data;
     } catch (err) {
       setDevProfileError(err.message);
@@ -1709,15 +2390,41 @@ export default function ConsolePage() {
     }
   }, [fetchAuthed]);
 
-  const loadDevSkills = useCallback(async () => {
-    setDevSkillsLoading(true);
+  const loadDevCapabilities = useCallback(async (kind) => {
+    setDevCapsLoading(true);
     try {
-      const data = await fetchAuthed('/api/v1/developer/skills');
-      setDevSkills(Array.isArray(data?.items) ? data.items : []);
+      const data = await fetchAuthed(
+        `/api/v1/developer/capabilities?kind=${encodeURIComponent(kind)}`
+      );
+      setDevCapabilities(Array.isArray(data?.items) ? data.items : []);
     } catch (err) {
       setDevProfileError(err.message);
     } finally {
-      setDevSkillsLoading(false);
+      setDevCapsLoading(false);
+    }
+  }, [fetchAuthed]);
+
+  const loadDevStats = useCallback(async () => {
+    setDevStatsLoading(true);
+    setDevStatsError('');
+    try {
+      setDevStats(await fetchAuthed('/api/v1/developer/stats'));
+    } catch (err) {
+      setDevStatsError(err.message);
+    } finally {
+      setDevStatsLoading(false);
+    }
+  }, [fetchAuthed]);
+
+  const loadDevEarnings = useCallback(async () => {
+    setDevEarningsLoading(true);
+    setDevEarningsError('');
+    try {
+      setDevEarnings(await fetchAuthed('/api/v1/developer/earnings'));
+    } catch (err) {
+      setDevEarningsError(err.message);
+    } finally {
+      setDevEarningsLoading(false);
     }
   }, [fetchAuthed]);
 
@@ -1725,33 +2432,73 @@ export default function ConsolePage() {
     if (!token || view !== 'developer') return undefined;
     let alive = true;
     loadDevProfile().then((data) => {
-      if (alive && data?.developer) loadDevSkills();
+      if (alive && data?.developer?.status === 'approved') loadDevCapabilities(devKindTab);
     });
     return () => {
       alive = false;
     };
-  }, [token, view, loadDevProfile, loadDevSkills]);
+    // devKindTab 变化由 tab 切换单独触发，避免整页重载
+  }, [token, view, loadDevProfile, loadDevCapabilities]);
+
+  useEffect(() => {
+    if (!token || view !== 'developer' || devSection !== 'publish') return undefined;
+    if (devProfile?.developer?.status !== 'approved') return undefined;
+    loadDevCapabilities(devKindTab);
+    return undefined;
+  }, [token, view, devSection, devKindTab, devProfile?.developer?.status, loadDevCapabilities]);
+
+  useEffect(() => {
+    if (!token || view !== 'developer' || devProfile?.developer?.status !== 'approved') return undefined;
+    if (devSection === 'stats') loadDevStats();
+    if (devSection === 'earnings') loadDevEarnings();
+    return undefined;
+  }, [token, view, devSection, devProfile?.developer?.status, loadDevStats, loadDevEarnings]);
+
+  const handleApplyChange = (field, value) => {
+    setApplyForm((prev) => ({ ...prev, [field]: value }));
+  };
 
   const handleApply = async () => {
     setApplyError('');
     const realName = applyForm.realName.trim();
     const purpose = applyForm.purpose.trim();
     if ([...realName].length < 2 || [...realName].length > 32) {
-      setApplyError('请输入 2-32 个字符的姓名');
+      setApplyError('请输入 2-32 个字符的真实姓名');
       return;
     }
     if ([...purpose].length < 10) {
       setApplyError('请用至少 10 个字说明入驻用途');
       return;
     }
+    if (!applyForm.agreement) {
+      setApplyError('请先阅读并同意《OpenElf 开发者服务协议》');
+      return;
+    }
+    const body = { subjectType: applyForm.subjectType, realName, purpose, agreementVersion: AGREEMENT_VERSION };
+    if (applyForm.subjectType === 'enterprise') {
+      body.orgName = applyForm.orgName.trim();
+      body.orgLicenseNo = applyForm.orgLicenseNo.trim();
+      body.orgContact = applyForm.orgContact.trim();
+      if (body.orgName.length < 2) {
+        setApplyError('请填写与营业执照一致的企业名称');
+        return;
+      }
+      if (!/^[0-9A-Z]{18}$/.test(body.orgLicenseNo.toUpperCase())) {
+        setApplyError('请填写 18 位统一社会信用代码');
+        return;
+      }
+      if (!body.orgContact) {
+        setApplyError('请填写企业联系人手机号或邮箱');
+        return;
+      }
+      body.orgLicenseNo = body.orgLicenseNo.toUpperCase();
+    }
+
     setApplying(true);
     try {
-      const data = await fetchAuthed('/api/v1/developer/apply', {
-        method: 'POST',
-        body: { realName, purpose }
-      });
+      const data = await fetchAuthed('/api/v1/developer/apply', { method: 'POST', body });
       setDevProfile(data);
-      await loadDevSkills();
+      if (data?.developer?.status === 'approved') await loadDevCapabilities(devKindTab);
     } catch (err) {
       setApplyError(err.message);
     } finally {
@@ -1759,35 +2506,127 @@ export default function ConsolePage() {
     }
   };
 
-  const handleCreateSkill = async () => {
+  const handleOpenEditor = (kind = devKindTab) => {
+    setDevEditorId('');
+    setDevEditor(newEditor(kind));
     setDevEditorError('');
-    const bookDiamonds = Number(devEditor.bookDiamonds);
-    if (!devEditor.name.trim() || !devEditor.slug.trim()) {
-      setDevEditorError('请填写技能名称与 slug');
+    setDevEditorOpen(true);
+  };
+
+  const handleEditCapability = (cap) => {
+    const definition = cap.definition || {};
+    setDevEditorId(cap.id);
+    setDevEditorError('');
+    setDevEditor({
+      ...newEditor(cap.kind),
+      kind: cap.kind,
+      name: cap.name || '',
+      slug: cap.slug || '',
+      track: cap.track || 'writing',
+      summary: cap.summary || '',
+      priceDiamonds: String(cap.price_diamonds ?? ''),
+      prompt: definition.prompt || '',
+      greeting: definition.greeting || '',
+      endpoint: definition.endpoint || '',
+      method: definition.method || 'POST',
+      auth: definition.auth || 'none',
+      description: definition.description || ''
+    });
+    setDevEditorOpen(true);
+  };
+
+  const handleCloseEditor = () => {
+    setDevEditorOpen(false);
+    setDevEditorId('');
+    setDevEditorError('');
+  };
+
+  const handleEditorChange = (field, value) => {
+    setDevEditor((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleSaveCapability = async () => {
+    setDevEditorError('');
+    const name = devEditor.name.trim();
+    const slug = devEditor.slug.trim();
+    const summary = devEditor.summary.trim();
+    const priceDiamonds = Number(devEditor.priceDiamonds);
+    if (!name || !slug) {
+      setDevEditorError('请填写名称与 slug');
       return;
     }
-    if (!Number.isInteger(bookDiamonds)) {
-      setDevEditorError('技能书价格需为整数钻石');
+    if (!Number.isInteger(priceDiamonds) || priceDiamonds < 18 || priceDiamonds > 999) {
+      setDevEditorError('定价需为 18-999 的整数钻石');
+      return;
+    }
+    if (summary.length < 4) {
+      setDevEditorError('请填写至少 4 个字的一句话介绍');
       return;
     }
 
-    const manifest = {
-      slug: devEditor.slug.trim(),
-      name: devEditor.name.trim(),
-      track: devEditor.track,
-      summary: devEditor.summary.trim(),
-      pricing: { book_diamonds: bookDiamonds }
-    };
+    let body;
+    if (devEditor.kind === 'skill') {
+      body = {
+        kind: 'skill',
+        manifest: {
+          slug,
+          name,
+          track: devEditor.track,
+          summary,
+          pricing: { book_diamonds: priceDiamonds }
+        },
+        source: devEditor.source
+      };
+    } else if (devEditor.kind === 'expert') {
+      if (devEditor.prompt.trim().length < 10) {
+        setDevEditorError('专家提示词至少 10 个字');
+        return;
+      }
+      body = {
+        kind: 'expert',
+        priceDiamonds,
+        definition: {
+          slug,
+          name,
+          track: devEditor.track,
+          summary,
+          prompt: devEditor.prompt.trim(),
+          greeting: devEditor.greeting.trim()
+        }
+      };
+    } else {
+      if (!/^https:\/\/\S{8,255}$/.test(devEditor.endpoint.trim())) {
+        setDevEditorError('服务地址需为 https:// 开头的完整地址');
+        return;
+      }
+      body = {
+        kind: 'connector',
+        priceDiamonds,
+        definition: {
+          slug,
+          name,
+          track: devEditor.track,
+          summary,
+          endpoint: devEditor.endpoint.trim(),
+          method: devEditor.method,
+          auth: devEditor.auth,
+          description: devEditor.description.trim()
+        }
+      };
+    }
 
     setDevSaving(true);
     try {
-      await fetchAuthed('/api/v1/developer/skills', {
-        method: 'POST',
-        body: { manifest, source: devEditor.source }
-      });
-      setDevEditorOpen(false);
-      setDevEditor(newEditor());
-      await loadDevSkills();
+      if (devEditorId) {
+        await fetchAuthed(`/api/v1/developer/capabilities/${encodeURIComponent(devEditorId)}`, {
+          method: 'PUT',
+          body
+        });
+      } else {
+        await fetchAuthed('/api/v1/developer/capabilities', { method: 'POST', body });
+      }
+      handleCloseEditor();
+      await loadDevCapabilities(devKindTab);
     } catch (err) {
       setDevEditorError(err.message);
     } finally {
@@ -1795,8 +2634,8 @@ export default function ConsolePage() {
     }
   };
 
-  const handleStartTest = (skill) => {
-    setDevTestSkillId(skill.id);
+  const handleStartTest = (cap) => {
+    setDevTestSkillId(cap.id);
     setDevTestResult(null);
     setDevTestError('');
   };
@@ -1820,11 +2659,11 @@ export default function ConsolePage() {
     setDevTesting(true);
     try {
       const data = await fetchAuthed(
-        `/api/v1/developer/skills/${encodeURIComponent(devTestSkillId)}/test`,
+        `/api/v1/developer/capabilities/${encodeURIComponent(devTestSkillId)}/test`,
         { method: 'POST', body: { input } }
       );
       setDevTestResult(data);
-      await loadDevSkills();
+      await loadDevCapabilities(devKindTab);
     } catch (err) {
       setDevTestError(err.message);
     } finally {
@@ -1832,21 +2671,38 @@ export default function ConsolePage() {
     }
   };
 
-  const handleSubmitReview = async (skill) => {
+  const handleSubmitReview = async (cap) => {
     if (devSubmittingId) return;
-    if (!window.confirm(`确认提交「${skill.name}」进入审核？提交后不能再编辑该技能。`)) return;
+    if (!window.confirm(`确认提交「${cap.name}」进入审核？提交后不能再编辑该能力。`)) return;
 
-    setDevSubmittingId(skill.id);
+    setDevSubmittingId(cap.id);
     try {
       await fetchAuthed(
-        `/api/v1/developer/skills/${encodeURIComponent(skill.id)}/submit`,
+        `/api/v1/developer/capabilities/${encodeURIComponent(cap.id)}/submit`,
         { method: 'POST' }
       );
-      await loadDevSkills();
+      await loadDevCapabilities(devKindTab);
     } catch (err) {
       window.alert(err.message);
     } finally {
       setDevSubmittingId('');
+    }
+  };
+
+  const handleOffline = async (cap) => {
+    if (devOfflineId) return;
+    if (!window.confirm(`确认下架「${cap.name}」？下架后将不再出现在市场，可再次提交审核。`)) return;
+    setDevOfflineId(cap.id);
+    try {
+      await fetchAuthed(
+        `/api/v1/developer/capabilities/${encodeURIComponent(cap.id)}/offline`,
+        { method: 'POST' }
+      );
+      await loadDevCapabilities(devKindTab);
+    } catch (err) {
+      window.alert(err.message);
+    } finally {
+      setDevOfflineId('');
     }
   };
 
@@ -2103,34 +2959,55 @@ export default function ConsolePage() {
               />
             ) : null}
 
+            {view === 'developer' && devProfile?.developer?.status === 'approved' ? (
+              <nav className="console-dev-nav">
+                {DEV_SECTION_ORDER.map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className={
+                      devSection === key
+                        ? 'console-dev-nav-item is-active'
+                        : 'console-dev-nav-item'
+                    }
+                    onClick={() => setDevSection(key)}
+                  >
+                    {DEV_SECTIONS[key].label}
+                  </button>
+                ))}
+              </nav>
+            ) : null}
+
             {view === 'developer' ? (
               <DeveloperPanel
+                section={devSection}
                 profile={devProfile}
                 loading={devProfileLoading}
                 error={devProfileError}
-                skills={devSkills}
-                skillsLoading={devSkillsLoading}
+                capabilities={devCapabilities}
+                capsLoading={devCapsLoading}
+                kindTab={devKindTab}
+                onKindTab={setDevKindTab}
+                stats={devStats}
+                statsLoading={devStatsLoading}
+                statsError={devStatsError}
+                earnings={devEarnings}
+                earningsLoading={devEarningsLoading}
+                earningsError={devEarningsError}
                 applyForm={applyForm}
                 applying={applying}
                 applyError={applyError}
-                onApplyChange={(field, value) =>
-                  setApplyForm((prev) => ({ ...prev, [field]: value }))
-                }
+                onApplyChange={handleApplyChange}
                 onApply={handleApply}
                 editorOpen={devEditorOpen}
                 editor={devEditor}
                 editorError={devEditorError}
                 saving={devSaving}
-                onOpenEditor={() => {
-                  setDevEditorError('');
-                  setDevEditor(newEditor());
-                  setDevEditorOpen(true);
-                }}
-                onCloseEditor={() => setDevEditorOpen(false)}
-                onEditorChange={(field, value) =>
-                  setDevEditor((prev) => ({ ...prev, [field]: value }))
-                }
-                onCreateSkill={handleCreateSkill}
+                onOpenEditor={handleOpenEditor}
+                onEditCapability={handleEditCapability}
+                onCloseEditor={handleCloseEditor}
+                onEditorChange={handleEditorChange}
+                onSaveCapability={handleSaveCapability}
                 testSkillId={devTestSkillId}
                 testing={devTesting}
                 testInput={devTestInput}
@@ -2146,6 +3023,8 @@ export default function ConsolePage() {
                 onRunTest={handleRunTest}
                 submittingId={devSubmittingId}
                 onSubmitReview={handleSubmitReview}
+                onOffline={handleOffline}
+                offlineId={devOfflineId}
               />
             ) : null}
           </div>

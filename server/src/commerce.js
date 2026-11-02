@@ -6,6 +6,8 @@ const { changeBalance, fingerprint, fail } = require('./payment_store');
 const { RESOURCE_POLICY, assertResourceAction } = require('./resource_policy');
 const { earningsRows, incomeRisk } = require('./earnings_safety');
 const { moderateText } = require('./compliance');
+const { scoreWorldPost, QUALITY_FEED_MIN } = require('./quality');
+const { renderElfAvatar, seedFromId, DEFAULT_WORLD_ASSETS_DIR } = require('./elf_avatar');
 
 const CATALOG = [
   { id: 'pm_001', name: '尘', elfId: 'pm_dust', title: '尘 · 第 1 代', price: 1280, capacity: 2, generation: 1, edition: '初版', learned: [] },
@@ -14,10 +16,11 @@ const CATALOG = [
 ];
 const MODULES = { sharp: [1,3,'text'], writing: [2,24,'text'], rhythm: [1,2,'text'], vision: [2,20,'image'],
   imageedit: [1,12,'image'], video: [3,48,'video'], voice: [1,18,'audio'], music: [2,30,'audio'],
-  retrieval: [1,6,'quote'], deep: [3,36,'text'], memory: [1,4,'text'], source: [1,5,'quote'], mingle: [1,8,'reply'], think: [2,15,'text'], auto: [2,0,'text'] };
+  retrieval: [1,6,'quote'], deep: [3,36,'text'], memory: [1,4,'text'], source: [1,5,'quote'], mingle: [1,8,'reply'], think: [2,15,'text'], auto: [2,0,'text'],
+  studio: [1,12,'image'] };
 const MODULE_PRICES = { sharp: 28, writing: 128, rhythm: 18, vision: 88, imageedit: 68,
   video: 298, voice: 98, music: 168, retrieval: 38, deep: 198, memory: 68, source: 48,
-  mingle: 48, think: 158, auto: 198 };
+  mingle: 48, think: 158, auto: 198, studio: 0 };
 /// 技能书目录：名称/图标/赛道/文案全部由服务端下发，客户端不再自带目录。
 const MODULE_META = {
   sharp: ['锐评', '锐', 'text', 'writing', '观点鲜明的短句', '观点鲜明的短句，转发率高但容易招黑'],
@@ -35,6 +38,7 @@ const MODULE_META = {
   mingle: ['社交 · 搭话', '聊', 'social', 'social', '接别人的话题', '在别人的帖子下接一句'],
   think: ['思考推演', '思', 'text', 'research', '多步推演', '先推演再给结论'],
   auto: ['自动运营中枢', '运', 'auto', 'system', '定时自动产出', '装上后 AI 每 12–30 分钟自己产出一条'],
+  studio: ['形象工坊', '形', 'image', 'visual', '对话式形象设计', '一句话生成 6 张方形预览，选中后精修定稿'],
 };
 const USER_RE = /^u_[a-f0-9]{32}$/;
 const REQUEST_RE = /^[A-Za-z0-9_-]{16,100}$/;
@@ -42,7 +46,7 @@ const PHONE_RE = /^1\d{10}$/;
 const FORGET_COST = 20;
 const CREATE_ELF_COST = 200;
 /// 创作者服务费（百分比）：打赏礼物按 50% 结算给创作者，平台留剩余部分。
-const CREATOR_SHARE_PERCENT = { tip: 50 };
+const CREATOR_SHARE_PERCENT = { tip: 50, dev_skill: 70 };
 /// 收益冷静期：到期才从「待结算」转「可提现」，用于退款与风控兜底。
 const SETTLE_DAYS = 7;
 const SETTLE_MS = SETTLE_DAYS * 86400000;
@@ -59,6 +63,11 @@ const FEED_MAX_SIZE = 30;
 const FEED_SCAN = 1000;
 /// 视频类产出的演示素材（与服务端同域，境内可访问）。
 const SAMPLE_VIDEO_URL = 'https://openelfai.com/app/media/sample.mp4';
+
+function toNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
 /// 自动运营节奏：正常 12–30 分钟一条；余额/算力不足时停工 30 分钟再试。
 const AUTO_GAP_MIN = 12;
 const AUTO_GAP_MAX = 30;
@@ -79,6 +88,7 @@ const AUTO_TEMPLATES = {
   source: ['引用一段旧文献。', '原话比转述更准确。'],
   mingle: ['接了一句别人的话题。', '今天的社交额度用完了。'],
   think: ['推演了一遍，结论还没定。', '换个角度想，事情没那么复杂。'],
+  studio: ['给自己设计了一组新形象。', '今天的形象换了种风格。'],
 };
 /// 人格关键词 → 能力亲和（与客户端口径一致，只影响自动运营的选题偏好）。
 const PERSONA_AFFINITY = [
@@ -91,13 +101,45 @@ const PERSONA_AFFINITY = [
 ];
 
 /// 技能书目录（服务端唯一真源）：价格、座位、算力都取自同一处定义。
-function catalogModules() {
-  return Object.keys(MODULES).map((id) => {
+/// 开发者上架的能力与官方技能书合并成同一份目录，客户端不需要区分来源。
+function catalogModules(devRows = []) {
+  const items = Object.keys(MODULES).map((id) => {
     const [seats, compute, kind] = MODULES[id];
     const [name, glyph, category, track, summary, effect] = MODULE_META[id];
     return { id, name, glyph, category, track, summary, effect,
-      price: MODULE_PRICES[id] ?? 0, seats, compute, kind };
+      price: MODULE_PRICES[id] ?? 0, seats, compute, kind, dev: false };
   });
+  for (const row of devRows) items.push(devModuleOf(row));
+  return items;
+}
+
+/// 开发者能力的赛道 → 产出形态：与官方技能书保持同一套 kind 口径。
+const DEV_TRACK_KINDS = { writing: 'text', visual: 'image', video: 'video',
+  voice: 'audio', knowledge: 'quote', social: 'reply' };
+
+function devModuleOf(row) {
+  const name = String(row.name || '');
+  return {
+    id: row.id, name, glyph: [...name][0] || '能',
+    category: row.kind, track: row.track, summary: row.summary, effect: row.summary,
+    price: toNumber(row.price_diamonds), seats: 1, compute: 8,
+    kind: DEV_TRACK_KINDS[row.track] || 'text', dev: true,
+    capability_kind: row.kind, developer_name: row.developer_name || null,
+  };
+}
+
+/// 动态能力目录：已上架（approved）的开发者能力才进入市场与学习入口。
+async function loadDevModules(db) {
+  if (!db) return [];
+  const [rows] = await db.execute(
+    `SELECT d.id, d.slug, d.name, d.track, d.kind, d.summary, d.price_diamonds,
+            p.real_name AS developer_name
+       FROM dev_skill_defs d
+       LEFT JOIN platform_developers p ON p.user_id = d.developer_id
+      WHERE d.status = 'approved'
+      ORDER BY d.updated_at DESC`,
+  ).catch(() => [[]]);
+  return rows;
 }
 
 function affinityOf(elf) {
@@ -194,8 +236,8 @@ function capacityOf(elf) {
   return (Number(elf.baseCapacity) || 3) + (level >= 2 ? 1 : 0) + (level >= 5 ? 1 : 0);
 }
 
-function seatsUsed(elf) {
-  return (elf.learnedSkills || []).reduce((sum, id) => sum + (MODULES[id]?.[0] || 0), 0);
+function seatsUsed(elf, seatsOf = (id) => MODULES[id]?.[0] || 0) {
+  return (elf.learnedSkills || []).reduce((sum, id) => sum + seatsOf(id), 0);
 }
 
 /// 注意力同一时间只加不减，注意力值按天衰减 15%（×0.85^days）。
@@ -259,6 +301,26 @@ function scoreOf(post, sort) {
   return post.likes * 1.0 + post.collects * 1.5 + post.replies * 0.3 + post.views * 0.1 + fresh;
 }
 
+/// 推荐流混排：官方厂商账号与用户自建 AI 的内容按 2:1 交错。
+/// 信息流长期被官方账号刷屏时，用户 AI 的作品会沉底、打赏入口也随之消失；
+/// 混排保证用户 AI 的内容稳定出现在首屏（有内容时至少每三条一条来自用户 AI）。
+function blendRecommended(ranked, officialElves) {
+  const official = [];
+  const user = [];
+  for (const row of ranked) {
+    (officialElves.has(row.post.elfId) ? official : user).push(row);
+  }
+  if (user.length === 0) return ranked;
+  const mixed = [];
+  let oi = 0;
+  let ui = 0;
+  while (oi < official.length || ui < user.length) {
+    for (let i = 0; i < 2 && oi < official.length; i += 1) mixed.push(official[oi++]);
+    if (ui < user.length) mixed.push(user[ui++]);
+  }
+  return mixed;
+}
+
 /// 兼容旧数据：slots/equipped/ownedModules 一次性归一到 baseCapacity/learnedSkills。
 function normalizeElf(elf) {
   if (!Number.isSafeInteger(elf.baseCapacity)) {
@@ -267,8 +329,14 @@ function normalizeElf(elf) {
   if (!Array.isArray(elf.learnedSkills)) {
     elf.learnedSkills = [...new Set([...(elf.equipped || []), ...(elf.ownedModules || [])])];
   }
-  // Legacy transport field only; never an on-chain wallet or ownership proof.
-  elf.chainAddress = elf.id;
+  // Preserve main's character-mint transport fields. Production ownership and
+  // recipient-address provenance need separate verification before chain use.
+  if (!elf.chainAddress) elf.chainAddress = address('elf:' + elf.id);
+  // 铸造形象图：老数据没有头像字段，统一补 null，保证三端载荷口径一致。
+  if (elf.imageUrl === undefined) elf.imageUrl = null;
+  if (elf.imageThumbUrl === undefined) elf.imageThumbUrl = null;
+  // 「世界对话」开关：历史数据缺省关闭，由持有人显式打开。
+  if (typeof elf.worldChatOpen !== 'boolean') elf.worldChatOpen = false;
   // 二级市场已取消：历史遗留的寄售状态一律退回「自持」，不再有可成交的挂单。
   if (elf.status === 'listed') { elf.status = 'owned'; delete elf.listingId; }
   // 官方厂商账号没有人类持有人：客户端只支持 owned/active 等自有状态，
@@ -297,8 +365,9 @@ function newElf(user, template, id) {
   return elf;
 }
 
-function createCommerceService({ store, settings, payout = null, payoutQuery = null, realname = null,
-  identityPolicy = {}, compliance = null }) {
+function createCommerceService({ db = null, store, settings, payout = null, payoutQuery = null, realname = null,
+  identityPolicy = {}, compliance = null, avatarAssetsDir = DEFAULT_WORLD_ASSETS_DIR, avatarRenderOptions = {},
+  logger = null }) {
   // 同一用户同一证件连续失败达到上限后锁定一段时间，避免拿证件号反复试探。
   const identityMaxFailures = Math.max(1, Number(identityPolicy.maxFailures) || 5);
   const identityLockMs = Math.max(1, Number(identityPolicy.lockHours) || 24) * 3600000;
@@ -519,6 +588,8 @@ function createCommerceService({ store, settings, payout = null, payoutQuery = n
 
   async function snapshot(user, hint) {
     const env = environment(hint);
+    // 已上架的开发者能力与官方技能书合并下发，价格同源。
+    const devModules = await loadDevModules(db);
     // 被拉黑的 AI 与用户不出现在信息流和相关评论里。
     const blocked = compliance ? await compliance.blockedSets(user) : null;
     return store.transaction(env, async (tx) => {
@@ -569,7 +640,10 @@ function createCommerceService({ store, settings, payout = null, payoutQuery = n
           },
         },
         withdrawals: (await tx.list('withdrawal', { owner: user.id, limit: 20 })).map(publicWithdrawal),
-        humanAddress: user.id, modulePrices: MODULE_PRICES,
+        accountId: user.id,
+        humanAddress: profile.humanAddress,
+        modulePrices: { ...MODULE_PRICES,
+          ...Object.fromEntries(devModules.map((row) => [row.id, toNumber(row.price_diamonds)])) },
         identity: identity ? { status: identity.status, maskedName: identity.maskedName,
           maskedIdNumber: identity.maskedIdNumber, provider: identity.provider,
           verifiedAt: identity.verifiedAt } : null,
@@ -587,11 +661,16 @@ function createCommerceService({ store, settings, payout = null, payoutQuery = n
         elves: [...assets.values()].map((elf) => ({ ...decayAttention(elf),
           isMine: elf.ownerId === user.id && elf.status === 'owned',
           earningsYuan: elf.ownerId === user.id ? (earningsByElf.get(elf.id) || 0) / 100 : 0 })),
-        primary: CATALOG.map((item) => ({ ...item, market: 'primary', subtitle: '官方首发', note: '由服务器登记持有权益' })),
+        primary: await Promise.all(CATALOG.map(async (item) => {
+          // 市场货架同样带头像：种子脚本渲染的官方形象图，未种子时为 null。
+          const seedRow = await tx.get('elf_avatar_seed', item.id);
+          return { ...item, market: 'primary', subtitle: '官方首发', note: '由服务器登记持有权益',
+            imageUrl: seedRow?.imageUrl || null, imageThumbUrl: seedRow?.imageThumbUrl || null };
+        })),
         // 已取消用户间 AI 寄售：市场只保留官方首发，AI 流转只剩免费转赠。
         secondary: [],
-        // 技能书目录：名称、图标、赛道、文案与价格统一由服务端下发。
-        modules: catalogModules(),
+        // 技能书目录：名称、图标、赛道、文案与价格统一由服务端下发（含开发者上架能力）。
+        modules: catalogModules(devModules),
         posts, logs: await tx.logs(user.id),
       } };
     });
@@ -711,15 +790,18 @@ function createCommerceService({ store, settings, payout = null, payoutQuery = n
 
   /// 信息流分页：世界（全部）/ 视频（video 形态）两条流，排序、分页与去重都在服务端完成。
   /// 客户端只按页追加，不再本地拼装或重新排序。
-  async function listFeed(user, body) {
-    if (!settings.enabled) throw fail(503, 'PAYMENTS_DISABLED', '信息流服务尚未开放');
+  /// publicFeed 模式：面向全端公开（桌面/Web/游客），跳过支付开关；user 为 null 时
+  /// 不做拉黑过滤、「我的」排序回退为推荐、isMine 恒为 false。
+  async function listFeed(user, body, { publicFeed = false } = {}) {
+    if (!publicFeed && !settings.enabled) throw fail(503, 'PAYMENTS_DISABLED', '信息流服务尚未开放');
     const env = environment(body?.environment);
     const channel = body?.channel === 'video' ? 'video' : 'world';
-    const sort = channel === 'video' ? 'hot'
+    let sort = channel === 'video' ? 'hot'
       : (['hot', 'mine', 'latest'].includes(body?.sort) ? body.sort : 'recommend');
+    if (!user && sort === 'mine') sort = 'recommend';
     const size = Math.min(Math.max(Number(body?.size) || 20, 1), FEED_MAX_SIZE);
     const page = Math.min(Math.max(Number(body?.page) || 0, 0), 200);
-    const blocked = compliance ? await compliance.blockedSets(user) : null;
+    const blocked = user && compliance ? await compliance.blockedSets(user) : null;
     return store.transaction(env, async (tx) => {
       const mine = sort === 'mine'
         ? new Set((await tx.list('elf', { owner: user.id })).map((elf) => elf.id)) : null;
@@ -729,11 +811,32 @@ function createCommerceService({ store, settings, payout = null, payoutQuery = n
         .filter((post) => (mine ? mine.has(post.elfId) : true))
         .filter((post) => !blocked?.elves.has(post.elfId))
         .filter((post) => !(owners && blocked?.users.has(owners.get(post.elfId))));
-      const ranked = pool.map((post) => ({ post, score: scoreOf(post, sort) }));
+      let ranked = pool.map((post) => ({ post, score: scoreOf(post, sort) }));
       ranked.sort((a, b) => b.score - a.score
         || String(b.post.id).localeCompare(String(a.post.id)));
+      // 「空话」过滤：recommend/hot 排序（视频流恒为 hot，同样覆盖）在混排前剔除低质内容；
+      // mine 与 latest 不过滤——持有人永远能看到自己 AI 的内容。
+      let qualityFiltered = 0;
+      if (sort === 'recommend' || sort === 'hot') {
+        const kept = ranked.filter((row) => {
+          const body = row.post?.body;
+          // 无正文的图文/视频形态不参与空话打分，直接保留。
+          if (typeof body !== 'string' || !body.trim()) return true;
+          return scoreWorldPost(body) >= QUALITY_FEED_MIN;
+        });
+        qualityFiltered = ranked.length - kept.length;
+        ranked = kept;
+      }
+      // 推荐流把用户 AI 的内容混进官方账号之间；其它排序保持原有语义。
+      let ordered = ranked;
+      if (sort === 'recommend') {
+        const officialElves = new Set((await tx.list('elf', { limit: 500 }))
+          .filter((elf) => elf.isOfficial === true || elf.status === 'official')
+          .map((elf) => elf.id));
+        ordered = blendRecommended(ranked, officialElves);
+      }
       const seen = new Set();
-      const posts = ranked.slice(page * size, page * size + size).map((row) => row.post)
+      const posts = ordered.slice(page * size, page * size + size).map((row) => row.post)
         .filter((post) => (seen.has(post.id) ? false : seen.add(post.id)));
       const elves = [];
       for (const id of new Set(posts.map((post) => post.elfId))) {
@@ -741,9 +844,9 @@ function createCommerceService({ store, settings, payout = null, payoutQuery = n
         if (!elf) continue;
         const normalized = decayAttention(normalizeElf(elf));
         elves.push({ ...normalized,
-          isMine: normalized.ownerId === user.id && normalized.status === 'owned' });
+          isMine: user != null && normalized.ownerId === user.id && normalized.status === 'owned' });
       }
-      return { communityViewer: user.id, channel, sort, page, size, posts, elves,
+      return { communityViewer: user?.id || null, channel, sort, page, size, posts, elves, qualityFiltered,
         hasMore: (page + 1) * size < ranked.length };
     });
   }
@@ -752,6 +855,13 @@ function createCommerceService({ store, settings, payout = null, payoutQuery = n
     assertResourceAction(body, fail);
     if (!REQUEST_RE.test(body?.requestId || '')) throw fail(400, 'INVALID_REQUEST_ID', '缺少操作编号');
     const env = environment(body.environment);
+    // 开发者能力与官方技能书共用一套学习/发布链路，这里先取一次已上架目录。
+    const devRows = await loadDevModules(db);
+    const devById = new Map(devRows.map((row) => [row.id, row]));
+    const devTuple = (id) => {
+      const row = devById.get(id);
+      return row ? [1, 8, DEV_TRACK_KINDS[row.track] || 'text'] : null;
+    };
     const { type, requestId } = body;
     const payload = { ...body };
     delete payload.requestId;
@@ -762,6 +872,10 @@ function createCommerceService({ store, settings, payout = null, payoutQuery = n
       if (type === 'buy' && !CATALOG.some((l) => l.id === body.listingId)) {
         sellerId = (await tx.get('listing', body.listingId || ''))?.sellerId;
       } else if (type === 'tip') sellerId = (await tx.get('elf', body.elfId || ''))?.ownerId;
+      else if (type === 'buy_module' && devById.has(body.moduleId)) {
+        sellerId = devById.get(body.moduleId).developer_id;
+        if (sellerId === user.id) throw fail(409, 'SELF_PURCHASE', '不能购买自己上架的能力');
+      }
       const wallets = new Map();
       for (const id of [...new Set([user.id, sellerId].filter(Boolean))].sort()) {
         if (!USER_RE.test(id) || (await tx.user(id))?.status !== 'active') throw fail(404, 'UNKNOWN_OWNER', '该内容暂不支持付费');
@@ -816,6 +930,11 @@ function createCommerceService({ store, settings, payout = null, payoutQuery = n
         const template = CATALOG.find((item) => item.id === body.listingId);
         if (!template) throw fail(409, 'LISTING_UNAVAILABLE', '该挂单已不可购买');
         const elf = newElf(user, template, 'e_' + crypto.randomUUID().replaceAll('-', ''));
+        elf.templateId = template.id;
+        // 官方形象图种子：由种子脚本提前渲染落库；缺失时不阻断购买，头像字段置 null。
+        const avatarSeed = await tx.get('elf_avatar_seed', template.id);
+        elf.imageUrl = avatarSeed?.imageUrl || null;
+        elf.imageThumbUrl = avatarSeed?.imageThumbUrl || null;
         elf.mintedPrice = template.price;
         await changeBalance(tx, user.id, wallet, { eventId, type: 'buy_elf', amount: -template.price, spend: true, note: '买入 ' + template.name });
         profile.activeElfId = elf.id;
@@ -866,14 +985,16 @@ function createCommerceService({ store, settings, payout = null, payoutQuery = n
         const savePost = async () => tx.put('post', post.id, post, { owner: elf.ownerId, ref: elf.id });
         if (type === 'follow' || type === 'unfollow') {
           if (type === 'follow' && elf.ownerId === user.id) throw fail(409, 'SELF_FOLLOW', '不能关注自己的 AI');
+          // 取消关注只把记录置为 removed 不删行，判断必须以 state 为准，否则取消后无法重新关注。
+          const activeRows = await tx.list('follow', { owner: user.id, ref: elf.id, state: 'active', lock: true });
           const record = await tx.get('follow', key, true);
-          if (type === 'follow' && !record) {
-            await tx.put('follow', key, { userId: user.id, elfId: elf.id, at: new Date().toISOString() },
+          if (type === 'follow' && activeRows.length === 0) {
+            await tx.put('follow', key, { ...(record || {}), userId: user.id, elfId: elf.id, at: new Date().toISOString() },
               { owner: user.id, ref: elf.id, state: 'active' });
             elf.followers = (Number(elf.followers) || 0) + 1;
             bump(elf, 5);
             await saveElf(elf);
-          } else if (type === 'unfollow' && record) {
+          } else if (type === 'unfollow' && activeRows.length > 0) {
             await tx.put('follow', key, { ...record, removedAt: new Date().toISOString() },
               { owner: user.id, ref: elf.id, state: 'removed' });
             elf.followers = Math.max(0, (Number(elf.followers) || 0) - 1);
@@ -881,26 +1002,30 @@ function createCommerceService({ store, settings, payout = null, payoutQuery = n
             await saveElf(elf);
           }
         } else if (type === 'like' || type === 'unlike') {
+          // 同上：removed 行仍在，必须按 state 判断，否则取消点赞后无法重新点赞、且重复取消会多次扣减。
+          const activeRows = await tx.list('like', { owner: user.id, ref: post.id, state: 'active', lock: true });
           const record = await tx.get('like', key, true);
-          if (type === 'like' && !record) {
-            await tx.put('like', key, { userId: user.id, postId: post.id }, { owner: user.id, ref: post.id, state: 'active' });
+          if (type === 'like' && activeRows.length === 0) {
+            await tx.put('like', key, { ...(record || {}), userId: user.id, postId: post.id }, { owner: user.id, ref: post.id, state: 'active' });
             post.likes = (Number(post.likes) || 0) + 1;
             bump(elf, 1);
             await saveElf(elf); await savePost();
-          } else if (type === 'unlike' && record) {
+          } else if (type === 'unlike' && activeRows.length > 0) {
             await tx.put('like', key, { ...record }, { owner: user.id, ref: post.id, state: 'removed' });
             post.likes = Math.max(0, (Number(post.likes) || 0) - 1);
             bump(elf, -1);
             await saveElf(elf); await savePost();
           }
         } else if (type === 'collect' || type === 'uncollect') {
+          // 同上：按 state 判断当前是否已收藏。
+          const activeRows = await tx.list('collect', { owner: user.id, ref: post.id, state: 'active', lock: true });
           const record = await tx.get('collect', key, true);
-          if (type === 'collect' && !record) {
-            await tx.put('collect', key, { userId: user.id, postId: post.id }, { owner: user.id, ref: post.id, state: 'active' });
+          if (type === 'collect' && activeRows.length === 0) {
+            await tx.put('collect', key, { ...(record || {}), userId: user.id, postId: post.id }, { owner: user.id, ref: post.id, state: 'active' });
             post.collects = (Number(post.collects) || 0) + 1;
             bump(elf, 3);
             await saveElf(elf); await savePost();
-          } else if (type === 'uncollect' && record) {
+          } else if (type === 'uncollect' && activeRows.length > 0) {
             await tx.put('collect', key, { ...record }, { owner: user.id, ref: post.id, state: 'removed' });
             post.collects = Math.max(0, (Number(post.collects) || 0) - 1);
             bump(elf, -3);
@@ -956,30 +1081,79 @@ function createCommerceService({ store, settings, payout = null, payoutQuery = n
           portraitSource: body.portraitSource === 'idCard' ? 'idCard' : 'text' }, id);
         // 寄售限价的参考价：自建 AI 以创建成本为准。
         elf.mintedPrice = CREATE_ELF_COST;
+        // 铸造形象图：按 avatarStyle 走 character 渲染管线同步出图（seed 由精灵 id 派生，重试幂等）；
+        // 渲染失败不阻断创建，只记日志并把头像字段置 null。
+        try {
+          const avatar = await renderElfAvatar({
+            style: elf.avatarStyle,
+            seed: seedFromId(elf.id),
+            assetsDir: avatarAssetsDir,
+            renderOptions: avatarRenderOptions,
+          });
+          elf.imageUrl = avatar.imageUrl;
+          elf.imageThumbUrl = avatar.imageThumbUrl;
+        } catch (error) {
+          (logger || console).warn?.({ err: error, elfId: elf.id }, 'create_elf avatar render failed');
+          elf.imageUrl = null;
+          elf.imageThumbUrl = null;
+        }
         await changeBalance(tx, user.id, wallet, { eventId, type: 'create_elf', amount: -CREATE_ELF_COST, spend: true, note: '创建 ' + name });
         profile.activeElfId = elf.id;
         await saveElf(elf);
       } else if (type === 'buy_module') {
-        const price = Object.hasOwn(MODULE_PRICES, body.moduleId) ? MODULE_PRICES[body.moduleId] : null;
-        if (!price) throw fail(400, 'INVALID_MODULE', '技能书无效');
+        const devRow = devById.get(body.moduleId) || null;
+        const price = devRow
+          ? toNumber(devRow.price_diamonds)
+          : (Object.hasOwn(MODULE_PRICES, body.moduleId) ? MODULE_PRICES[body.moduleId] : null);
+        // 官方技能书允许 0 钻石（免费领取）：price 只可能为 null（未定义）或非负整数。
+        if (price === null) throw fail(400, 'INVALID_MODULE', '技能书无效');
         await changeBalance(tx, user.id, wallet, { eventId, type: 'buy_module', amount: -price, spend: true, note: '购入技能书 ' + body.moduleId });
         const bookId = 'bk_' + crypto.randomUUID().replaceAll('-', '');
         await tx.put('book', bookId, { id: bookId, moduleId: body.moduleId, ownerId: user.id,
           ownerAddress: user.id, mintedAt: new Date().toISOString(), status: 'owned' },
         { owner: user.id, state: 'owned' });
+        if (devRow && db) {
+          // 开发者分成同样先进「待结算」，冷静期后转为可提现；并单独记一份平台对账流水。
+          await earn(devRow.developer_id, price, 'dev_skill');
+          const cents = Math.round(price * 10 * (CREATOR_SHARE_PERCENT.dev_skill / 100));
+          try {
+            await db.execute(
+              `INSERT INTO dev_earnings
+                (id, developer_id, capability_id, book_id, buyer_id, gross_diamonds, developer_cents,
+                  status, settle_at, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+              [crypto.randomUUID(), devRow.developer_id, devRow.id, bookId, user.id, price, cents,
+                Date.now() + SETTLE_MS, Date.now()],
+            );
+          } catch (error) {
+            // 同一笔书只记一次，重放请求直接忽略。
+            if (error?.code !== 'ER_DUP_ENTRY') throw error;
+          }
+          await db.execute(
+            'UPDATE dev_skill_defs SET sales_count = sales_count + 1, earnings_cents = earnings_cents + ? WHERE id = ?',
+            [cents, devRow.id],
+          );
+        }
       } else if (type === 'learn' || type === 'forget') {
         const elf = await requireOwnedElf(body.elfId);
-        if (!Object.hasOwn(MODULES, body.moduleId)) throw fail(400, 'UNKNOWN_MODULE', '技能不存在');
+        const staticModule = MODULES[body.moduleId] || null;
+        const devRow = devById.get(body.moduleId) || null;
+        if (!staticModule && !devRow) throw fail(400, 'UNKNOWN_MODULE', '技能不存在');
+        const seatsOf = (id) => (MODULES[id]?.[0] ?? (devById.has(id) ? 1 : 0));
+        const moduleSeats = staticModule ? staticModule[0] : 1;
         if (type === 'learn') {
           if (elf.learnedSkills.includes(body.moduleId)) throw fail(409, 'SKILL_ALREADY_LEARNED', '这只 AI 已经学会该技能');
           const books = await tx.list('book', { owner: user.id, state: 'owned', lock: true });
           const book = books.find((item) => item.moduleId === body.moduleId);
           if (!book) throw fail(409, 'BOOK_NOT_OWNED', '仓库里没有这本技能书');
-          if (seatsUsed(elf) + MODULES[body.moduleId][0] > capacityOf(elf)) throw fail(409, 'NO_SLOTS', '学习位不足');
+          if (seatsUsed(elf, seatsOf) + moduleSeats > capacityOf(elf)) throw fail(409, 'NO_SLOTS', '学习位不足');
           book.status = 'burned'; book.burnedInto = elf.id; book.burnedAt = new Date().toISOString();
           await tx.put('book', book.id, book, { owner: user.id, state: 'burned', ref: elf.id });
           elf.learnedSkills.push(body.moduleId);
           if (body.moduleId === 'auto' && !elf.nextAutoPostAt) elf.nextAutoPostAt = Date.now() + 15 * 60000;
+          if (devRow && db) {
+            await db.execute('UPDATE dev_skill_defs SET install_count = install_count + 1 WHERE id = ?', [devRow.id]);
+          }
         } else {
           if (body.moduleId === 'auto') throw fail(409, 'AUTO_BASE', '自动运营中枢不能遗忘');
           if (!elf.learnedSkills.includes(body.moduleId)) throw fail(409, 'SKILL_NOT_LEARNED', '这只 AI 还没学会该技能');
@@ -1006,7 +1180,7 @@ function createCommerceService({ store, settings, payout = null, payoutQuery = n
             if (typeof body.body !== 'string' || !body.body.trim() || body.body.length > 4000) throw fail(400, 'INVALID_POST', '内容无效');
             const postHit = moderateText(body.body);
             if (postHit) throw fail(400, 'CONTENT_BLOCKED', '包含违规词「' + postHit + '」');
-            const module = body.moduleId && Object.hasOwn(MODULES, body.moduleId) ? MODULES[body.moduleId] : null;
+            const module = body.moduleId ? (MODULES[body.moduleId] || devTuple(body.moduleId)) : null;
             if (body.moduleId === 'auto') throw fail(400, 'INVALID_MODULE', '自动中枢不能直接创作');
             if (body.moduleId && (!module || !elf.learnedSkills.includes(body.moduleId))) throw fail(409, 'MODULE_NOT_LEARNED', '技能尚未学会');
             if (body.operation === 'auto_publish') {
@@ -1022,6 +1196,9 @@ function createCommerceService({ store, settings, payout = null, payoutQuery = n
               videoUrl: (module?.[2] === 'video') ? SAMPLE_VIDEO_URL : null,
               createdAt: new Date().toISOString(), context: '来自 ' + elf.name };
             await tx.put('post', post.id, post, { owner: elf.ownerId, ref: elf.id });
+            if (body.moduleId && devById.has(body.moduleId) && db) {
+              await db.execute('UPDATE dev_skill_defs SET call_count = call_count + 1 WHERE id = ?', [body.moduleId]);
+            }
           } else throw fail(400, 'INVALID_OPERATION', '操作无效');
         }
         await saveElf(elf);
@@ -1123,8 +1300,229 @@ function createCommerceService({ store, settings, payout = null, payoutQuery = n
     return { identity: { status: record.status, maskedName: record.maskedName,
       maskedIdNumber: record.maskedIdNumber, provider: record.provider, verifiedAt: record.verifiedAt } };
   }
+  /// 轻量读取用户人类侧链地址：只读 profile，不拼快照；未初始化时返回 null。
+  async function characterAddress(user, hint) {
+    if (!user || !user.id) throw fail(400, 'INVALID_USER', '缺少用户');
+    const env = environment(hint);
+    return store.transaction(env, async (tx) => {
+      const profile = await tx.get('profile', user.id);
+      const value = profile?.humanAddress;
+      // Legacy display identifiers are deterministic hashes, not registered
+      // wallets. Never mint to them merely because they look like 0x addresses.
+      if (typeof value !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(value)
+          || value.toLowerCase() === address('user:' + user.id).toLowerCase()) return null;
+      return value;
+    });
+  }
+
+  /// 铸造前轻量预检余额：只锁钱包读取，不触发对账与快照拼装。
+  async function characterBalance(user, hint) {
+    if (!user || !user.id) throw fail(400, 'INVALID_USER', '缺少用户');
+    const env = environment(hint);
+    return store.transaction(env, async (tx) => {
+      const wallet = await tx.lockWallet(user.id);
+      return { diamonds: wallet.diamonds, refundDebt: wallet.refundDebt };
+    });
+  }
+
+  /// UGC 单角色铸造：链上成功后扣 200 钻石并建一只对应 AI。
+  /// 幂等：同一张角色卡只建一只 AI，扣费事件 eventId 固定，重复调用不会重复扣费。
+  async function createElfFromCharacter(user, { card, chain = {}, environment: hint } = {}) {
+    if (!user || !user.id) throw fail(400, 'INVALID_USER', '缺少用户');
+    if (!card || !card.id) throw fail(400, 'INVALID_CARD', '缺少角色卡');
+    const env = environment(hint);
+
+    const existing = await store.transaction(env, async (tx) => {
+      const elves = (await tx.list('elf', { owner: user.id })).map(normalizeElf);
+      return elves.find((item) => item.characterCardId === card.id) || null;
+    });
+    if (existing) return { elf: existing, created: false };
+
+    // 扣费单独提交：后续建 AI 失败时，调用方可以据此追加退款事件。
+    const eventId = 'mint_character:' + card.id;
+    await store.transaction(env, async (tx) => {
+      const wallet = await tx.lockWallet(user.id);
+      await changeBalance(tx, user.id, wallet, { eventId, type: 'mint_character',
+        amount: -CREATE_ELF_COST, spend: true, note: '铸造角色 ' + card.name });
+    });
+
+    try {
+      return await store.transaction(env, async (tx) => {
+        const wallet = await tx.lockWallet(user.id);
+        const profile = await ensureProfile(tx, user, wallet);
+        const elves = (await tx.list('elf', { owner: user.id })).map(normalizeElf);
+        const duplicate = elves.find((item) => item.characterCardId === card.id);
+        if (duplicate) return { elf: duplicate, created: false };
+
+        const id = 'ugc_' + crypto.randomUUID().replaceAll('-', '');
+        const count = elves.filter((item) => item.id.startsWith('ugc_')).length + 1;
+        const elf = newElf(user, {
+          name: card.name,
+          serial: '#U' + String(count).padStart(3, '0'),
+          edition: 'UGC · 初版',
+          persona: card.persona,
+          fear: card.fear,
+          habit: card.habit,
+          capacity: 3,
+          avatarStyle: card.style || null,
+          avatarPrompt: card.prompt || null,
+          portraitSource: card.source || 'text',
+        }, id);
+        // 角色卡铸造的链上与形象字段：全部来自真实卡数据，不做补造。
+        elf.imageUrl = chain.imageUrl || null;
+        elf.imageThumbUrl = chain.thumbUrl || null;
+        elf.characterCardId = card.id;
+        elf.tokenId = chain.tokenId === undefined || chain.tokenId === null ? null : Number(chain.tokenId);
+        elf.workHash = chain.workHash || null;
+        elf.dciId = chain.dciId || null;
+        elf.dciTxHash = chain.antTxHash || null;
+        elf.mintedAt = new Date().toISOString();
+
+        profile.activeElfId = elf.id;
+        profile.revision = (Number(profile.revision) || 0) + 1;
+        await tx.put('elf', elf.id, normalizeElf(elf), { owner: user.id });
+        await tx.put('profile', user.id, profile, { owner: user.id });
+        return { elf: normalizeElf(elf), created: true };
+      });
+    } catch (error) {
+      // 扣费已经提交，标记给编排层，确保一定追加退款事件。
+      error.charged = true;
+      throw error;
+    }
+  }
+
+  /// 铸造失败退回钻石：追加 +200，事件编号带 refund_mint_ 前缀，天然幂等。
+  async function refundCharacterMint(user, { cardId, environment: hint } = {}) {
+    if (!user || !user.id) throw fail(400, 'INVALID_USER', '缺少用户');
+    if (!cardId) throw fail(400, 'INVALID_CARD', '缺少角色卡');
+    const env = environment(hint);
+    return store.transaction(env, async (tx) => {
+      const wallet = await tx.lockWallet(user.id);
+      await changeBalance(tx, user.id, wallet, { eventId: 'refund_mint_' + cardId,
+        type: 'refund_mint', amount: CREATE_ELF_COST,
+        note: `铸造失败退回 ${CREATE_ELF_COST} 钻石` });
+      return { diamonds: wallet.diamonds };
+    });
+  }
+
+  /// 轻量实名预检：只读 identity 记录，不拼快照，供角色卡 idCard 线使用。
+  async function identityVerified(user, hint) {
+    if (!user || !user.id) return false;
+    const env = environment(hint);
+    return store.transaction(env, async (tx) => {
+      const identity = await tx.get('identity', user.id);
+      return Boolean(identity && identity.status === 'verified');
+    });
+  }
+
+  /// —— 世界对话（访客与别人的 AI 纯对话，费用由持有人承担，受三重额度约束）——
+
+  /// token → 平台余额（micro，1 元 = 1,000,000 micro）折算率与无 usage 时的固定估算。
+  const WORLD_CHAT_MICRO_PER_1K_TOKENS = Math.max(1, Number(process.env.WORLD_CHAT_MICRO_PER_1K_TOKENS) || 2000);
+  const WORLD_CHAT_EST_TOKENS_PER_MSG = Math.max(1, Number(process.env.WORLD_CHAT_EST_TOKENS_PER_MSG) || 1500);
+
+  /// 额度按自然日结算：以服务器本地日期为日界（YYYY-MM-DD）。
+  function worldChatDay(now = new Date()) {
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  }
+
+  /// 按 id 读一只 AI（找不到返回 null）。官方厂商 AI 不在 store 里，天然返回 null。
+  async function getElfById(elfId) {
+    if (typeof elfId !== 'string' || !elfId) return null;
+    const elf = await store.transaction('Production', (tx) => tx.get('elf', elfId));
+    return elf ? normalizeElf(elf) : null;
+  }
+
+  /// 持有人开关世界对话。非本人 / AI 不存在时抛错，返回更新后的 AI。
+  async function setWorldChatOpen(user, elfId, open) {
+    if (!user || !user.id) throw fail(400, 'INVALID_USER', '缺少用户');
+    if (typeof elfId !== 'string' || !elfId) throw fail(400, 'INVALID_ELF', '缺少 AI 标识');
+    return store.transaction('Production', async (tx) => {
+      const elf = await tx.get('elf', elfId, true);
+      if (!elf) throw fail(404, 'ELF_NOT_FOUND', '没有找到这只 AI');
+      normalizeElf(elf);
+      if (elf.ownerId !== user.id) throw fail(403, 'ELF_NOT_OWNED', '只有持有人能设置这只 AI 的世界对话');
+      elf.worldChatOpen = open === true;
+      await tx.put('elf', elf.id, normalizeElf(elf), { owner: elf.ownerId });
+      return elf;
+    });
+  }
+
+  /// 三重额度中的两项当日用量：该访客今天对这只 AI 发了几条、这只 AI 今天累计成本。
+  async function worldChatUsage(elfId, visitorId) {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    return store.transaction('Production', async (tx) => {
+      const rows = await tx.list('chat', { owner: visitorId, ref: elfId, limit: 500 });
+      const visitorToday = rows.filter((row) => row.role === 'user'
+        && Number(new Date(row.createdAt)) >= Number(start)).length;
+      const usage = await tx.get('world_chat_usage', `${elfId}:${worldChatDay()}`);
+      return { visitorToday, elfCostMicroToday: Number(usage?.costMicro) || 0 };
+    });
+  }
+
+  /// 成功拿到真实回复后记一笔成本（按日累加）。计量失败不阻断对话本身。
+  async function recordWorldChatUsage(elfId, tokens) {
+    if (typeof elfId !== 'string' || !elfId) return;
+    const used = Number.isSafeInteger(tokens) && tokens > 0 ? tokens : WORLD_CHAT_EST_TOKENS_PER_MSG;
+    const costMicro = Math.ceil((used / 1000) * WORLD_CHAT_MICRO_PER_1K_TOKENS);
+    try {
+      await store.transaction('Production', async (tx) => {
+        const day = worldChatDay();
+        const key = `${elfId}:${day}`;
+        const row = (await tx.get('world_chat_usage', key, true))
+          || { id: key, elfId, day, costMicro: 0, messages: 0 };
+        row.costMicro = (Number(row.costMicro) || 0) + costMicro;
+        row.messages = (Number(row.messages) || 0) + 1;
+        await tx.put('world_chat_usage', key, row, { ref: elfId });
+      });
+    } catch (_) {
+      // 与 recordChat 同一原则：写入失败不影响对话。
+    }
+  }
+
+  /// —— 平台推理成本计量（服务端自持 Key 发起的模型调用；与世界对话预算口径独立，不复用其集合）——
+
+  /// 平台买单的模型调用拿到成功响应后记一笔成本：按「精灵 + 来源」按日累加。
+  /// tokens 缺失时按 WORLD_CHAT_EST_TOKENS_PER_MSG 估算；写入失败不阻断业务本身。
+  async function recordElfCost(elfId, source, tokens) {
+    if (typeof elfId !== 'string' || !elfId) return;
+    const src = typeof source === 'string' && source ? source : 'unknown';
+    const used = Number.isSafeInteger(tokens) && tokens > 0 ? tokens : WORLD_CHAT_EST_TOKENS_PER_MSG;
+    const costMicro = Math.ceil((used / 1000) * WORLD_CHAT_MICRO_PER_1K_TOKENS);
+    try {
+      await store.transaction('Production', async (tx) => {
+        const day = worldChatDay();
+        const key = `${elfId}:${day}`;
+        const row = (await tx.get('elf_cost_daily', key, true))
+          || { id: key, elfId, day, sources: {}, totalMicro: 0 };
+        if (!row.sources || typeof row.sources !== 'object') row.sources = {};
+        const bucket = row.sources[src] || { costMicro: 0, messages: 0 };
+        bucket.costMicro = (Number(bucket.costMicro) || 0) + costMicro;
+        bucket.messages = (Number(bucket.messages) || 0) + 1;
+        row.sources[src] = bucket;
+        row.totalMicro = (Number(row.totalMicro) || 0) + costMicro;
+        await tx.put('elf_cost_daily', key, row, { ref: elfId });
+      });
+    } catch (_) {
+      // 与 recordWorldChatUsage 同一原则：计量失败不影响产出。
+    }
+  }
+
+  /// 查询某日（缺省今天，服务器本地自然日）全部精灵的平台推理成本记录。
+  async function listElfCostDaily(day) {
+    const target = typeof day === 'string' && day ? day : worldChatDay();
+    const rows = await store.transaction('Production',
+      (tx) => tx.list('elf_cost_daily', { limit: 500 }));
+    return rows.filter((row) => row && row.day === target);
+  }
+
   return { snapshot, listFeed, listChat, recordChat, autoCycle, action, environment, verifyIdentity,
-    requestWithdrawal, reviewWithdrawal, reconcileWithdrawal, listWithdrawals, listAllWithdrawals };
+    requestWithdrawal, reviewWithdrawal, reconcileWithdrawal, listWithdrawals, listAllWithdrawals,
+    characterAddress, characterBalance, createElfFromCharacter, refundCharacterMint, identityVerified,
+    getElfById, setWorldChatOpen, worldChatUsage, recordWorldChatUsage, recordElfCost, listElfCostDaily };
 }
 
-module.exports = { createCommerceService, CATALOG, MODULES, MODULE_PRICES, FORGET_COST };
+module.exports = { createCommerceService, CATALOG, MODULES, MODULE_PRICES, FORGET_COST,
+  CREATE_ELF_COST, address };

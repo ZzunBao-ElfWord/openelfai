@@ -10,6 +10,7 @@ import '../widgets/audio_player_card.dart';
 import '../widgets/common.dart';
 import '../widgets/work_share_sheet.dart';
 import '../widgets/content_safety.dart';
+import '../widgets/workbench_panel.dart';
 import 'elf_chat_page.dart';
 import 'login_page.dart';
 import 'attention_board_page.dart';
@@ -31,7 +32,7 @@ class _WorldPageState extends State<WorldPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tc;
 
-  /// Public content loads independently of StoreKit and wallet availability.
+  /// Public content and desktop workbench do not wait for payment readiness.
   bool _kickedOff = false;
 
   @override
@@ -46,7 +47,7 @@ class _WorldPageState extends State<WorldPage>
   void _tryKickoffFeed() {
     if (_kickedOff || !mounted) return;
     final state = AppState.instance;
-    if (state.currentUser == null) return;
+    // Guest browsing is supported; account-only actions remain authenticated.
     _kickedOff = true;
     state.loadFeed();
   }
@@ -96,6 +97,10 @@ class _WorldPageState extends State<WorldPage>
                       maxWidth: 760,
                       child: Column(
                         children: [
+                          // 首页工作台（WorkBuddy 框架）只给桌面 / Web 宽屏用，
+                          // 手机端保留原有的信息流头部。
+                          if (WideContent.isWide(context))
+                            const WorkbenchPanel(wide: true),
                           _header(state),
                           _tabs(state),
                           Expanded(

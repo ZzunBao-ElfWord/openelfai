@@ -347,15 +347,15 @@ func (d Deps) ListModerationPendingMedia(c *gin.Context) {
 	items := make([]gin.H, 0, len(rowsData))
 	for _, row := range rowsData {
 		items = append(items, gin.H{
-			"id":          row.objectID,
-			"environment": row.environment,
-			"elf_id":      row.payload.ElfID,
-			"elf_name":    elfNames[row.environment+"|"+row.payload.ElfID],
-			"body":        row.payload.Body,
-			"video_url":   row.payload.VideoURL,
-			"cover_url":   row.payload.CoverURL,
-			"uploaded_by": row.payload.UploadedBy,
-			"created_at":  row.payload.CreatedAt,
+			"id":           row.objectID,
+			"environment":  row.environment,
+			"elf_id":       row.payload.ElfID,
+			"elf_name":     elfNames[row.environment+"|"+row.payload.ElfID],
+			"body":         row.payload.Body,
+			"video_url":    row.payload.VideoURL,
+			"cover_url":    row.payload.CoverURL,
+			"uploaded_by":  row.payload.UploadedBy,
+			"created_at":   row.payload.CreatedAt,
 			"submitted_at": row.updatedAt,
 		})
 	}

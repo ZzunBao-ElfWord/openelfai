@@ -3,6 +3,7 @@ import '../models/elf.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import 'generator_works_page.dart';
 import 'market_listing_page.dart';
 import 'login_page.dart';
 import 'wallet_page.dart';
@@ -16,7 +17,10 @@ class MarketPage extends StatefulWidget {
   /// 内嵌在底栏 tab 中时隐藏返回按钮、标题显示「发现」。
   final bool embedded;
 
-  const MarketPage({super.key, this.embedded = false});
+  /// 初始选中的 tab：0 = AI 智能体，1 = AI 技能书。
+  final int initialTab;
+
+  const MarketPage({super.key, this.embedded = false, this.initialTab = 0});
 
   @override
   State<MarketPage> createState() => _MarketPageState();
@@ -31,7 +35,8 @@ class _MarketPageState extends State<MarketPage>
   @override
   void initState() {
     super.initState();
-    _tc = TabController(length: 2, vsync: this);
+    _tc = TabController(
+        length: 2, vsync: this, initialIndex: widget.initialTab);
   }
 
   @override
@@ -124,6 +129,17 @@ class _MarketPageState extends State<MarketPage>
               const SizedBox(width: 8),
               Icon(Icons.store, size: 16, color: AppColors.textMuted),
               const Spacer(),
+              // 作品画廊：生成器全量作品，游客可看。
+              IconButton(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                      builder: (_) => const GeneratorWorksPage.gallery()),
+                ),
+                icon: Icon(Icons.auto_awesome_outlined,
+                    size: 17, color: AppColors.textMuted),
+                tooltip: '作品画廊',
+                visualDensity: VisualDensity.compact,
+              ),
               InkWell(
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const WalletPage()),
@@ -665,7 +681,7 @@ class _MarketPageState extends State<MarketPage>
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    '💎 $price',
+                    price == 0 ? '免费领取' : '💎 $price',
                     style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
@@ -673,7 +689,7 @@ class _MarketPageState extends State<MarketPage>
                   ),
                   const SizedBox(height: 7),
                   _miniBtn(
-                    '购入',
+                    price == 0 ? '免费领取' : '购入',
                     primary: true,
                     onTap: () {
                       if (checkLoginOrPrompt(context)) {
@@ -809,7 +825,9 @@ class _MarketPageState extends State<MarketPage>
               ],
               const SizedBox(height: 16),
               BrandButton(
-                label: '💎 ${state.modulePrice(m.id)} · 购入《${m.name}》',
+                label: state.modulePrice(m.id) == 0
+                    ? '免费领取《${m.name}》'
+                    : '💎 ${state.modulePrice(m.id)} · 购入《${m.name}》',
                 onTap: () async {
                   final err = await state.purchaseBook(m.id);
                   if (!ctx.mounted || !mounted) return;

@@ -3,8 +3,12 @@
     "apps": [],
     "details": [
       {
-        "appID": "REPLACE_WITH_TEAM_ID.com.ai.openelf",
+        "appID": "ZJ3YQXTB93.com.ai.openelf",
         "components": [
+          {
+            "/": "/e/*",
+            "comment": "精灵分享落地页回流"
+          },
           {
             "/": "/share/*",
             "comment": "站外分享回流"

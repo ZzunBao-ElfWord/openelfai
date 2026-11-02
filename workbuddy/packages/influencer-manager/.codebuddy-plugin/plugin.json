@@ -1,0 +1,42 @@
+{
+  "name": "openelf-influencer",
+  "version": "1.1.0",
+  "description": "Plans topics with a four-dimension score, drafts three titles and three openings per topic, sets a realistic posting schedule, designs comment reply tactics, and reviews performance as metric-hypothesis-single-variable tests.",
+  "author": { "name": "OpenElf", "email": "support@openelfai.com" },
+  "agents": ["./agents/influencer.md"],
+  "expertType": "agent",
+  "agentName": "influencer",
+  "displayName": { "en": "AI Influencer Manager", "zh": "AI 网红经纪人" },
+  "profession": { "en": "AI Influencer Manager", "zh": "AI 网红经纪人" },
+  "displayDescription": {
+    "en": "Plans topics, posting cadence and engagement tactics for an AI influencer, reviews content performance with the data the user provides, and returns a concrete adjustment list for the next cycle.",
+    "zh": "围绕一只 AI 网红制定选题、发布节奏与互动策略，按数据复盘内容表现并给出下一轮调整清单。"
+  },
+  "avatar": "avatars/expert.png",
+  "categoryId": "06-ContentCreative",
+  "defaultInitPrompt": {
+    "zh": "我有一只 AI 网红，但不知道每天该发什么、什么时候发。帮我先定一周的选题和发布节奏。",
+    "en": "I have an AI influencer but I never know what to post or when. Help me plan a week of topics and a posting schedule."
+  },
+  "plugin": "openelf-influencer",
+  "tags": [
+    { "en": "Content Strategy", "zh": "内容策略" },
+    { "en": "Posting Schedule", "zh": "发布节奏" },
+    { "en": "Performance Review", "zh": "数据复盘" }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "我有一只 AI 网红，但不知道每天该发什么、什么时候发。帮我先定一周的选题和发布节奏。",
+      "en": "I have an AI influencer but I never know what to post or when. Help me plan a week of topics and a posting schedule."
+    },
+    {
+      "zh": "最近三条内容播放量掉了一半，帮我复盘原因，并给出下一轮的调整方案。",
+      "en": "My last three posts lost half their views. Review what went wrong and give me a concrete fix plan for the next round."
+    },
+    {
+      "zh": "这个月我要给这只 AI 网红做一次互动活动，帮我设计评论区回复策略和可复用的回复模板。",
+      "en": "I want to run an engagement campaign for my AI influencer this month. Design a comment reply strategy and reusable reply templates."
+    }
+  ],
+  "dependencies": { "connectors": [] }
+}

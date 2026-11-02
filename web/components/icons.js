@@ -94,6 +94,14 @@ export function Icon({ name, size = 18, className }) {
         stroke="none"
       />
     ),
+    windows: (
+      <g>
+        <rect x="3.5" y="3.5" width="7" height="7" rx="1" />
+        <rect x="13.5" y="3.5" width="7" height="7" rx="1" />
+        <rect x="3.5" y="13.5" width="7" height="7" rx="1" />
+        <rect x="13.5" y="13.5" width="7" height="7" rx="1" />
+      </g>
+    ),
     globe: (
       <g>
         <circle cx="12" cy="12" r="8.5" />

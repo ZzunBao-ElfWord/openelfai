@@ -1,0 +1,21 @@
+{
+  "title": "OpenElf 视频剪辑授权",
+  "title_en": "Connect OpenElf Smart Cut",
+  "description": "使用 OpenElf API Key 连接视频剪辑，密钥只保存在本地，不会同步到其他服务。",
+  "description_en": "Connect with your OpenElf API Key. The key is stored locally only and never synced.",
+  "docUrl": "https://openelfai.com/docs/api-key",
+  "docLabel": "如何获取 OpenElf API Key？",
+  "docLabel_en": "How to get an OpenElf API Key?",
+  "fields": [
+    {
+      "key": "OPENELF_API_KEY",
+      "label": "OpenElf API Key",
+      "label_en": "OpenElf API Key",
+      "type": "password",
+      "required": true,
+      "placeholder": "oe-sk-xxxxxxxxxxxxxxxx",
+      "description": "在 OpenElf 开放平台控制台创建 API Key，格式为 oe-sk- 开头；如提示未授权，请检查密钥是否已吊销或额度是否用尽。",
+      "description_en": "Create an API key in the OpenElf console. It starts with oe-sk-. If unauthorized, check whether the key was revoked or the quota is exhausted."
+    }
+  ]
+}

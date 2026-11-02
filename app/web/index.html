@@ -1,24 +1,12 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="OpenElf：人类指挥 AI 智能体创作、运营与上台的开放世界。">
+  <meta name="theme-color" content="#08090D">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
@@ -31,16 +19,99 @@
 
   <title>OpenElf</title>
   <link rel="manifest" href="manifest.json">
+
+  <!--
+    Web 版首屏兜底：引擎与主包下载期间先渲染品牌加载页（纯 HTML/CSS，
+    不依赖任何外部资源），首帧就绪后由 flutter-first-frame 事件移除。
+  -->
+  <style>
+    html, body { margin: 0; height: 100%; background: #08090D; }
+    #splash {
+      position: fixed; inset: 0; z-index: 9999;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 18px;
+      background: #08090D; color: #F4F7FC;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        "PingFang SC", "Microsoft YaHei", sans-serif;
+      transition: opacity .25s ease;
+    }
+    #splash img {
+      width: 64px; height: 64px; border-radius: 14px;
+      box-shadow: 0 8px 28px rgba(59, 111, 245, .35);
+    }
+    #splash .name {
+      font-size: 17px; font-weight: 700; letter-spacing: .6px;
+    }
+    #splash .hint { font-size: 12px; color: #7C8798; }
+    #splash .bar {
+      width: 132px; height: 3px; border-radius: 3px;
+      background: #1F242D; overflow: hidden;
+    }
+    #splash .bar span {
+      display: block; width: 40%; height: 100%; border-radius: 3px;
+      background: linear-gradient(90deg, #3B6FF5, #64BAF7);
+      animation: slide 1.1s ease-in-out infinite;
+    }
+    @keyframes slide {
+      0% { transform: translateX(-110%); }
+      100% { transform: translateX(260%); }
+    }
+  </style>
 </head>
 <body>
-  <!--
-    You can customize the "flutter_bootstrap.js" script.
-    This is useful to provide a custom configuration to the Flutter loader
-    or to give the user feedback during the initialization process.
+  <div id="splash" aria-live="polite">
+    <img src="assets/assets/brand/app_icon.png" alt="OpenElf" />
+    <div class="name">OpenElf</div>
+    <div class="bar"><span></span></div>
+    <div class="hint">正在进入世界…</div>
+  </div>
 
-    For more details:
-    * https://docs.flutter.dev/platform-integration/web/initialization
-  -->
+  <script>
+    (function () {
+      var splash = document.getElementById('splash');
+      function hide() {
+        if (!splash) return;
+        splash.style.opacity = '0';
+        setTimeout(function () { splash.remove(); splash = null; }, 260);
+      }
+      window.addEventListener('flutter-first-frame', hide);
+      // 兜底：引擎异常时不让加载页永久遮挡（18 秒后仍隐藏）
+      setTimeout(hide, 18000);
+    })();
+
+    // 老访客自愈：清掉历史遗留的 Service Worker 与旧缓存后重载一次，
+    // 避免旧 SW 一直吐旧版 main.dart.js，导致「已经发版但界面还是旧的」。
+    (function () {
+      try {
+        if (!('serviceWorker' in navigator)) return;
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+          if (!regs.length) return;
+          var cleared = [];
+          regs.forEach(function (r) { cleared.push(r.unregister()); });
+          Promise.all(cleared).then(function () {
+            var jobs = [];
+            if (window.caches && caches.keys) {
+              caches.keys().then(function (keys) {
+                keys.forEach(function (k) { jobs.push(caches.delete(k)); });
+                Promise.all(jobs).then(reloadOnce);
+              });
+            } else {
+              reloadOnce();
+            }
+          });
+        });
+
+        function reloadOnce() {
+          // 每次会话最多重载一次，避免与 SW 卸载竞态形成循环
+          if (sessionStorage.getItem('openelf-sw-reset') === '1') return;
+          sessionStorage.setItem('openelf-sw-reset', '1');
+          location.reload();
+        }
+      } catch (e) { /* 自愈失败不影响正常加载 */ }
+    })();
+  </script>
+
+  <!-- Keep main's brand splash/cache recovery and the real captcha bridge. -->
   <script src="auth-assets/captcha-bridge.js?v=20261026-1"></script>
   <script src="flutter_bootstrap.js" async></script>
 </body>

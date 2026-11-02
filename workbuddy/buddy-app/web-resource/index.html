@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="wb-task-theme" content="light" />
+  <title>OpenElf 工作台</title>
+  <link rel="stylesheet" href="./assets/style.css" />
+</head>
+<body>
+  <div class="app">
+    <!-- 头部 -->
+    <header class="header">
+      <div class="brand">
+        <img src="./assets/logo.svg" alt="OpenElf" class="logo" />
+        <div class="brand-text">
+          <h1 class="title">OpenElf 网红创作工作台</h1>
+          <p class="subtitle">一站式 AI 网红创作：形象设计 · 批量生成 · 爆款剪辑 · 选题策划</p>
+        </div>
+      </div>
+    </header>
+
+    <!-- 能力卡片 -->
+    <section class="cards">
+      <div class="card" data-action="character">
+        <div class="card-icon icon-character">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="8" r="4" />
+            <path d="M4 21c0-4 4-7 8-7s8 3 8 7" />
+          </svg>
+        </div>
+        <div class="card-body">
+          <h3 class="card-title">设计虚拟形象</h3>
+          <p class="card-desc">从风格、发型、服装到气质，AI 拆解并生成预览，定稿后保存角色卡。</p>
+        </div>
+        <div class="card-arrow">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 6l6 6-6 6" />
+          </svg>
+        </div>
+      </div>
+
+      <div class="card" data-action="generator">
+        <div class="card-icon icon-generator">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1" />
+            <rect x="14" y="3" width="7" height="7" rx="1" />
+            <rect x="3" y="14" width="7" height="7" rx="1" />
+            <rect x="14" y="14" width="7" height="7" rx="1" />
+          </svg>
+        </div>
+        <div class="card-body">
+          <h3 class="card-title">批量生成角色</h3>
+          <p class="card-desc">设定图层权重，一次批量生成最多 100 个形象，联系表对比后打包下载。</p>
+        </div>
+        <div class="card-arrow">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 6l6 6-6 6" />
+          </svg>
+        </div>
+      </div>
+
+      <div class="card" data-action="video">
+        <div class="card-icon icon-video">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="5" width="15" height="14" rx="2" />
+            <path d="M17 9l5-3v12l-5-3" />
+          </svg>
+        </div>
+        <div class="card-body">
+          <h3 class="card-title">爆款短视频剪辑</h3>
+          <p class="card-desc">按气口规则切片，生成爆款标题与文案，输出可直接发布的短视频。</p>
+        </div>
+        <div class="card-arrow">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 6l6 6-6 6" />
+          </svg>
+        </div>
+      </div>
+
+      <div class="card" data-action="influencer">
+        <div class="card-icon icon-influencer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 3v18h18" />
+            <path d="M7 14l4-4 4 4 5-6" />
+          </svg>
+        </div>
+        <div class="card-body">
+          <h3 class="card-title">网红选题策划</h3>
+          <p class="card-desc">四维选题打分、文案骨架与单变量复盘方案，让每条内容都有数据支撑。</p>
+        </div>
+        <div class="card-arrow">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 6l6 6-6 6" />
+          </svg>
+        </div>
+      </div>
+    </section>
+
+    <!-- 快速开始 -->
+    <section class="quickstart">
+      <h2 class="section-title">快速开始</h2>
+      <div class="quickstart-grid">
+        <button class="quick-item" data-prompt="我想做一只原创 AI 形象，帮我拆成风格、发型、服装、气质四部分，给两个方案。">
+          <span class="quick-label">形象设计</span>
+          <span class="quick-text">从零设计 AI 形象</span>
+        </button>
+        <button class="quick-item" data-prompt="帮我批量生成 50 个像素风赛博朋克角色，输出联系表。">
+          <span class="quick-label">批量生成</span>
+          <span class="quick-text">50 个角色矩阵</span>
+        </button>
+        <button class="quick-item" data-prompt="把这段 3 分钟口播剪成 3 条 60 秒短视频，配爆款标题。">
+          <span class="quick-label">视频剪辑</span>
+          <span class="quick-text">口播素材剪爆款</span>
+        </button>
+        <button class="quick-item" data-prompt="我的赛道是 AI 工具测评，帮我策划本周 5 个选题并打分。">
+          <span class="quick-label">选题策划</span>
+          <span class="quick-text">本周选题打分</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- 页脚 -->
+    <footer class="footer">
+      <p>点击任意卡片或快捷入口，将需求带入 AI 对话开始创作。</p>
+    </footer>
+  </div>
+
+  <!-- WorkBuddy JSSDK -->
+  <script src="https://openplatform-cdn.codebuddy.cn/open/sdk/jsapi/0.0.2/jsapi.js"></script>
+  <script src="./assets/app.js"></script>
+</body>
+</html>

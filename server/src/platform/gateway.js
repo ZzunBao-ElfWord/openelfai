@@ -79,11 +79,20 @@ function createGateway({ db, billing, upstream }) {
       throw e;
     }
 
+    // 遥测上下文：requestId 作为 sessionId 可把同一次请求的预授权与产出对齐排查。
+    const trace = {
+      name: 'gateway/chat-completions',
+      userId: key.user_id,
+      sessionId: preauth.requestId,
+      tags: ['gateway'],
+      metadata: { keyId: key.id, model, stream: !!stream },
+    };
+
     try {
       if (stream) {
         let completionTokens = 0;
         await upstream.chatCompletionsStream(
-          { model, messages, max_tokens: maxTok, temperature, ...passthrough },
+          { model, messages, max_tokens: maxTok, temperature, trace, ...passthrough },
           (chunk) => {
             const delta = chunk.choices?.[0]?.delta?.content;
             if (delta) {
@@ -110,7 +119,7 @@ function createGateway({ db, billing, upstream }) {
         return;
       }
 
-      const result = await upstream.chatCompletions({ model, messages, max_tokens: maxTok, temperature, ...passthrough });
+      const result = await upstream.chatCompletions({ model, messages, max_tokens: maxTok, temperature, trace, ...passthrough });
       const usage = result.usage || { prompt_tokens: 0, completion_tokens: 0 };
       await billing.settle({
         userId: key.user_id, requestId: preauth.requestId, keyId: key.id,
@@ -149,7 +158,11 @@ function createGateway({ db, billing, upstream }) {
     }
     const { model, messages, ...rest } = req.body;
     try {
-      return await upstream.chatCompletions({ model, messages, ...rest });
+      return await upstream.chatCompletions({
+        model, messages,
+        ...rest,
+        trace: { name: 'internal/chat-completions', tags: ['internal'], metadata: { model } },
+      });
     } catch (e) {
       if (e.statusCode) {
         return reply.code(e.statusCode).send({ error: { message: 'upstream error', type: 'api_error' } });

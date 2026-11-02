@@ -1,0 +1,23 @@
+{
+  "name": "千人千面生成器 OpenElf",
+  "name_zh": "千人千面生成器 OpenElf",
+  "name_en": "Mass Character Generator OpenElf",
+  "description": "Generate character sets in batches by layer and part combinations: adjust rarity weights, preview, batch-generate up to 100 items, and download the pack.",
+  "description_zh": "按图层与配件组合批量生成形象作品：调整稀有度权重、预览、单次最多 100 件、打包下载。",
+  "description_en": "Batch-generate characters from layer and part combinations: tune rarity weights, preview, generate up to 100 items at once, and download them as a pack.",
+  "source": "openelf-generator",
+  "type": "mcp",
+  "version": "1.0.0",
+  "auth_mode": "token",
+  "minWorkbuddyVersion": "4.24.0",
+  "examples_zh": [
+    "帮我看下可用的图层和配件目录",
+    "把背景槽位的稀有度权重调成 30",
+    "批量生成 50 个像素风角色并打包下载"
+  ],
+  "examples_en": [
+    "Show me the available layers and parts",
+    "Set the background slot rarity weight to 30",
+    "Batch-generate 50 pixel-art characters and download the pack"
+  ]
+}

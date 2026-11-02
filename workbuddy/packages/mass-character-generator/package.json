@@ -1,0 +1,11 @@
+{
+  "name": "mass-character-generator",
+  "kind": "skill",
+  "version": "1.0.0",
+  "displayName": "千人千面生成器 OpenElf",
+  "dependencies": {
+    "connectors": [
+      "openelf-generator"
+    ]
+  }
+}

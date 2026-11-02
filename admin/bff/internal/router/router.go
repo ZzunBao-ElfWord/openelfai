@@ -81,11 +81,17 @@ func New(d handler.Deps) *gin.Engine {
 
 		authed.GET("/platform/models", modOnly, d.ListPlatformModels)
 		authed.GET("/platform/developers", modOnly, d.ListPlatformDevelopers)
+		authed.GET("/platform/capabilities", modOnly, d.ListPlatformCapabilities)
 		authed.GET("/platform/keys", modOnly, d.ListPlatformKeys)
 		authed.GET("/platform/wallets/:userId", modOnly, d.GetPlatformWallet)
 		authed.GET("/platform/requests", modOnly, d.ListPlatformRequests)
 		authed.GET("/platform/usage", modOnly, d.ListPlatformUsage)
 		authed.GET("/platform/vendors", modOnly, d.ListPlatformVendors)
+
+		// WorkBuddy 上架包：只读展示清单、校验结果与发布记录
+		authed.GET("/workbuddy/packages", modOnly, d.ListWorkBuddyPackages)
+		// WorkBuddy 调试台：服务端完成模型 + 工具调用循环（密钥仅本次请求使用）
+		authed.POST("/workbuddy/chat", modOnly, d.WorkBuddyChat)
 
 		// 运营配置：运营可查看/编辑草稿与文案类配置，发布与开关由超管执行
 		authed.GET("/app-content/documents", modOnly, d.ListAppDocuments)
@@ -99,6 +105,10 @@ func New(d handler.Deps) *gin.Engine {
 		authed.GET("/character/parts", modOnly, d.ListCharacterParts)
 		authed.GET("/character/batches", modOnly, d.ListCharacterBatches)
 		authed.GET("/character/batches/:id", modOnly, d.GetCharacterBatch)
+
+		// 系列发行（P4 B2B 千人千面）：列表与详情只读
+		authed.GET("/character/series", modOnly, d.ListCharacterSeries)
+		authed.GET("/character/series/:id", modOnly, d.GetCharacterSeries)
 	}
 
 	// 高危操作：仅 super_admin
@@ -115,6 +125,8 @@ func New(d handler.Deps) *gin.Engine {
 		authed.PUT("/official/elves/:id", superOnly, d.UpdateOfficialElf)
 
 		authed.POST("/platform/models/upsert", superOnly, d.PutPlatformModel)
+		authed.POST("/platform/developers/:userId/review", superOnly, d.ReviewPlatformDeveloper)
+		authed.POST("/platform/capabilities/:id/review", superOnly, d.ReviewPlatformCapability)
 		authed.PUT("/platform/keys/:id", superOnly, d.PutPlatformKey)
 		authed.POST("/platform/keys/:id/revoke", superOnly, d.RevokePlatformKey)
 		authed.POST("/platform/wallets/:userId/topup", superOnly, d.TopupPlatformWallet)
@@ -129,6 +141,13 @@ func New(d handler.Deps) *gin.Engine {
 		// 形象工坊：配件权重覆盖与批量生成（写操作走 openelf-api）
 		authed.PUT("/character/parts/:id", superOnly, d.UpdateCharacterPart)
 		authed.POST("/character/batches", superOnly, d.CreateCharacterBatch)
+
+		// 系列发行：新建、渲染、授权、铸造、重铸全部为写操作
+		authed.POST("/character/series", superOnly, d.CreateCharacterSeries)
+		authed.POST("/character/series/:id/render", superOnly, d.RenderCharacterSeries)
+		authed.POST("/character/series/:id/authorize", superOnly, d.AuthorizeCharacterSeries)
+		authed.POST("/character/series/:id/mint", superOnly, d.MintCharacterSeries)
+		authed.POST("/character/series/:id/retry", superOnly, d.RetryCharacterSeries)
 
 		authed.GET("/admin-users", superOnly, d.ListAdminUsers)
 		authed.POST("/admin-users", superOnly, d.CreateAdminUser)

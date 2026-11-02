@@ -43,7 +43,7 @@ class WalletPage extends StatelessWidget {
                       const WebDiamondRechargePanel()
                     else if (IapConfig.enabled)
                       const IosRechargePanel()
-                    else if (CommerceConfig.android)
+                    else if (CommerceConfig.alipay)
                       const AlipayRechargePanel()
                     else
                       _rechargeClosed(),

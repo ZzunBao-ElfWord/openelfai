@@ -124,6 +124,7 @@ function createWorldVideoService({
   logger,
   assetBaseUrl = 'https://openelfai.com',
   fetchImpl = globalThis.fetch,
+  recordCost,
 }) {
   const perDay = Math.max(1, Number(settings?.perDay) || 3);
   const duration = Math.max(2, Math.min(12, Number(settings?.duration) || 12));
@@ -183,7 +184,16 @@ function createWorldVideoService({
         ],
         temperature: 0.9,
         max_tokens: 200,
+        trace: {
+          name: 'world-video/caption',
+          userId: ELF_ID,
+          sessionId: ELF_ID,
+          tags: ['world-video'],
+          metadata: { source: 'video_caption', model: captionModel },
+        },
       });
+      // 文案走平台自持 Key（worldUpstream 的 masterKey），计入平台推理成本口径。
+      await recordCost?.(ELF_ID, 'video_caption', res?.usage?.total_tokens);
       const text = String(res?.choices?.[0]?.message?.content || '')
         .replace(/^["“”']+/, '').replace(/["“”']+$/, '')
         .replace(/\s+/g, ' ').trim().slice(0, 200);

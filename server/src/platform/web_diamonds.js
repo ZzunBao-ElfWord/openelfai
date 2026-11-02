@@ -39,7 +39,8 @@ function createWebDiamondServices({ db, store = createPaymentStore(db), settings
   } : null;
   const payment = createAlipayService({ store: webOrderStore(store, prefix), settings,
     commerceSettings, gateway: webGateway, now });
-  const commerce = createCommerceService({ store, settings: commerceSettings,
+  // Main's DB-backed capabilities share the same reviewed wallet and policy.
+  const commerce = createCommerceService({ db, store, settings: commerceSettings,
     realname, identityPolicy, payout, payoutQuery, compliance });
   return { payment, commerce };
 }

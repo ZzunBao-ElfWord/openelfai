@@ -54,6 +54,10 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
   bool _failed = false;
   bool _muted = false;
 
+  /// 桌面宽屏的「视频」tab 走浏览页（大图 + 侧栏双卡 + 网格），不挂播放器；
+  /// 从浏览页点开卡片后 push 的沉浸式播放页仍按竖屏流播放。
+  bool _browseMode = false;
+
   AppState get _state => AppState.instance;
 
   @override
@@ -162,6 +166,7 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
   }
 
   void _watchCurrent() {
+    if (_browseMode) return;
     final p = _posts[_index];
     if (!_state.watchedPosts.contains(p.id)) _state.watch(p.id);
   }
@@ -175,7 +180,7 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
   }
 
   void _playCurrent() {
-    if (_posts.isEmpty) return;
+    if (_browseMode || _posts.isEmpty) return;
     _play(_posts[_index]);
   }
 
@@ -260,22 +265,416 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
 
   @override
   Widget build(BuildContext context) {
+    // 桌面宽屏的「视频」tab 改成 B 站式浏览页：大图 + 侧栏双卡 + 下方网格。
+    // 窄屏与从卡片 push 进来的播放页仍保留沉浸式竖屏流。
+    _browseMode = !widget.showBack && WideContent.isWide(context);
     final body = _posts.isEmpty
         ? _empty()
-        // 桌面宽屏：竖屏视频收窄居中，两侧留给黑底，类似抖音网页版。
-        : WideContent(
-            maxWidth: 520,
-            child: PageView.builder(
-              controller: _pc,
-              scrollDirection: Axis.vertical,
-              itemCount: _posts.length,
-              onPageChanged: _onPageChanged,
-              itemBuilder: (context, i) => _item(_posts[i], i),
+        : _browseMode
+            ? _desktopBrowser()
+            // 桌面宽屏播放页：竖屏视频收窄居中，两侧留给黑底，类似抖音网页版。
+            : WideContent(
+                maxWidth: 520,
+                child: PageView.builder(
+                  controller: _pc,
+                  scrollDirection: Axis.vertical,
+                  itemCount: _posts.length,
+                  onPageChanged: _onPageChanged,
+                  itemBuilder: (context, i) => _item(_posts[i], i),
+                ),
+              );
+    // 浏览页挂在桌面侧栏里，由 HomeShell 提供 Scaffold；播放页需要自己的黑底。
+    if (!widget.showBack && !_browseMode) return body;
+    return Scaffold(
+      backgroundColor: _browseMode ? AppColors.bg : Colors.black,
+      body: body,
+    );
+  }
+
+  // —— 桌面端浏览页 ——
+
+  Widget _desktopBrowser() {
+    final hero = _posts.first;
+    final side = _posts.skip(1).take(2).toList();
+    final rest = _posts.skip(1 + side.length).toList();
+    return SafeArea(
+      child: WideContent(
+        maxWidth: 1120,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 18, 24, 36),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _browserHeader(),
+              const SizedBox(height: 16),
+              LayoutBuilder(
+                builder: (context, c) {
+                  // 首屏高度跟侧栏双卡对齐：侧栏两张卡各占一半，大图铺满整列。
+                  final sideW = (c.maxWidth - 16) * 0.38;
+                  final rowH = (sideW * 9 / 16 + 72) * 2 + 16;
+                  if (side.isEmpty) {
+                    return SizedBox(height: rowH, child: _heroCard(hero));
+                  }
+                  return SizedBox(
+                    height: rowH,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(flex: 62, child: _heroCard(hero)),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          flex: 38,
+                          child: Column(
+                            children: [
+                              for (var i = 0; i < side.length; i++) ...[
+                                if (i > 0) const SizedBox(height: 16),
+                                Expanded(child: _gridCard(side[i])),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+              if (rest.isNotEmpty) ...[
+                const SizedBox(height: 24),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(
+                      '更多视频',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.text,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${rest.length} 条',
+                      style:
+                          TextStyle(fontSize: 11, color: AppColors.textFaint),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _videoGrid(rest),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _browserHeader() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Text(
+          '视频',
+          style: TextStyle(
+            fontSize: 21,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.5,
+            color: AppColors.text,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          'AI 生成的短视频，点开即刷',
+          style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+        ),
+        const Spacer(),
+        Text(
+          '${_posts.length} 条',
+          style: TextStyle(fontSize: 11, color: AppColors.textFaint),
+        ),
+        const SizedBox(width: 8),
+        Semantics(
+          label: '刷新视频流',
+          button: true,
+          child: IconButton(
+            onPressed: _refresh,
+            icon: Icon(Icons.refresh, size: 18, color: AppColors.textMuted),
+            tooltip: '刷新视频流',
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _refresh() {
+    unawaited(_state.loadFeed(channel: 'video', sort: 'hot', reset: true));
+    _loadFeed(keepIndex: true);
+  }
+
+  /// 点卡片 → push 沉浸式竖屏流，从这条开始上下滑。
+  void _openPlayer(ElfPost p) {
+    _state.watch(p.id);
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => VideoFeedPage(
+          seedPosts: _posts.where((item) => item.kind == 'video').toList(),
+          startPostId: p.id,
+          showBack: true,
+        ),
+      ),
+    );
+  }
+
+  Widget _heroCard(ElfPost p) {
+    final elf = _state.elf(p.elfId);
+    return _tapCard(
+      p,
+      ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            _cover(p),
+            _coverShade(),
+            _playBadge(56),
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: 14,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _authorRow(elf, p, light: true),
+                  const SizedBox(height: 6),
+                  Text(
+                    p.body,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 7),
+                  _statsRow(p),
+                ],
+              ),
             ),
-          );
-    // 从世界流点开时作为独立页面出现，自带背景与返回入口。
-    if (!widget.showBack) return body;
-    return Scaffold(backgroundColor: Colors.black, body: body);
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _gridCard(ElfPost p) {
+    final elf = _state.elf(p.elfId);
+    return _tapCard(
+      p,
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  _cover(p),
+                  _coverShade(soft: true),
+                  _playBadge(34),
+                  Positioned(left: 8, bottom: 8, child: _viewsChip(p)),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            p.body,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              height: 1.45,
+              color: AppColors.text,
+            ),
+          ),
+          const SizedBox(height: 5),
+          _authorRow(elf, p),
+        ],
+      ),
+    );
+  }
+
+  Widget _videoGrid(List<ElfPost> posts) {
+    return LayoutBuilder(
+      builder: (context, c) {
+        const gap = 16.0;
+        final n = c.maxWidth >= 900 ? 3 : 2;
+        final w = (c.maxWidth - gap * (n - 1)) / n;
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          padding: EdgeInsets.zero,
+          itemCount: posts.length,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: n,
+            mainAxisSpacing: 18,
+            crossAxisSpacing: gap,
+            // 封面占 16:9，下方留给两行标题 + 作者行
+            mainAxisExtent: w * 9 / 16 + 74,
+          ),
+          itemBuilder: (_, i) => _gridCard(posts[i]),
+        );
+      },
+    );
+  }
+
+  Widget _tapCard(ElfPost p, Widget child) {
+    return InkWell(
+      onTap: () => _openPlayer(p),
+      borderRadius: BorderRadius.circular(12),
+      child: child,
+    );
+  }
+
+  Widget _cover(ElfPost p) {
+    if (p.coverUrl != null && p.coverUrl!.isNotEmpty) {
+      return Image.network(
+        p.coverUrl!,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => _coverFallback(),
+      );
+    }
+    return _coverFallback();
+  }
+
+  Widget _coverFallback() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.surfaceHigh, AppColors.surfaceAlt],
+        ),
+      ),
+      alignment: Alignment.center,
+      child: Icon(Icons.movie_creation_outlined,
+          size: 28, color: AppColors.textFaint),
+    );
+  }
+
+  Widget _coverShade({bool soft = false}) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.center,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.transparent,
+            Colors.black.withOpacity(soft ? 0.5 : 0.78),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _playBadge(double size) {
+    return Center(
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.4),
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white24),
+        ),
+        child: Icon(Icons.play_arrow_rounded,
+            size: size * 0.56, color: Colors.white),
+      ),
+    );
+  }
+
+  Widget _viewsChip(ElfPost p) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.55),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.play_arrow_rounded, size: 12, color: Colors.white70),
+          const SizedBox(width: 2),
+          Text(
+            _fmt(p.views),
+            style: const TextStyle(fontSize: 10, color: Colors.white70),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _authorRow(Elf elf, ElfPost p, {bool light = false}) {
+    return Row(
+      children: [
+        ElfAvatar(elf: elf, size: 18),
+        const SizedBox(width: 5),
+        Flexible(
+          child: Text(
+            elf.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              color: light ? Colors.white70 : AppColors.textSub,
+            ),
+          ),
+        ),
+        Text(
+          ' · ${p.timeAgo}',
+          style: TextStyle(
+            fontSize: 10.5,
+            color: light ? Colors.white54 : AppColors.textFaint,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _statsRow(ElfPost p) {
+    return Row(
+      children: [
+        const Icon(Icons.visibility_outlined, size: 12, color: Colors.white70),
+        const SizedBox(width: 3),
+        Text(
+          '${_fmt(p.views)} 次播放',
+          style: const TextStyle(fontSize: 10.5, color: Colors.white70),
+        ),
+        if (p.dwell > 0) ...[
+          const SizedBox(width: 8),
+          const Icon(Icons.timer_outlined, size: 12, color: Colors.white54),
+          const SizedBox(width: 3),
+          Text(
+            '均停 ${p.dwell}s',
+            style: const TextStyle(fontSize: 10.5, color: Colors.white54),
+          ),
+        ],
+        const SizedBox(width: 8),
+        const Icon(Icons.favorite_border, size: 12, color: Colors.white54),
+        const SizedBox(width: 3),
+        Text(
+          _fmt(p.likes),
+          style: const TextStyle(fontSize: 10.5, color: Colors.white54),
+        ),
+      ],
+    );
   }
 
   // —— 单条视频 ——
@@ -468,30 +867,30 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                     semantic: '分享',
                     onTap: () => WorkShareHelper.share(context, p),
                   ),
-                  const SizedBox(height: 16),
-                  _railButton(
-                    icon: Icons.auto_awesome,
-                    label: '打赏',
-                    semantic: '打赏',
-                    color: (elf.isMine || elf.isOfficial)
-                        ? Colors.white38
-                        : AppColors.cyan,
-                    onTap: (elf.isMine || elf.isOfficial)
-                        ? null
-                        : () {
-                            if (checkLoginOrPrompt(context)) _tipSheet(p, elf);
-                          },
-                  ),
+                  // Ordinary AI tips remain available; own/official AI are not tipped.
+                  if (!elf.isMine && !elf.isOfficial) ...[
+                    const SizedBox(height: 16),
+                    _railButton(
+                      icon: Icons.auto_awesome,
+                      label: '打赏',
+                      semantic: '打赏',
+                      color: AppColors.cyan,
+                      onTap: () {
+                        if (checkLoginOrPrompt(context)) _tipSheet(p, elf);
+                      },
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   _railButton(
-                      icon: Icons.flag_outlined,
-                      label: '举报',
-                      semantic: '举报与屏蔽',
-                      onTap: () => ContentSafety.show(context,
-                          targetKind: 'post',
-                          targetId: p.id,
-                          elfId: elf.id,
-                          ownerId: elf.ownerId)),
+                    icon: Icons.flag_outlined,
+                    label: '举报',
+                    semantic: '举报与屏蔽',
+                    onTap: () => ContentSafety.show(context,
+                        targetKind: 'post',
+                        targetId: p.id,
+                        elfId: elf.id,
+                        ownerId: elf.ownerId),
+                  ),
                 ],
               ),
             ),

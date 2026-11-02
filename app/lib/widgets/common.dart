@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../config/api_config.dart';
 import '../models/elf.dart';
 import '../theme.dart';
 
@@ -228,8 +229,14 @@ class ElfAvatar extends StatelessWidget {
   final double size;
   const ElfAvatar({super.key, required this.elf, this.size = 40});
 
+  /// 头像唯一来源是铸造形象图；无图或加载失败时回落到首字色块。
+  String? get _imageUrl => ApiConfig.resolveAssetUrl(
+        elf.imageThumbUrl ?? elf.imageUrl,
+      );
+
   @override
   Widget build(BuildContext context) {
+    final url = _imageUrl;
     return Container(
       width: size,
       height: size,
@@ -239,7 +246,7 @@ class ElfAvatar extends StatelessWidget {
       ),
       alignment: Alignment.center,
       clipBehavior: Clip.antiAlias,
-      child: elf.avatarUrl == null
+      child: url == null
           ? Text(
               elf.initial,
               style: TextStyle(
@@ -249,7 +256,7 @@ class ElfAvatar extends StatelessWidget {
               ),
             )
           : Image.network(
-              elf.avatarUrl!,
+              url,
               width: size,
               height: size,
               fit: BoxFit.cover,

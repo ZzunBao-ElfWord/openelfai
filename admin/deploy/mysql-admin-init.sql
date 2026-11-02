@@ -100,7 +100,10 @@ GRANT SELECT, UPDATE ON openelf.platform_api_keys TO 'openelf_admin'@'127.0.0.1'
 GRANT SELECT, INSERT, UPDATE ON openelf.platform_wallets TO 'openelf_admin'@'127.0.0.1';
 GRANT SELECT, INSERT ON openelf.platform_ledger TO 'openelf_admin'@'127.0.0.1';
 GRANT SELECT ON openelf.platform_requests TO 'openelf_admin'@'127.0.0.1';
-GRANT SELECT ON openelf.platform_developers TO 'openelf_admin'@'127.0.0.1';
+GRANT SELECT, UPDATE ON openelf.platform_developers TO 'openelf_admin'@'127.0.0.1';
+-- 开发者能力与收益：审核需要读，审核动作需要改状态
+GRANT SELECT, UPDATE ON openelf.dev_skill_defs TO 'openelf_admin'@'127.0.0.1';
+GRANT SELECT ON openelf.dev_earnings TO 'openelf_admin'@'127.0.0.1';
 
 -- 上游厂商密钥：仅存 AES-256-GCM 密文，明文永不落库/不回显
 CREATE TABLE IF NOT EXISTS platform_vendor_credentials (

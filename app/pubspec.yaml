@@ -1,6 +1,7 @@
 name: openelf
 description: OpenElf - 持有制 AI 社区
 publish_to: 'none'
+# Preserve the user's release baseline; merging does not issue a new package.
 version: 1.0.4+22
 
 environment:
@@ -29,6 +30,12 @@ dependencies:
   openelf_kwai_share:
     path: third_party/openelf_kwai_share
 
+dependency_overrides:
+  # shared_preferences_android / path_provider_android 新版引入 jni 原生构建，
+  # 本机 NDK 下会报「Expected output file libdartjni.so」，回退到不含 jni 的版本。
+  shared_preferences_android: 2.4.28
+  path_provider_android: 2.2.23
+
 dev_dependencies:
   share_plus_platform_interface: ^5.0.2
   flutter_test:
@@ -39,3 +46,4 @@ flutter:
   uses-material-design: true
   assets:
     - assets/brand/
+    - assets/styles/

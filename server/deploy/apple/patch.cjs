@@ -20,10 +20,26 @@ function section(source, start, end) {
   return source.slice(offset, stop);
 }
 
+/// 交付源码统一按 LF 切片，插入时再对齐目标文件的换行，避免不同行尾叠加累积。
+function readSource(relative) {
+  return fs.readFileSync(path.join(payload, relative), 'utf8').replace(/\r\n/g, '\n');
+}
+
+function eolOf(source) {
+  const total = source.split('\n').length - 1;
+  const crlf = source.split('\r\n').length - 1;
+  return total > 0 && crlf * 2 >= total ? '\r\n' : '\n';
+}
+
+function alignEol(text, source) {
+  const normalized = text.replace(/\r\n/g, '\n');
+  return eolOf(source) === '\r\n' ? normalized.replace(/\n/g, '\r\n') : normalized;
+}
+
 function prepare({ app, config, db, packageJson }) {
-  const desiredApp = fs.readFileSync(path.join(payload, 'src/app.js'), 'utf8');
-  const desiredConfig = fs.readFileSync(path.join(payload, 'src/config.js'), 'utf8');
-  const desiredDb = fs.readFileSync(path.join(payload, 'src/db.js'), 'utf8');
+  const desiredApp = readSource('src/app.js');
+  const desiredConfig = readSource('src/config.js');
+  const desiredDb = readSource('src/db.js');
   if (!app.includes("require('./apple_iap')")) {
     app = insertOnce(app, "const config = require('./config');",
       "\nconst { createAppleIapService, createAppleVerifier } = require('./apple_iap');");
@@ -32,9 +48,9 @@ function prepare({ app, config, db, packageJson }) {
     if (!app.includes("require('./" + module + "')")) app = insertOnce(app, "const config = require('./config');",
       `\nconst { ${symbol} } = require('./${module}');`);
   }
-  const setup = section(desiredApp, '  const appleVerifier =', desiredApp.includes('  const androidCommerce =') ? '\n  const androidCommerce =' : '\n\n  const app = Fastify');
+  const setup = alignEol(section(desiredApp, '  const appleVerifier =', desiredApp.includes('  const androidCommerce =') ? '\n  const androidCommerce =' : '\n\n  const app = Fastify'), app);
   if (!app.includes('const appleIap =')) {
-    app = insertOnce(app, '  const sms = options.sms || createSmsProvider(config);', '\n' + setup);
+    app = insertOnce(app, '  const sms = options.sms || createSmsProvider(config);', eolOf(app) + setup);
   } else {
     const pattern = /  const appleVerifier =[\s\S]*?  const appleIap = createAppleIapService\([\s\S]*?\n  }\);/g;
     if ([...app.matchAll(pattern)].length !== 1) throw new Error('无法安全更新支付初始化');
@@ -46,7 +62,7 @@ function prepare({ app, config, db, packageJson }) {
     throw new Error('发现部分支付路由，停止更新以避免重复或覆盖现有钱包');
   }
   if (!existingRoutes.length) {
-    const routesCode = section(desiredApp, '  // 内购默认关闭。', desiredApp.includes('  // Android Alipay:') ? '  // Android Alipay:' : '  // —— 发送验证码 ——');
+    const routesCode = alignEol(section(desiredApp, '  // 内购默认关闭。', desiredApp.includes('  // Android Alipay:') ? '  // Android Alipay:' : '  // —— 发送验证码 ——'), app);
     const anchor = '  // —— 发送验证码 ——';
     if (app.split(anchor).length !== 2) throw new Error('无法安全定位支付路由插入点');
     app = app.replace(anchor, routesCode + anchor);
@@ -58,19 +74,21 @@ function prepare({ app, config, db, packageJson }) {
         !previous.includes('appleIap.wallet(user.id)') && !previous.includes('commerce.snapshot(user,')) {
       throw new Error('已有钱包接口无法识别，停止更新');
     }
-    app = app.replace(previous, section(desiredApp, start, desiredApp.includes('  // Android Alipay:') ? '  // Android Alipay:' : end));
+    app = app.replace(previous, alignEol(section(desiredApp, start, desiredApp.includes('  // Android Alipay:') ? '  // Android Alipay:' : end), app));
   }
   if (!config.includes('  appleIap: {')) {
-    const block = section(desiredConfig, '  appleIap: {', '\n};');
+    const block = alignEol(section(desiredConfig, '  appleIap: {', '\n};'), config);
     const ending = /\r?\n};\s*$/;
     if (!ending.test(config)) throw new Error('无法安全定位配置插入点');
-    config = config.replace(ending, '\n' + block + '\n};\n');
+    const eol = eolOf(config);
+    config = config.replace(ending, eol + block + eol + '};' + eol);
   } else if (!config.includes('APPLE_IAP_SANDBOX_ONLY')) {
     config = insertOnce(config, "    enabled: bool('APPLE_IAP_ENABLED', false),",
       "\n    sandboxOnly: bool('APPLE_IAP_SANDBOX_ONLY', false),");
   }
+  const dbEol = eolOf(db);
   for (const table of ['user_wallets', 'apple_iap_transactions', 'apple_iap_sandbox_wallets', 'apple_iap_sandbox_transactions']) {
-    const block = section(desiredDb, '  `CREATE TABLE IF NOT EXISTS ' + table + ' (', '`,') + '`,';
+    const block = alignEol(section(desiredDb, '  `CREATE TABLE IF NOT EXISTS ' + table + ' (', '`,') + '`,', db);
     if (db.includes('CREATE TABLE IF NOT EXISTS ' + table + ' (')) {
       if (!db.replace(/\r\n/g, '\n').includes(block.replace(/\r\n/g, '\n'))) {
         throw new Error('已有钱包表定义与当前版本不同，请先核对数据库结构');
@@ -78,11 +96,11 @@ function prepare({ app, config, db, packageJson }) {
     } else {
       const ending = /\r?\n];/g;
       if ([...db.matchAll(ending)].length !== 1) throw new Error('无法安全定位数据库表定义');
-      db = db.replace(ending, '\n\n' + block + '\n];');
+      db = db.replace(ending, dbEol + dbEol + block + dbEol + '];');
     }
   }
   if (!db.includes("require('./payment_store')")) {
-    db = "const { PAYMENT_TABLES } = require('./payment_store');\n" + db;
+    db = "const { PAYMENT_TABLES } = require('./payment_store');" + dbEol + db;
   }
   if (db.includes('for (const statement of TABLES)')) {
     db = db.replace('for (const statement of TABLES)', 'for (const statement of [...TABLES, ...PAYMENT_TABLES])');

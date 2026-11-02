@@ -7,6 +7,8 @@ const parts = require('./parts');
 const render = require('./render');
 const { createCharacterStore } = require('./store');
 const { refineCharacter, buildRefinePrompt } = require('./refine');
+const { prepareAndMint, META_FILE_RE } = require('./mint');
+const { createLinkspriteClient } = require('./linksprite');
 
 const ASSET_FILE_RE = /^(char_[a-f0-9]{64}(_thumb)?\.png|batch_[a-f0-9]{32}_sheet\.png)$/;
 
@@ -68,12 +70,13 @@ function mergeTraits(base, patch) {
   return { ...(base && typeof base === 'object' ? base : {}), ...patch };
 }
 
-function registerCharacterRoutes(app, { db, authenticate }) {
+function registerCharacterRoutes(app, { db, authenticate, commerce, androidCommerce, chainClient } = {}) {
   const store = createCharacterStore({
     db,
     assetsDir: process.env.CHARACTER_ASSETS_DIR || undefined,
   });
   const auth = (request) => authenticate(request);
+  const mintClient = chainClient || createLinkspriteClient();
 
   const safeInsertRun = async (payload) => {
     try {
@@ -88,15 +91,28 @@ function registerCharacterRoutes(app, { db, authenticate }) {
     return { slots: parts.listSlots(), comboSpace: parts.comboSpace() };
   });
 
+  // 身份证授权线必须以服务端实名记录为准，客户端声明不采信。
+  const assertIdCardVerified = async (user, source) => {
+    if (source !== 'idCard') return;
+    if (!commerce || typeof commerce.identityVerified !== 'function') {
+      throw fail(503, 'REALNAME_UNAVAILABLE', '实名服务不可用');
+    }
+    if (!await commerce.identityVerified(user)) {
+      throw fail(403, 'IDENTITY_REQUIRED', '请先完成实名认证');
+    }
+  };
+
   app.post('/api/v1/character/drafts', { bodyLimit: 32 * 1024 }, async (request) => {
     const { user } = await auth(request);
     const patch = readDraftBody(request.body);
+    await assertIdCardVerified(user, patch.source);
     return store.createCard(user.id, patch);
   });
 
   app.put('/api/v1/character/drafts/:id', { bodyLimit: 32 * 1024 }, async (request) => {
     const { user } = await auth(request);
     const patch = readDraftBody(request.body);
+    await assertIdCardVerified(user, patch.source);
     return store.updateCard(user.id, request.params.id, patch);
   });
 
@@ -183,9 +199,38 @@ function registerCharacterRoutes(app, { db, authenticate }) {
     return { ...card, imageUrl: assetUrl(card.image_key), thumbUrl: assetUrl(card.thumb_key) };
   });
 
-  // 形象图片只允许访问 char_<sha256>.png 与缩略图，并设置长缓存。
+  // UGC 单角色铸造：链上成功后扣 200 钻石并建 AI；重复铸造直接返回同一结果。
+  app.post('/api/v1/character/cards/:id/mint', { bodyLimit: 16 * 1024 }, async (request) => {
+    const { user } = await auth(request);
+    const service = request.body?.platform === 'android' && androidCommerce
+      ? androidCommerce : commerce;
+    if (!service) throw fail(503, 'COMMERCE_DISABLED', '消费服务尚未开放');
+    return prepareAndMint(db, {
+      userId: user.id,
+      user,
+      cardId: request.params.id,
+      commerce: service,
+      client: mintClient,
+      assetsDir: store.assetsDir,
+      logger: app.log,
+    });
+  });
+
+  // 形象图片与元数据白名单：char_<sha256>.png / 缩略图 / 批次联系表 / meta_<hash>.json。
   app.get('/api/v1/character-assets/:file', async (request, reply) => {
     const file = String(request.params.file || '');
+    if (META_FILE_RE.test(file)) {
+      let text;
+      try {
+        text = await fs.readFile(path.join(store.assetsDir, path.basename(file)), 'utf8');
+      } catch (_) {
+        throw fail(404, 'NOT_FOUND', '元数据不存在');
+      }
+      return reply
+        .type('application/json; charset=utf-8')
+        .header('cache-control', 'no-store')
+        .send(text);
+    }
     if (!ASSET_FILE_RE.test(file)) {
       throw fail(404, 'NOT_FOUND', '图片不存在');
     }
@@ -204,4 +249,4 @@ function registerCharacterRoutes(app, { db, authenticate }) {
   return store;
 }
 
-module.exports = { registerCharacterRoutes, ASSET_FILE_RE };
+module.exports = { registerCharacterRoutes, ASSET_FILE_RE, META_FILE_RE };

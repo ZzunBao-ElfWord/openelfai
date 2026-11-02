@@ -55,6 +55,7 @@ function registerWebTopup(app, { db, authenticate, settings = webSettings(), gat
     } catch (_) { return reply.code(400).type('text/plain').send('failure'); }
   });
   require('./web_diamonds').registerWebDiamonds(app, { db, authenticate, settings, gateway: active.gateway,
+    // Shared business policy is required on web as well as native clients.
     store, realname, identityPolicy, payout, payoutQuery, compliance,
     legacy: old ? { settings: old.settings, gateway: old.gateway } : null });
 }

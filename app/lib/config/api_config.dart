@@ -16,6 +16,20 @@ class ApiConfig {
   /// AI 对话超时：大模型生成较慢，单独放宽。
   static const Duration chatTimeout = Duration(seconds: 60);
 
+  /// 形象生成 / 铸造超时：要合成本地 PNG 并等链上确权，单独放宽到 90 秒。
+  static const Duration characterTimeout = Duration(seconds: 90);
+
+  /// 把服务端返回的图片地址补成可直接展示的完整 URL。
+  /// 服务端给的是相对路径（/api/v1/character-assets/xxx.png），
+  /// 铸造接口可能直接给绝对地址，两种情况都要兼容。
+  static String? resolveAssetUrl(String? path) {
+    final raw = path?.trim() ?? '';
+    if (raw.isEmpty) return null;
+    if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
+    if (raw.startsWith('/')) return '$baseUrl$raw';
+    return '$baseUrl/$raw';
+  }
+
   /// 请求头（JSON API）。
   static const Map<String, String> jsonHeaders = {
     'Content-Type': 'application/json; charset=UTF-8',
@@ -68,6 +82,38 @@ class ApiConfig {
   /// AI 真实对话（POST）。
   static const String elfChatPath = '/api/v1/elf-chat';
 
+  /// 世界对话开关（POST，仅持有人）。body: {elfId, open}
+  static const String elfWorldChatPath = '/api/v1/elf/world-chat';
+
+  /// 公开信息流（GET）：全端可用，登录态可选。
+  static const String publicFeedPath = '/api/v1/feed';
+
+  // —— P3 角色卡：角色设定 → 形象预览/生成 → 铸造 ——
+
+  /// 角色配件库（GET）：slots + comboSpace。
+  static const String characterPartsPath = '/api/v1/character/parts';
+
+  /// 创建角色卡草稿（POST）。
+  static const String characterDraftsPath = '/api/v1/character/drafts';
+
+  /// 更新角色卡草稿（PUT，仅 draft 可改）。
+  static String characterDraftPath(String id) => '$characterDraftsPath/$id';
+
+  /// 预览形象（POST，本地合成缩略图，不落库、免费）。
+  static String characterDraftPreviewPath(String id) =>
+      '${characterDraftPath(id)}/preview';
+
+  /// 生成形象（POST，免费，生成后锁定组合）。
+  static String characterDraftGeneratePath(String id) =>
+      '${characterDraftPath(id)}/generate';
+
+  /// 角色卡详情（GET）。
+  static String characterCardPath(String id) => '/api/v1/character/cards/$id';
+
+  /// 铸造角色卡（POST，链上确权后扣 200 钻石并建 AI）。
+  static String characterCardMintPath(String id) =>
+      '${characterCardPath(id)}/mint';
+
   /// 上传 AI 生成视频（POST，body 为 MP4 原始字节，元信息走 query）。
   static const String videoUploadPath = '/api/v1/world/video-uploads';
 
@@ -81,6 +127,18 @@ class ApiConfig {
   static const String blocksPath = '/api/v1/blocks';
   static const String blocksUnblockPath = '/api/v1/blocks/unblock';
 
+  /// 社区快照（GET）：含 termsAccepted（是否已同意社区规范）。
+  static const String communityPath = '/api/v1/community';
+
+  /// 同意社区规范（POST）。body: {version, accepted: true}
+  static const String communityTermsPath = '/api/v1/community/terms';
+
   /// 注销账号（DELETE）。body: {confirm: true}
   static const String accountPath = '/api/v1/account';
+
+  /// 生成器作品画廊（GET）：发现页用，游客可看。query: limit/offset。
+  static const String generatorFeedPath = '/api/v1/generator/feed';
+
+  /// 我的生成器作品（GET）：仅本人。query: limit/offset。
+  static const String generatorMinePath = '/api/v1/generator/mine';
 }

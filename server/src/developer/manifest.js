@@ -151,7 +151,72 @@ function validateSource(source) {
   return source;
 }
 
+// 专家 / 连接器是声明式能力，没有可执行源码，只校验定义结构。
+// 专家 = 一套可被 AI 直接套用的人设与提示词；连接器 = 一个外部服务入口的描述。
+const KINDS = Object.freeze(['skill', 'expert', 'connector']);
+const CONNECTOR_METHODS = Object.freeze(['GET', 'POST']);
+const CONNECTOR_AUTH = Object.freeze(['none', 'api_key']);
+const URL_RE = /^https:\/\/[^\s]{8,255}$/;
+
+function readPrice(raw) {
+  const price = Number(raw);
+  if (!Number.isInteger(price) || price < BOOK_DIAMONDS_MIN || price > BOOK_DIAMONDS_MAX) {
+    throw fail('INVALID_DEFINITION', `定价需为 ${BOOK_DIAMONDS_MIN}-${BOOK_DIAMONDS_MAX} 的整数钻石`);
+  }
+  return price;
+}
+
+function readSlug(raw) {
+  const slug = readText(raw, 'slug', { min: 2, max: 32 });
+  if (!SLUG_RE.test(slug)) {
+    throw fail('INVALID_DEFINITION', 'slug 只能包含小写字母、数字与中划线，且以字母或数字开头');
+  }
+  return slug;
+}
+
+function normalizeDefinition(kind, raw) {
+  if (!KINDS.includes(kind)) throw fail('INVALID_KIND', '能力类型需为 skill / expert / connector');
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw fail('INVALID_DEFINITION', 'definition 必须是 JSON 对象');
+  }
+  const base = {
+    slug: readSlug(raw.slug),
+    name: readText(raw.name, 'name', { min: 2, max: 32 }),
+    track: readText(raw.track, 'track', { min: 2, max: 24 }),
+    summary: readText(raw.summary, 'summary', { min: 4, max: 140 }),
+  };
+  if (!TRACKS.includes(base.track)) {
+    throw fail('INVALID_DEFINITION', `track 需为 ${TRACKS.join(' / ')} 之一`);
+  }
+
+  if (kind === 'expert') {
+    return { ...base,
+      prompt: readText(raw.prompt, 'prompt', { min: 10, max: 4000 }),
+      greeting: raw.greeting === undefined || raw.greeting === null || raw.greeting === ''
+        ? '' : readText(raw.greeting, 'greeting', { min: 1, max: 200 }),
+    };
+  }
+
+  // connector：只登记外部服务入口，不允许把密钥写进定义（密钥由平台下发）。
+  const endpoint = readText(raw.endpoint, 'endpoint', { min: 8, max: 255 });
+  if (!URL_RE.test(endpoint)) throw fail('INVALID_DEFINITION', 'endpoint 必须是以 https:// 开头的完整地址');
+  const method = raw.method === undefined || raw.method === null || raw.method === ''
+    ? 'POST' : readText(raw.method, 'method', { min: 2, max: 8 }).toUpperCase();
+  if (!CONNECTOR_METHODS.includes(method)) throw fail('INVALID_DEFINITION', 'method 仅支持 GET / POST');
+  const auth = raw.auth === undefined || raw.auth === null || raw.auth === ''
+    ? 'none' : readText(raw.auth, 'auth', { min: 2, max: 16 });
+  if (!CONNECTOR_AUTH.includes(auth)) throw fail('INVALID_DEFINITION', 'auth 仅支持 none / api_key');
+  if (/\b(api[_-]?key|secret|token)\s*[:=]\s*['"]?[A-Za-z0-9_-]{12,}/i.test(JSON.stringify(raw))) {
+    throw fail('INVALID_DEFINITION', '定义中不能包含真实密钥，请由平台统一配置');
+  }
+  return { ...base, endpoint, method, auth,
+    description: raw.description === undefined || raw.description === null || raw.description === ''
+      ? '' : readText(raw.description, 'description', { min: 4, max: 500 }),
+  };
+}
+
 module.exports = {
+  KINDS,
   TRACKS,
   LIMITS,
   SOURCE_LIMIT,
@@ -159,4 +224,6 @@ module.exports = {
   BOOK_DIAMONDS_MAX,
   validateManifest,
   validateSource,
+  readPrice,
+  normalizeDefinition,
 };

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../config/api_config.dart';
 import '../config/commerce_config.dart';
 import '../data/world_data.dart';
 import '../models/elf.dart';
@@ -12,6 +13,7 @@ import 'bookshelf_page.dart';
 import 'create_elf_page.dart';
 import 'elf_console_page.dart';
 import 'earnings_page.dart';
+import 'generator_works_page.dart';
 import 'login_page.dart';
 import 'market_page.dart';
 import 'settings_page.dart';
@@ -351,6 +353,21 @@ class _ProfilePageState extends State<ProfilePage> {
               const SizedBox(width: 6),
               InkWell(
                 onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                      builder: (_) => const GeneratorWorksPage.mine()),
+                ),
+                borderRadius: BorderRadius.circular(6),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  child: Text('作品',
+                      style: TextStyle(
+                          fontSize: 10.5, color: AppColors.violetSoft)),
+                ),
+              ),
+              const SizedBox(width: 6),
+              InkWell(
+                onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const WalletPage()),
                 ),
                 borderRadius: BorderRadius.circular(6),
@@ -374,7 +391,7 @@ class _ProfilePageState extends State<ProfilePage> {
             ],
           ),
           const SizedBox(height: 10),
-          Text('地址为站内资产登记编号，不涉及外部钱包、加密货币或数字代币交易。',
+          Text('站内账号与角色登记凭证分别记录；上链结果以实际铸造返回的凭证为准，不提供余额转让或代币交易。',
               style: TextStyle(fontSize: 9.5, color: AppColors.textFaint)),
           const SizedBox(height: 10),
           Row(
@@ -639,7 +656,8 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Widget _nftCoverArt(Elf elf) {
-    final url = elf.avatarUrl;
+    // 封面与全局头像口径一致：只用铸造形象图，无图回落首字色块。
+    final url = ApiConfig.resolveAssetUrl(elf.imageThumbUrl ?? elf.imageUrl);
     if (url == null || url.isEmpty) return _nftInitialArt(elf);
     return Image.network(
       url,
@@ -739,7 +757,7 @@ class _ProfilePageState extends State<ProfilePage> {
           Text('你还没有 AI',
               style: TextStyle(fontSize: 14, color: AppColors.textSub)),
           const SizedBox(height: 4),
-          Text('创建的AI作为站内资源保存在你的账号下，不是链上资产。',
+          Text('创建后的 AI 归入你的账号；需要上链登记的角色须完成服务端校验与铸造。',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
           const SizedBox(height: 14),

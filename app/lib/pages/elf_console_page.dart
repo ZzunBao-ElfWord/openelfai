@@ -29,10 +29,25 @@ class _ElfConsolePageState extends State<ElfConsolePage> {
   /// 0 作品 / 1 技能 / 2 人格（技能书是人类资产，走人类级的「仓库」页面）
   int _tab = 0;
 
+  /// 世界对话开关的请求中状态：防止连点造成重复提交。
+  bool _worldChatBusy = false;
+
   void _openShelf() {
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const BookshelfPage()),
     );
+  }
+
+  Future<void> _toggleWorldChat(AppState state, Elf elf, bool open) async {
+    if (_worldChatBusy) return;
+    setState(() => _worldChatBusy = true);
+    final error = await state.setWorldChatOpen(elf, open);
+    if (!mounted) return;
+    setState(() => _worldChatBusy = false);
+    if (error != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error)));
+    }
   }
 
   @override
@@ -63,6 +78,7 @@ class _ElfConsolePageState extends State<ElfConsolePage> {
                             children: [
                               _nftSection(context, state, elf),
                               _capabilitySection(context, state, elf),
+                              _worldChatSection(context, state, elf),
                               _assetSection(context, state, elf),
                               _publicSection(context, state, elf),
                               _tabsSection(context, state, elf),
@@ -448,6 +464,54 @@ class _ElfConsolePageState extends State<ElfConsolePage> {
                     ),
                   ),
                 ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 世界对话：打开后访客可以和这只 AI 纯对话，费用走持有人的 Key 与余额。
+  /// 开启的前置条件（可用 API Key + 平台余额大于 0）由服务端校验，失败原因直接弹出。
+  Widget _worldChatSection(BuildContext context, AppState state, Elf elf) {
+    final open = elf.worldChatOpen;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeader('世界对话', trailing: '费用由持有人承担'),
+        _group(
+          child: Row(
+            children: [
+              Icon(Icons.public,
+                  size: 15,
+                  color: open ? AppColors.cyan : AppColors.textFaint),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('允许访客与它对聊',
+                        style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textSub)),
+                    const SizedBox(height: 2),
+                    Text(
+                      open
+                          ? '已开放。访客与你的 AI 纯对话时消耗你的 Key 与余额，有每日额度兜底。'
+                          : '未开放。开启后访客与你的 AI 纯对话将消耗你的 Key 与余额。',
+                      style:
+                          TextStyle(fontSize: 10, color: AppColors.textMuted),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                value: open,
+                onChanged: _worldChatBusy
+                    ? null
+                    : (value) => _toggleWorldChat(state, elf, value),
               ),
             ],
           ),

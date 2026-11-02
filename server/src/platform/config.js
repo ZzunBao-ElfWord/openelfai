@@ -34,4 +34,12 @@ module.exports = {
   rateLimit: {
     defaultQps: envInt('PLATFORM_DEFAULT_QPS', 5),
   },
+  // Langfuse 自托管实例：密钥为空时遥测自动降级为无操作。
+  langfuse: {
+    enabled: env('LANGFUSE_ENABLED', 'true') !== 'false',
+    publicKey: env('LANGFUSE_PUBLIC_KEY', ''),
+    secretKey: env('LANGFUSE_SECRET_KEY', ''),
+    baseUrl: env('LANGFUSE_BASE_URL', 'http://127.0.0.1:3100'),
+    environment: env('LANGFUSE_ENVIRONMENT', ''),
+  },
 };

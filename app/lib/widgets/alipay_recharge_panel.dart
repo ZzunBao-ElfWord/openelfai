@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../config/commerce_config.dart';
 import '../payments/alipay_service.dart';
 import '../theme.dart';
 
@@ -41,7 +42,9 @@ class _AlipayRechargePanelState extends State<AlipayRechargePanel>
               Text(
                   _service.mode == 'sandbox'
                       ? '支付宝沙箱测试 · 非真实收款'
-                      : '安卓充值 · 仅支持支付宝',
+                      : CommerceConfig.web
+                          ? '网页充值 · 仅支持支付宝'
+                          : '安卓充值 · 仅支持支付宝',
                   style: TextStyle(
                       color: AppColors.textMuted, fontSize: 12)),
               if (_service.loading) const LinearProgressIndicator(),
@@ -70,7 +73,7 @@ class _AlipayRechargePanelState extends State<AlipayRechargePanel>
                                         builder: (dialog) => AlertDialog(
                                               title: const Text('使用支付宝付款'),
                                               content: Text(
-                                                  '将通过支付宝 SDK 购买 ${p['diamonds']} 钻石，金额 ¥${(p['priceFen'] / 100).toStringAsFixed(2)}。付款结果以服务端确认为准。'),
+                                                  '将通过支付宝${CommerceConfig.web ? '网页收银台' : ' SDK'}购买 ${p['diamonds']} 钻石，金额 ¥${(p['priceFen'] / 100).toStringAsFixed(2)}。付款结果以服务端确认为准。'),
                                               actions: [
                                                 TextButton(
                                                     onPressed: () =>

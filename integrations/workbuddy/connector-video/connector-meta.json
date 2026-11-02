@@ -1,0 +1,23 @@
+{
+  "name": "视频剪辑 OpenElf",
+  "name_zh": "视频剪辑 OpenElf",
+  "name_en": "Smart Cut OpenElf",
+  "description": "Turn long footage into multiple publish-ready short clips: transcribe, find breath pauses, cut and re-encode, add subtitles and export in batch.",
+  "description_zh": "把长视频转成多条可独立发布的短片段：转写、找气口、裁剪重编码、生成字幕并批量导出。",
+  "description_en": "Turn long footage into multiple standalone short clips: transcribe, detect breath pauses, cut and re-encode, add subtitles and export in batch, with unified aspect ratio and loudness.",
+  "source": "openelf-video",
+  "type": "mcp",
+  "version": "1.0.0",
+  "auth_mode": "token",
+  "minWorkbuddyVersion": "4.24.0",
+  "examples_zh": [
+    "帮我读一下这段素材的时长和分辨率",
+    "把这条 3 分钟口播按气口切成 3 条短视频",
+    "给切好的片段烧上字幕并导出"
+  ],
+  "examples_en": [
+    "Read the duration and resolution of this footage",
+    "Cut this 3-minute talking head into 3 short clips by breath pauses",
+    "Burn subtitles into the clips and export them"
+  ]
+}

@@ -122,6 +122,8 @@ func (d Deps) ListPlatformDevelopers(c *gin.Context) {
 	args2 := append(append([]any{}, args...), pageSize, offset)
 	rows, err := d.DB.QueryContext(ctx,
 		`SELECT d.user_id, d.real_name, d.purpose, d.status, d.tier, d.created_at, d.approved_at,
+			d.subject_type, d.org_name, d.org_license_no, d.org_contact, d.agreement_version,
+			d.review_note, d.reviewed_at,
 			COALESCE(w.balance_micro, 0), COALESCE(w.frozen_micro, 0), COALESCE(w.total_topup_micro, 0),
 			COUNT(k.id)
 		 FROM platform_developers d
@@ -129,6 +131,8 @@ func (d Deps) ListPlatformDevelopers(c *gin.Context) {
 		 LEFT JOIN platform_api_keys k ON k.user_id = d.user_id
 		 WHERE `+cond+`
 		 GROUP BY d.user_id, d.real_name, d.purpose, d.status, d.tier, d.created_at, d.approved_at,
+			d.subject_type, d.org_name, d.org_license_no, d.org_contact, d.agreement_version,
+			d.review_note, d.reviewed_at,
 			w.balance_micro, w.frozen_micro, w.total_topup_micro
 		 ORDER BY d.created_at DESC, d.user_id ASC LIMIT ? OFFSET ?`, args2...)
 	if err != nil {
@@ -141,9 +145,12 @@ func (d Deps) ListPlatformDevelopers(c *gin.Context) {
 	for rows.Next() {
 		var userID, realName, purpose, status, tier string
 		var createdAt int64
-		var approvedAt sql.NullInt64
+		var approvedAt, reviewedAt sql.NullInt64
+		var subjectType string
+		var orgName, orgLicenseNo, orgContact, agreementVersion, reviewNote sql.NullString
 		var balance, frozen, totalTopup, keyCount int64
 		if err := rows.Scan(&userID, &realName, &purpose, &status, &tier, &createdAt, &approvedAt,
+			&subjectType, &orgName, &orgLicenseNo, &orgContact, &agreementVersion, &reviewNote, &reviewedAt,
 			&balance, &frozen, &totalTopup, &keyCount); err != nil {
 			d.internalError(c, "scan platform developers failed", err)
 			return
@@ -151,6 +158,13 @@ func (d Deps) ListPlatformDevelopers(c *gin.Context) {
 		items = append(items, gin.H{
 			"user_id": userID, "real_name": realName, "purpose": purpose,
 			"status": status, "tier": tier, "created_at": createdAt,
+			"subject_type":      subjectType,
+			"org_name":          platformNullableString(orgName),
+			"org_license_no":    platformNullableString(orgLicenseNo),
+			"org_contact":       platformNullableString(orgContact),
+			"agreement_version": platformNullableString(agreementVersion),
+			"review_note":       platformNullableString(reviewNote),
+			"reviewed_at":       platformNullableInt64(reviewedAt),
 			"approved_at":       platformNullableInt64(approvedAt),
 			"balance_micro":     balance,
 			"frozen_micro":      frozen,
@@ -159,6 +173,208 @@ func (d Deps) ListPlatformDevelopers(c *gin.Context) {
 		})
 	}
 	c.JSON(http.StatusOK, gin.H{"items": items, "total": total, "page": page, "page_size": pageSize})
+}
+
+// ReviewPlatformDeveloper POST /api/v1/platform/developers/:userId/review
+// 审核企业主体入驻：approve 通过，reject 需带说明（开发者可修改后重新提交）。
+func (d Deps) ReviewPlatformDeveloper(c *gin.Context) {
+	userID := strings.TrimSpace(c.Param("userId"))
+	if userID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id_required"})
+		return
+	}
+	var body struct {
+		Action string `json:"action"`
+		Note   string `json:"note"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_body"})
+		return
+	}
+	action := strings.TrimSpace(body.Action)
+	if action != "approve" && action != "reject" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_action"})
+		return
+	}
+	note := strings.TrimSpace(body.Note)
+	if utf8.RuneCountInString(note) > 255 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "note_too_long"})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	defer cancel()
+
+	var status string
+	err := d.DB.QueryRowContext(ctx,
+		"SELECT status FROM platform_developers WHERE user_id = ?", userID).Scan(&status)
+	if errors.Is(err, sql.ErrNoRows) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "developer_not_found"})
+		return
+	}
+	if err != nil {
+		d.internalError(c, "read developer failed", err)
+		return
+	}
+
+	now := time.Now().UnixMilli()
+	if action == "approve" {
+		_, err = d.DB.ExecContext(ctx,
+			`UPDATE platform_developers
+			    SET status = 'approved', approved_at = ?, review_note = NULL, reviewed_at = ?, updated_at = ?
+			  WHERE user_id = ?`, now, now, now, userID)
+		status = "approved"
+	} else {
+		if note == "" {
+			note = "审核未通过，请补充或修改资料后重新提交"
+		}
+		_, err = d.DB.ExecContext(ctx,
+			`UPDATE platform_developers
+			    SET status = 'rejected', review_note = ?, reviewed_at = ?, updated_at = ?
+			  WHERE user_id = ?`, note, now, now, userID)
+		status = "rejected"
+	}
+	if err != nil {
+		d.internalError(c, "review developer failed", err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"user_id": userID, "status": status,
+		"review_note": platformNullableString(sql.NullString{String: note, Valid: note != ""}),
+		"reviewed_at": now})
+}
+
+// ListPlatformCapabilities GET /api/v1/platform/capabilities?status=&kind=&page=&page_size=
+func (d Deps) ListPlatformCapabilities(c *gin.Context) {
+	page, pageSize, offset := pageParams(c, 20, 100)
+
+	where := []string{"1=1"}
+	args := make([]any, 0)
+	if status := strings.TrimSpace(c.Query("status")); status != "" {
+		where = append(where, "s.status = ?")
+		args = append(args, status)
+	}
+	if kind := strings.TrimSpace(c.Query("kind")); kind != "" {
+		where = append(where, "s.kind = ?")
+		args = append(args, kind)
+	}
+	cond := strings.Join(where, " AND ")
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	defer cancel()
+
+	var total int64
+	if err := d.DB.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM dev_skill_defs s WHERE "+cond, args...).Scan(&total); err != nil {
+		d.internalError(c, "count capabilities failed", err)
+		return
+	}
+
+	args2 := append(append([]any{}, args...), pageSize, offset)
+	rows, err := d.DB.QueryContext(ctx,
+		`SELECT s.id, s.developer_id, COALESCE(p.real_name, ''), s.slug, s.name, s.track, s.kind,
+			s.summary, s.price_diamonds, s.status, s.review_note, s.approved_at,
+			s.install_count, s.sales_count, s.call_count, s.earnings_cents,
+			s.created_at, s.updated_at
+		 FROM dev_skill_defs s
+		 LEFT JOIN platform_developers p ON p.user_id = s.developer_id
+		 WHERE `+cond+`
+		 ORDER BY s.updated_at DESC, s.id ASC LIMIT ? OFFSET ?`, args2...)
+	if err != nil {
+		d.internalError(c, "list capabilities failed", err)
+		return
+	}
+	defer rows.Close()
+
+	items := make([]gin.H, 0)
+	for rows.Next() {
+		var id, developerID, developerName, slug, name, track, kind, summary, status string
+		var price, installs, sales, calls, earnings, createdAt, updatedAt int64
+		var reviewNote sql.NullString
+		var approvedAt sql.NullInt64
+		if err := rows.Scan(&id, &developerID, &developerName, &slug, &name, &track, &kind,
+			&summary, &price, &status, &reviewNote, &approvedAt,
+			&installs, &sales, &calls, &earnings, &createdAt, &updatedAt); err != nil {
+			d.internalError(c, "scan capabilities failed", err)
+			return
+		}
+		items = append(items, gin.H{
+			"id": id, "developer_id": developerID, "developer_name": developerName,
+			"slug": slug, "name": name, "track": track, "kind": kind, "summary": summary,
+			"price_diamonds": price, "status": status, "review_note": platformNullableString(reviewNote),
+			"approved_at":   platformNullableInt64(approvedAt),
+			"install_count": installs, "sales_count": sales, "call_count": calls, "earnings_cents": earnings,
+			"created_at": createdAt, "updated_at": updatedAt,
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{"items": items, "total": total, "page": page, "page_size": pageSize})
+}
+
+// ReviewPlatformCapability POST /api/v1/platform/capabilities/:id/review
+// 能力审核：approve 即上架（进入市场与学习入口），reject 退回开发者修改。
+func (d Deps) ReviewPlatformCapability(c *gin.Context) {
+	id := strings.TrimSpace(c.Param("id"))
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "id_required"})
+		return
+	}
+	var body struct {
+		Action string `json:"action"`
+		Note   string `json:"note"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_body"})
+		return
+	}
+	action := strings.TrimSpace(body.Action)
+	if action != "approve" && action != "reject" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_action"})
+		return
+	}
+	note := strings.TrimSpace(body.Note)
+	if utf8.RuneCountInString(note) > 255 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "note_too_long"})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	defer cancel()
+
+	var status string
+	err := d.DB.QueryRowContext(ctx,
+		"SELECT status FROM dev_skill_defs WHERE id = ?", id).Scan(&status)
+	if errors.Is(err, sql.ErrNoRows) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "capability_not_found"})
+		return
+	}
+	if err != nil {
+		d.internalError(c, "read capability failed", err)
+		return
+	}
+
+	now := time.Now().UnixMilli()
+	if action == "approve" {
+		_, err = d.DB.ExecContext(ctx,
+			`UPDATE dev_skill_defs
+			    SET status = 'approved', approved_at = ?, review_note = NULL, updated_at = ?
+			  WHERE id = ?`, now, now, id)
+		status = "approved"
+	} else {
+		if note == "" {
+			note = "审核未通过，请按反馈修改后重新提交"
+		}
+		_, err = d.DB.ExecContext(ctx,
+			`UPDATE dev_skill_defs
+			    SET status = 'rejected', review_note = ?, updated_at = ?
+			  WHERE id = ?`, note, now, id)
+		status = "rejected"
+	}
+	if err != nil {
+		d.internalError(c, "review capability failed", err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"id": id, "status": status,
+		"review_note": platformNullableString(sql.NullString{String: note, Valid: note != ""}),
+		"reviewed_at": now})
 }
 
 // ListPlatformKeys GET /api/v1/platform/keys?user_id=&page=&page_size=
