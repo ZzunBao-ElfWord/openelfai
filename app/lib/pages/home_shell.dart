@@ -11,6 +11,7 @@ import '../models/elf.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'create_elf_page.dart';
+import 'conversation_page.dart';
 import 'create_post_sheet.dart';
 import 'elf_chat_page.dart';
 import 'login_page.dart';
@@ -23,6 +24,9 @@ import 'wallet_page.dart';
 import 'identity_verify_page.dart';
 import 'elf_works_page.dart';
 import '../push/push_service.dart';
+
+const _conversationPageIndex = 4;
+const _conversationNavIndex = -1;
 
 /// 主容器：底栏 5 格 —— 世界 / 视频 / 创建（居中）/ 发现 / 我。
 /// 世界与视频是两个独立的站内曝光渠道；「我的 AI」与设置合并进「我」；
@@ -40,12 +44,15 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   StreamSubscription<Uri>? _linkSub;
   Timer? _autoTimer;
   bool _pushScheduled = false;
+  // Preserve the same mounted pages (and unsent draft) across responsive shell changes.
+  final _pageStackKey = GlobalKey();
 
   List<Widget> get _pages => [
-        const WorldPage(),
+        WorldPage(showWorkbench: !isDesktopPlatform),
         VideoFeedPage(active: _current == 1),
         const MarketPage(embedded: true),
         const ProfilePage(),
+        if (isDesktopPlatform) const ConversationPage(),
       ];
 
   @override
@@ -173,6 +180,11 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   }
 
   void _onNavTap(int i) {
+    FocusManager.instance.primaryFocus?.unfocus();
+    if (i == _conversationNavIndex && isDesktopPlatform) {
+      setState(() => _current = _conversationPageIndex);
+      return;
+    }
     if (i == 2) {
       // 中间「创建」：全端统一打开创建 AI 流程，新用户首持漏斗不被打断。
       _openCreate();
@@ -190,16 +202,21 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         backgroundColor: AppColors.bg,
         body: Row(
           children: [
-            _SideRail(current: _current, onTap: _onNavTap),
+            _SideRail(
+                current: _current,
+                onTap: _onNavTap,
+                showConversation: isDesktopPlatform),
             Container(width: 1, color: AppColors.strokeSoft),
-            Expanded(child: IndexedStack(index: _current, children: _pages)),
+            Expanded(
+                child: IndexedStack(
+                    key: _pageStackKey, index: _current, children: _pages)),
           ],
         ),
       );
     }
     return Scaffold(
       backgroundColor: AppColors.bg,
-      body: IndexedStack(index: _current, children: _pages),
+      body: IndexedStack(key: _pageStackKey, index: _current, children: _pages),
       bottomNavigationBar: _BottomBar(current: _current, onTap: _onNavTap),
     );
   }
@@ -209,8 +226,12 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 class _SideRail extends StatelessWidget {
   final int current;
   final ValueChanged<int> onTap;
+  final bool showConversation;
 
-  const _SideRail({required this.current, required this.onTap});
+  const _SideRail(
+      {required this.current,
+      required this.onTap,
+      this.showConversation = false});
 
   static const _items = [
     (Icons.public, '世界'),
@@ -235,20 +256,31 @@ class _SideRail extends StatelessWidget {
             children: [
               _brand(),
               const SizedBox(height: 18),
-              for (var i = 0; i < _items.length; i++) _navItem(context, i),
-              if (state.myElves.isNotEmpty) ...[
-                const SizedBox(height: 18),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(10, 0, 0, 4),
-                  child: Text(
-                    '最近',
-                    style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (showConversation)
+                        _navItem(context, _conversationNavIndex),
+                      for (var i = 0; i < _items.length; i++)
+                        _navItem(context, i),
+                      if (state.myElves.isNotEmpty) ...[
+                        const SizedBox(height: 18),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(10, 0, 0, 4),
+                          child: Text('最近',
+                              style: TextStyle(
+                                  fontSize: 11, color: AppColors.textMuted)),
+                        ),
+                        for (final elf in state.myElves.take(4))
+                          _recentItem(context, elf),
+                      ],
+                    ],
                   ),
                 ),
-                for (final elf in state.myElves.take(4))
-                  _recentItem(context, elf),
-              ],
-              const Spacer(),
+              ),
+              const SizedBox(height: 12),
               _promoCard(context),
               const SizedBox(height: 14),
               _userRow(context, state),
@@ -301,9 +333,15 @@ class _SideRail extends StatelessWidget {
   }
 
   Widget _navItem(BuildContext context, int i) {
-    final (icon, label) = _items[i];
+    final isConversation = i == _conversationNavIndex;
+    final (icon, label) =
+        isConversation ? (Icons.chat_bubble_outline, '对话') : _items[i];
     final isCreate = i == 2;
-    final pageIndex = i < 2 ? i : i - 1;
+    final pageIndex = isConversation
+        ? _conversationPageIndex
+        : i < 2
+            ? i
+            : i - 1;
     final selected = !isCreate && pageIndex == current;
     final color = isCreate
         ? AppColors.cyan
@@ -311,6 +349,7 @@ class _SideRail extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
       child: InkWell(
+        key: ValueKey('desktop-nav-$label'),
         onTap: () => onTap(i),
         borderRadius: BorderRadius.circular(10),
         child: Container(
@@ -398,7 +437,13 @@ class _SideRail extends StatelessWidget {
           ),
           const SizedBox(height: 9),
           InkWell(
-            onTap: () => _openCommand(context),
+            onTap: () {
+              if (showConversation) {
+                onTap(_conversationNavIndex);
+              } else {
+                _openCommand(context);
+              }
+            },
             borderRadius: BorderRadius.circular(8),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),

@@ -9,10 +9,13 @@ import 'package:http/testing.dart';
 
 import 'package:openelf/main.dart';
 import 'package:openelf/models/user.dart';
+import 'package:openelf/models/elf.dart';
 import 'package:openelf/pages/character_studio_page.dart';
 import 'package:openelf/pages/create_elf_page.dart';
 import 'package:openelf/pages/market_page.dart';
 import 'package:openelf/pages/home_shell.dart';
+import 'package:openelf/pages/conversation_page.dart';
+import 'package:openelf/pages/video_feed_page.dart';
 import 'package:openelf/pages/login_page.dart';
 import 'package:openelf/pages/profile_page.dart';
 import 'package:openelf/services/platform_api.dart';
@@ -74,30 +77,108 @@ void main() {
       avatarInitial: '宽',
       createdAt: DateTime.now(),
     );
+    state.elves.add(Elf(
+        id: 'desktop-dialogue-fixture',
+        serial: 'TEST',
+        name: '对话选择测试AI',
+        initial: '测',
+        ownerId: 'wide-user',
+        ownerLabel: '我',
+        isMine: true,
+        generation: 1,
+        edition: 'test',
+        persona: '',
+        fear: '',
+        habit: '',
+        status: ElfStatus.active,
+        followers: 0,
+        echo: 0,
+        works: 0,
+        attention: 0,
+        baseCapacity: 1,
+        learnedSkills: [],
+        today: [],
+        relations: []));
 
     await tester.pumpWidget(const MaterialApp(home: HomeShell()));
     await tester.pump();
 
-    // 左侧导航：品牌 + 版本 + 5 项入口
+    // 桌面左栏新增对话，既有导航与默认世界入口保留。
     expect(find.text('OpenElf'), findsOneWidget);
     expect(find.text('v1.3'), findsOneWidget);
     expect(find.text('世界'), findsWidgets); // 导航项 + 页面标题
-    expect(find.text('视频'), findsWidgets); // 导航项 + 工作台赛道胶囊
+    expect(find.text('视频'), findsWidgets);
+    expect(find.text('对话'), findsOneWidget);
     expect(find.text('创建'), findsOneWidget);
     expect(find.text('发现'), findsOneWidget);
 
-    // 首页工作台：大标题 + 药丸输入框
+    // 默认世界只展示信息流；工作台只挂载一次，保留在独立对话页。
+    expect(find.text('OpenElf，我帮你'), findsNothing);
+    expect(find.text('为你推荐'), findsOneWidget);
+    expect(find.byType(WorkbenchPanel, skipOffstage: false), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('desktop-nav-对话')));
+    await tester.pump();
+    expect(find.byType(ConversationPage), findsOneWidget);
     expect(find.text('OpenElf，我帮你'), findsOneWidget);
     expect(find.text('创作'), findsOneWidget);
     expect(find.text('快速'), findsOneWidget);
-
-    // 内容区：世界信息流正常渲染
+    state.selectElf('desktop-dialogue-fixture');
+    await tester.pump();
+    expect(
+        find.descendant(
+            of: find.byType(WorkbenchPanel), matching: find.text('对话选择测试AI')),
+        findsOneWidget);
+    expect(find.text('为你推荐'), findsNothing);
+    final composerState = tester.state(find.byType(WorkbenchPanel));
+    await tester.tap(find.text('运营'));
+    await tester.enterText(find.byType(TextField), '保留这条未发送的对话');
+    await tester.tap(find.byKey(const ValueKey('desktop-nav-世界')));
+    await tester.pump();
+    expect(find.text('OpenElf，我帮你'), findsNothing);
     expect(find.text('为你推荐'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('desktop-nav-对话')));
+    await tester.pump();
+    expect(tester.state(find.byType(WorkbenchPanel)), same(composerState));
+    expect(find.text('保留这条未发送的对话'), findsOneWidget);
+    expect(find.textContaining('规划这周要发的三条动态'), findsOneWidget);
+    // 小窗口可滚动；跨过侧栏断点再恢复也不能丢草稿或所选模式。
+    tester.view.physicalSize = const Size(1100, 520);
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    tester.view.physicalSize = const Size(800, 700);
+    await tester.pump();
+    expect(tester.state(find.byType(WorkbenchPanel)), same(composerState));
+    tester.view.physicalSize = const Size(1440, 900);
+    await tester.pump();
+    expect(find.text('保留这条未发送的对话'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    // 添加入口不能错位既有视频、发现、我与创建动作。
+    await tester.tap(find.byKey(const ValueKey('desktop-nav-视频')));
+    await tester.pump();
+    expect(tester.widget<VideoFeedPage>(find.byType(VideoFeedPage)).active,
+        isTrue);
+    await tester.tap(find.byKey(const ValueKey('desktop-nav-发现')));
+    await tester.pump();
+    expect(find.byType(MarketPage), findsOneWidget);
+    expect(
+        tester
+            .widget<VideoFeedPage>(
+                find.byType(VideoFeedPage, skipOffstage: false))
+            .active,
+        isFalse);
 
     // 点击侧栏「我」切换 tab 不崩溃
     await tester.tap(find.text('我'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byType(ProfilePage), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('desktop-nav-创建')));
+    await tester.pumpAndSettle();
+    expect(find.byType(CreateElfPage), findsOneWidget);
+    Navigator.of(tester.element(find.byType(CreateElfPage))).pop();
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
 
     // 卸载 HomeShell，取消周期 Timer，避免测试收尾报 pending timer
     await tester.pumpWidget(const SizedBox());
@@ -131,6 +212,7 @@ void main() {
     expect(find.text('创建'), findsOneWidget);
     // 手机端不出现工作台，保留原有世界页头部
     expect(find.text('OpenElf，我帮你'), findsNothing);
+    expect(find.text('对话'), findsNothing);
     expect(find.text('写作'), findsNothing);
     expect(find.text('为你推荐'), findsOneWidget);
 

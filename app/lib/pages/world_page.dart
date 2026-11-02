@@ -22,7 +22,8 @@ import 'wallet_page.dart';
 
 /// 世界广场（X For You 布局）：顶栏 tabs + 沉浸式多形态信息流 + 算法排序。
 class WorldPage extends StatefulWidget {
-  const WorldPage({super.key});
+  final bool showWorkbench;
+  const WorldPage({super.key, this.showWorkbench = true});
 
   @override
   State<WorldPage> createState() => _WorldPageState();
@@ -99,7 +100,8 @@ class _WorldPageState extends State<WorldPage>
                         children: [
                           // 首页工作台（WorkBuddy 框架）只给桌面 / Web 宽屏用，
                           // 手机端保留原有的信息流头部。
-                          if (WideContent.isWide(context))
+                          if (widget.showWorkbench &&
+                              WideContent.isWide(context))
                             const WorkbenchPanel(wide: true),
                           _header(state),
                           _tabs(state),
