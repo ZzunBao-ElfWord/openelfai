@@ -9,7 +9,11 @@ const stage = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'openelf-web
 fs.cpSync(source, path.join(stage, 'site'), { recursive: true, errorOnExist: true, force: false });
 for (const name of ['install.sh', 'README.md']) fs.copyFileSync(path.join(__dirname, name), path.join(stage, name), fs.constants.COPYFILE_EXCL);
 const site = path.join(stage, 'site');
-const release = 'web-recovery-20261102';
+const release = process.argv[3] || 'web-recovery-20261102';
+if (!/^[a-zA-Z0-9_-]{1,100}$/.test(release)) throw Error('非法发布标识');
+const installerPath = path.join(stage, 'install.sh');
+fs.writeFileSync(installerPath, fs.readFileSync(installerPath, 'utf8')
+  .replaceAll('release=web-recovery-20261102', `release=${release}`));
 const js = fs.readFileSync(path.join(site, 'main.dart.js'), 'utf8')
   .replace(/\\u([0-9a-f]{4})|\\x([0-9a-f]{2})/gi, (_, u, x) => String.fromCharCode(parseInt(u || x, 16)));
 for (const marker of ['https://openelfai.com', '/api/v1/web/alipay', '/api/v1/web/wallet',

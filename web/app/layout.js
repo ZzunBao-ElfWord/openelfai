@@ -1,4 +1,5 @@
 import './globals.css';
+import Script from 'next/script';
 import SiteChrome from '../components/site-chrome';
 import { PreferencesProvider } from '../components/preferences';
 import { SITE_NAME, SITE_TITLE, SITE_DESC, SITE_URL } from '../lib/site';
@@ -54,6 +55,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="zh-CN">
       <body>
+        <Script src="/console/auth/console-auth.js?v=20261102-source-v2" strategy="beforeInteractive" />
         {/* 注销旧版 Flutter 网页注册的 Service Worker，避免旧缓存拦截新官网 */}
         <script
           dangerouslySetInnerHTML={{

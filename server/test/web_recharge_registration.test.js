@@ -25,6 +25,15 @@ test('完整入口注册网页支付，匿名401、错误回调400，不访问DB
     webTopupSettings: { enabled: false, sandbox: false, appId: NEW_APP_ID, sellerId: seller },
     webPaymentGateway: null, webLegacy: null });
   t.after(() => app.close());
+  for (const origin of ['https://open.openelfai.com', 'https://web.openelfai.com',
+    'https://openelfai.com', 'https://www.openelfai.com', 'https://untrusted.example']) {
+    const response = await app.inject({ method: 'OPTIONS', url: '/api/v1/auth/send-code',
+      headers: { origin, 'access-control-request-method': 'POST',
+        'access-control-request-headers': 'content-type' } });
+    assert.equal(response.statusCode, 204);
+    assert.equal(response.headers['access-control-allow-origin'],
+      origin === 'https://untrusted.example' ? undefined : origin);
+  }
   for (const url of ['/api/v1/platform/web-topup/products', '/api/v1/web/alipay/products',
     '/api/v1/web/alipay/pending', '/api/v1/web/alipay/legacy-orders', '/api/v1/web/wallet',
     '/api/v1/web/commerce/feed', '/api/v1/web/commerce/chat']) {
