@@ -48,6 +48,20 @@ SocialShareContent content({String url = 'https://openelfai.com/e/?id=demo'}) =>
         link: Uri.parse(url),
         png: Uint8List.fromList([1, 2, 3]));
 
+// Rasterization completes outside the fake widget clock. A fixed 100ms delay
+// races slower CI machines; wait for the actual UI/handoff with a hard bound.
+Future<void> waitForRendering(
+    WidgetTester tester, bool Function() ready) async {
+  final elapsed = Stopwatch()..start();
+  while (!ready() && elapsed.elapsed < const Duration(seconds: 10)) {
+    await tester
+        .runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+    await tester.pump();
+  }
+  expect(ready(), isTrue, reason: 'Expected render/handoff within 10 seconds');
+  await tester.pumpAndSettle();
+}
+
 void main() {
   test('六渠道名称与路由一一对应，不伪造平台能力', () {
     expect(SocialChannel.values.map((v) => v.label),
@@ -240,9 +254,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('海报预览'));
       await tester.pumpAndSettle();
-      await tester.runAsync(
-          () => Future<void>.delayed(const Duration(milliseconds: 100)));
-      await tester.pumpAndSettle();
+      await waitForRendering(
+          tester, () => find.text('保存海报').evaluate().isNotEmpty);
       expect(find.text('保存海报'), findsOneWidget);
       expect(posterSaves, 0); // Preview must never request photo permission.
       posterDenied = true;
@@ -271,9 +284,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('生成分享图'));
       await tester.pumpAndSettle();
-      await tester.runAsync(
-          () => Future<void>.delayed(const Duration(milliseconds: 100)));
-      await tester.pumpAndSettle();
+      await waitForRendering(
+          tester, () => find.byType(Image).evaluate().isNotEmpty);
       expect(find.text('分享图预览'), findsOneWidget);
       expect(find.byType(Image), findsOneWidget);
       await tester.tap(find.text('关闭'));
@@ -307,9 +319,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('系统分享'));
       await tester.pumpAndSettle();
-      await tester.runAsync(
-          () => Future<void>.delayed(const Duration(milliseconds: 100)));
-      await tester.pumpAndSettle();
+      await waitForRendering(tester, () => pending.calls == 1);
       expect(pending.calls, 1);
       expect(pending.result.isCompleted, isFalse);
       await tester.tap(find.text('分享'));
