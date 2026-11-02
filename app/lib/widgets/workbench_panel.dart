@@ -346,7 +346,7 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
         child: Align(
           alignment: Alignment.topCenter,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 840),
+            constraints: const BoxConstraints(maxWidth: 760),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -417,7 +417,7 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
                         );
                       })),
                 )),
-                SizedBox(height: compact ? 28 : 48),
+                SizedBox(height: compact ? 24 : 36),
                 Wrap(spacing: 8, runSpacing: 8, children: [
                   for (var i = 0; i < _quickTracks.length; i++)
                     OutlinedButton.icon(
@@ -437,7 +437,7 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
                 ]),
                 const SizedBox(height: 14),
                 _desktopComposer(context),
-                const SizedBox(height: 32),
+                const SizedBox(height: 24),
                 Text('试试这样说',
                     style: TextStyle(
                         fontSize: 14,
@@ -503,7 +503,7 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Container(
-                    padding: EdgeInsets.all(compact ? 16 : 20),
+                    padding: EdgeInsets.all(compact ? 14 : 16),
                     decoration: BoxDecoration(
                         color: AppColors.surface,
                         borderRadius: BorderRadius.circular(21),
@@ -538,7 +538,7 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
                                 key: const ValueKey('desktop-task-input'),
                                 controller: _input,
                                 focusNode: _focus,
-                                minLines: 4,
+                                minLines: 3,
                                 maxLines: 8,
                                 keyboardType: TextInputType.multiline,
                                 textInputAction: TextInputAction.newline,
@@ -557,7 +557,7 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
                                         height: 1.65,
                                         color: AppColors.textSub)),
                               )),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 12),
                           Row(children: [
                             TextButton.icon(
                                 onPressed: _openSkillPicker,
@@ -600,7 +600,7 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
                   ),
                   Padding(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 18, vertical: 12),
+                        horizontal: 16, vertical: 8),
                     child: Wrap(
                         spacing: 20,
                         runSpacing: 8,
