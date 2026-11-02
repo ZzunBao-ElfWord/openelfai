@@ -140,6 +140,9 @@ function errorMessage(status) {
 }
 
 async function apiRequest(path, { method = 'GET', body, authToken } = {}) {
+  if (path.startsWith('/api/v1/auth/') && !window.__openelfConsoleAuth) {
+    throw new Error('登录安全组件尚未加载，请刷新后重试');
+  }
   let res;
   try {
     res = await fetch(API_BASE + path, {
@@ -260,7 +263,7 @@ function LoginView({ notice, onNoticeClear, onLoggedIn }) {
     try {
       const data = await apiRequest('/api/v1/auth/send-code', {
         method: 'POST',
-        // 网页端不带阿里云 H5 图形验证凭证，靠 platform 让服务端走浏览器渠道的频控分支。
+        // console/auth 适配器先获取真实图形验证凭证，再发送短信；服务端仍强制校验。
         body: { phone: value, platform: 'web' }
       });
       const wait = Number(data?.resendAfter);

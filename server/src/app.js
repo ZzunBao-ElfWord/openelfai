@@ -63,6 +63,7 @@ const CORS_ORIGINS = (process.env.PLATFORM_CORS_ORIGINS || 'https://openelfai.co
   .split(',')
   // OPENELF_WEB_CORS_20261028: trusted Flutter Web origin.
   .concat('https://web.openelfai.com')
+  .concat('https://open.openelfai.com')
   .map((origin) => origin.trim())
   .filter(Boolean);
 
