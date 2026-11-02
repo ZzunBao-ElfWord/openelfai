@@ -6,6 +6,7 @@ import '../models/elf.dart';
 import '../pages/character_studio_page.dart';
 import '../pages/create_elf_page.dart';
 import '../pages/create_post_sheet.dart';
+import '../pages/elf_chat_page.dart';
 import '../pages/login_page.dart';
 import '../pages/market_page.dart';
 import '../pages/skill_picker_sheet.dart';
@@ -148,6 +149,47 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
     (Icons.forum_outlined, '互动'),
   ];
 
+  static const _desktopModes = [
+    (Icons.forum_outlined, '对话'),
+    (Icons.edit_outlined, '创作'),
+    (Icons.auto_mode_outlined, '运营'),
+  ];
+
+  static const _desktopTracks = [
+    [
+      (Icons.help_outline, '日常问答', '帮我解答一个问题：'),
+      (Icons.menu_book_outlined, '知识讲解', '帮我讲清楚一个知识点：'),
+      (Icons.summarize_outlined, '内容总结', '帮我总结以下内容：'),
+      (Icons.translate, '翻译润色', '帮我翻译并润色以下内容：'),
+      (Icons.lightbulb_outline, '思路梳理', '帮我梳理这个想法：'),
+    ],
+    [
+      (Icons.article_outlined, '写文章', '帮我写一篇短文'),
+      (Icons.image_outlined, '图片创意', '帮我设计一张封面图的创意'),
+      (Icons.movie_outlined, '视频脚本', '帮我写一条短视频脚本'),
+      (Icons.mic_none_outlined, '音频文案', '帮我写一段电台播报文案'),
+      (Icons.people_outline, '动态文案', '帮我写一条平台动态文案'),
+    ],
+    [
+      (Icons.calendar_month_outlined, '内容计划', '帮我规划这周的内容主题'),
+      (Icons.title, '发布标题', '帮我为这篇作品拟几个发布标题'),
+      (Icons.forum_outlined, '互动文案', '帮我设计一个评论区互动话题'),
+      (Icons.person_outline, '角色定位', '帮我梳理 AI 角色的内容定位'),
+    ],
+  ];
+
+  static const _desktopExamples = [
+    ['用通俗的话解释一个我不熟悉的概念', '把这段资料总结成三个要点', '帮我比较两个方案，列出各自的优缺点'],
+    ['写一篇《潮汐来信》的续章', '给今天的动态配一句标题', '把这段想法扩写成一则短文'],
+    ['规划这周要发的三条动态', '为这篇作品拟三个不同风格的标题', '设计一个让读者愿意留言的话题'],
+  ];
+
+  static const _desktopHints = [
+    '有什么想问的，或想一起梳理的事情？\n输入问题和相关背景，开始与 AI 对话。',
+    '今天想创作什么？\n描述主题、风格和要求，选择技能后继续创作。',
+    '想怎样经营你的 AI 和作品？\n说说内容目标，准备计划、标题或互动文案。',
+  ];
+
   static const _quickTracks = [
     (Icons.article_outlined, '写作', '帮我写一篇短文'),
     (Icons.image_outlined, '视觉', '帮我做一张封面图'),
@@ -216,6 +258,23 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
       return;
     }
     if (!checkLoginOrPrompt(context)) return;
+
+    if (widget.desktopLayout && _mode == 0 && _skill == null) {
+      Elf? target = _state.myElf;
+      for (final elf in _state.elves) {
+        if (target == null && elf.id == 'off_workbuddy') target = elf;
+      }
+      if (target == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('请先选择一个可对话的 AI')),
+        );
+        return;
+      }
+      await Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => ElfChatPage(elfId: target!.id, initialDraft: text),
+      ));
+      return;
+    }
 
     final skill = _skill;
     if (skill != null && skill.id == WorkbenchPanel.studioSkillId) {
@@ -334,7 +393,7 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
   }
 
   Widget _desktopWorkbench(BuildContext context) {
-    const labels = ['写文章', '图片创意', '视频脚本', '语音文案', '知识问答', '社交文案'];
+    final tracks = _desktopTracks[_mode];
     return LayoutBuilder(builder: (context, constraints) {
       final compact = constraints.maxWidth < 600;
       return Padding(
@@ -358,7 +417,7 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
                         fontWeight: FontWeight.w700,
                         color: AppColors.text)),
                 const SizedBox(height: 8),
-                Text('描述目标，选择 AI，开始创作、运营或互动。',
+                Text('与 AI 对话，创作内容，经营你的作品。',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                         fontSize: 13, height: 1.5, color: AppColors.textSub)),
@@ -373,7 +432,7 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
                   child: Wrap(
                       spacing: 4,
                       runSpacing: 4,
-                      children: List.generate(_modes.length, (i) {
+                      children: List.generate(_desktopModes.length, (i) {
                         final selected = _mode == i;
                         return Semantics(
                           button: true,
@@ -396,13 +455,13 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
                               child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(_modes[i].$1,
+                                    Icon(_desktopModes[i].$1,
                                         size: 17,
                                         color: selected
                                             ? AppColors.brand
                                             : AppColors.textSub),
                                     const SizedBox(width: 7),
-                                    Text(_modes[i].$2,
+                                    Text(_desktopModes[i].$2,
                                         style: TextStyle(
                                             fontSize: 14,
                                             fontWeight: selected
@@ -419,11 +478,11 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
                 )),
                 SizedBox(height: compact ? 20 : 28),
                 Wrap(spacing: 6, runSpacing: 6, children: [
-                  for (var i = 0; i < _quickTracks.length; i++)
+                  for (var i = 0; i < tracks.length; i++)
                     OutlinedButton.icon(
-                      onPressed: () => _fill(_quickTracks[i].$3),
-                      icon: Icon(_quickTracks[i].$1, size: 16),
-                      label: Text(labels[i]),
+                      onPressed: () => _fill(tracks[i].$3),
+                      icon: Icon(tracks[i].$1, size: 16),
+                      label: Text(tracks[i].$2),
                       style: OutlinedButton.styleFrom(
                           foregroundColor: AppColors.textSub,
                           backgroundColor: AppColors.surface,
@@ -447,7 +506,7 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
                 Text('点击示例填入输入框，不会直接执行',
                     style: TextStyle(fontSize: 12, color: AppColors.textSub)),
                 const SizedBox(height: 12),
-                for (final example in _examples[_mode])
+                for (final example in _desktopExamples[_mode])
                   Align(
                       alignment: Alignment.centerLeft,
                       child: ConstrainedBox(
@@ -550,8 +609,7 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
                                     border: InputBorder.none,
                                     isDense: true,
                                     contentPadding: EdgeInsets.zero,
-                                    hintText:
-                                        '今天想让 AI 帮你完成什么？\n说说你的目标、要求，或先点选一个示例。',
+                                    hintText: _desktopHints[_mode],
                                     hintStyle: TextStyle(
                                         fontSize: 14,
                                         height: 1.5,
@@ -583,7 +641,9 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
                                       : _submit,
                                   icon:
                                       const Icon(Icons.arrow_upward, size: 18),
-                                  label: const Text('发送'),
+                                  label: Text(_mode == 0 && _skill == null
+                                      ? '开始对话'
+                                      : '继续'),
                                   style: FilledButton.styleFrom(
                                       backgroundColor: AppColors.brand,
                                       foregroundColor: AppColors.onBrand,
@@ -599,8 +659,8 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
                         ]),
                   ),
                   Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     child: Wrap(
                         spacing: 20,
                         runSpacing: 8,

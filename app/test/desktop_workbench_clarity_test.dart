@@ -33,6 +33,8 @@ void main() {
         'desktop clear hierarchy and text contrast (${dark ? 'dark' : 'light'})',
         (tester) async {
       await mount(tester, dark: dark);
+      await tester.tap(find.text('创作'));
+      await tester.pump();
       expect(find.text('执行 AI'), findsOneWidget);
       expect(find.text('技能与工具'), findsOneWidget);
       expect(find.text('快捷指令'), findsOneWidget);
@@ -67,6 +69,8 @@ void main() {
       'examples only fill input; whitespace cannot submit; Ctrl+Enter keeps login gate',
       (tester) async {
     await mount(tester);
+    await tester.tap(find.text('创作'));
+    await tester.pump();
     final input = find.byKey(const ValueKey('desktop-task-input'));
     final send = find.byKey(const ValueKey('desktop-task-send'));
     await tester.tap(find.text('写文章'));
@@ -83,6 +87,28 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pumpAndSettle();
     expect(find.text('登录后继续'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'desktop scenarios switch shortcuts and hints without discarding draft',
+      (tester) async {
+    await mount(tester);
+    final input = find.byKey(const ValueKey('desktop-task-input'));
+    expect(find.text('日常问答'), findsOneWidget);
+    expect(find.text('开始对话'), findsOneWidget);
+    await tester.enterText(input, '保留我的需求');
+    await tester.tap(find.text('创作'));
+    await tester.pump();
+    expect(find.text('写文章'), findsOneWidget);
+    expect(find.text('日常问答'), findsNothing);
+    expect(tester.widget<TextField>(input).decoration!.hintText,
+        contains('今天想创作什么'));
+    await tester.tap(find.text('运营'));
+    await tester.pump();
+    expect(find.text('内容计划'), findsOneWidget);
+    expect(find.text('写文章'), findsNothing);
+    expect(tester.widget<TextField>(input).controller!.text, '保留我的需求');
     expect(tester.takeException(), isNull);
   });
 

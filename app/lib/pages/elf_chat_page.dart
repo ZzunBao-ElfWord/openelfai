@@ -19,7 +19,8 @@ import 'login_page.dart';
 /// 平台约定：AI 必须有形象，头像统一走 [ElfAvatar]（UGC / 身份证 / 平台发售一致）。
 class ElfChatPage extends StatefulWidget {
   final String elfId;
-  const ElfChatPage({super.key, required this.elfId});
+  final String initialDraft;
+  const ElfChatPage({super.key, required this.elfId, this.initialDraft = ''});
 
   @override
   State<ElfChatPage> createState() => _ElfChatPageState();
@@ -46,6 +47,7 @@ class _ElfChatPageState extends State<ElfChatPage> {
   @override
   void initState() {
     super.initState();
+    _input.text = widget.initialDraft;
     _state.addListener(_onStateChanged);
     _input.addListener(_onInputChanged);
     // 打开会话即拉服务端记录，换设备后能接着聊。
