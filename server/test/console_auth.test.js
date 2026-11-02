@@ -15,6 +15,15 @@ test('both website variants retain parser-early login safety in source', () => {
   }
 });
 const API = 'https://api.openelfai.com';
+test('release verification stays within the open-site console route, without changing Nginx', () => {
+  const installer = fs.readFileSync(path.resolve(__dirname, '../deploy/site_update/install.cjs'), 'utf8');
+  const packager = fs.readFileSync(path.resolve(__dirname, '../deploy/site_update/package.cjs'), 'utf8');
+  const nginx = fs.readFileSync(path.resolve(__dirname, '../../deploy/open.openelfai.com.nginx.conf'), 'utf8');
+  assert.ok(nginx.includes('location ^~ /console/'));
+  assert.ok(installer.includes("'console/openelf-site-release.json'"));
+  assert.ok(packager.includes("'console/openelf-site-release.json'"));
+  assert.ok(!installer.includes("'openelf-site-release.json']"));
+});
 const AUTH = 'openelf:console:auth';
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 function harness(network, initial = null, proofError = null) {

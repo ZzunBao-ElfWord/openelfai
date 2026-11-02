@@ -16,8 +16,10 @@ for (const site of ['site', 'open']) {
   if (!fs.readFileSync(path.join(stage, site, 'console/auth/console-auth.js')).equals(auth)) {
     throw Error('Stale compiled auth: ' + site);
   }
-  fs.writeFileSync(path.join(stage, site, 'openelf-site-release.json'), JSON.stringify({
-    release: 'sites-console-20261102-r1', variant: site,
+  // The open-site Nginx only serves /console/, /platform/, /docs/ etc.
+  // A root-level release JSON is redirected to the main site, so verify under /console/.
+  fs.writeFileSync(path.join(stage, site, 'console/openelf-site-release.json'), JSON.stringify({
+    release: 'sites-console-20261102-r2', variant: site,
     domains: site === 'open' ? ['open.openelfai.com'] : ['openelfai.com', 'www.openelfai.com'],
     consoleAuthSha256: digest(auth), features: ['real-captcha', 'session-refresh', 'server-logout'],
   }) + '\n', { flag: 'wx' });

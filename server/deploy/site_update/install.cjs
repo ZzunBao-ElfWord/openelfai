@@ -122,9 +122,9 @@ async function main() {
       switched.push({ target, old });
       fs.renameSync(stage, target);
       for (const asset of ['console/index.html', 'console/auth/console-auth.js',
-        'console/auth/web-captcha.js', 'console/auth/ct4.js', 'openelf-site-release.json']) {
+        'console/auth/web-captcha.js', 'console/auth/ct4.js', 'console/openelf-site-release.json']) {
         const bytes = cp.spawnSync('curl', ['--noproxy', '*', '-fsS', '--connect-timeout', '5', '--max-time', '20',
-          '--resolve', domain + ':443:127.0.0.1', 'https://' + domain + '/' + asset + '?verify=sites-20261102-r1'],
+          '--resolve', domain + ':443:127.0.0.1', 'https://' + domain + '/' + asset + '?verify=sites-20261102-r2'],
         { timeout: 25000, maxBuffer: 8 * 1024 * 1024 });
         if (bytes.error || bytes.status !== 0 || digest(bytes.stdout) !== digest(fs.readFileSync(path.join(root, source, asset)))) {
           throw Error('HTTPS site verification failed: ' + domain + '/' + asset);
