@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../config/video_delivery.dart';
 import 'package:video_player/video_player.dart';
 import '../models/elf.dart';
 import '../theme.dart';
@@ -26,7 +27,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
   }
 
   void _init() {
-    final url = widget.post.videoUrl;
+    final url = VideoDelivery.url(widget.post.videoUrl);
     if (url == null || url.isEmpty) {
       setState(() => _failed = true);
       return;
@@ -34,21 +35,29 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
     _c?.removeListener(_tick);
     _c?.dispose();
     final c = VideoPlayerController.networkUrl(Uri.parse(url));
+    final preparation = Stopwatch()..start();
     _c = c;
     setState(() {
       _failed = false;
       _loading = true;
     });
     c.initialize().then((_) {
-      if (!mounted) return;
+      if (!mounted || !identical(_c, c)) return;
+      debugPrint('[OpenElfVideo] initialized post=${widget.post.id} '
+          'elapsedMs=${preparation.elapsedMilliseconds}');
       setState(() => _loading = false);
       c.play();
       c.addListener(_tick);
     }).catchError((_) {
-      if (mounted) setState(() {
-        _failed = true;
-        _loading = false;
-      });
+      if (mounted && identical(_c, c)) {
+        debugPrint(
+            '[OpenElfVideo] initialization failed post=${widget.post.id} '
+            'elapsedMs=${preparation.elapsedMilliseconds}');
+        setState(() {
+          _failed = true;
+          _loading = false;
+        });
+      }
     });
   }
 
@@ -96,11 +105,15 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
                       children: [
                         Text(
                           widget.elf.name,
-                          style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600),
                         ),
                         Text(
                           widget.post.context ?? '视频内容',
-                          style: const TextStyle(color: Colors.white54, fontSize: 10),
+                          style: const TextStyle(
+                              color: Colors.white54, fontSize: 10),
                         ),
                       ],
                     ),
@@ -134,9 +147,13 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
                     const SizedBox(height: 6),
                     Row(
                       children: [
-                        Text(_fmt(c.value.position), style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                        Text(_fmt(c.value.position),
+                            style: const TextStyle(
+                                color: Colors.white70, fontSize: 11)),
                         const Spacer(),
-                        Text(_fmt(c.value.duration), style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                        Text(_fmt(c.value.duration),
+                            style: const TextStyle(
+                                color: Colors.white38, fontSize: 11)),
                       ],
                     ),
                   ],
@@ -147,7 +164,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
               child: Text(
                 widget.post.body,
-                style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.6),
+                style: const TextStyle(
+                    color: Colors.white70, fontSize: 13, height: 1.6),
               ),
             ),
           ],
@@ -172,7 +190,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
                 color: Colors.black.withOpacity(0.5),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.play_arrow, color: Colors.white, size: 36),
+              child:
+                  const Icon(Icons.play_arrow, color: Colors.white, size: 36),
             ),
         ],
       ),
@@ -185,7 +204,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
       children: [
         const Icon(Icons.cloud_off, color: Colors.white38, size: 40),
         const SizedBox(height: 10),
-        Text(reason, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+        Text(reason,
+            style: const TextStyle(color: Colors.white54, fontSize: 12)),
         const SizedBox(height: 12),
         TextButton.icon(
           onPressed: onRetry,
@@ -232,14 +252,19 @@ class _ImageViewerPageState extends State<ImageViewerPage> {
                   errorBuilder: (_, __, ___) => Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.broken_image_outlined, color: Colors.white38, size: 40),
+                      const Icon(Icons.broken_image_outlined,
+                          color: Colors.white38, size: 40),
                       const SizedBox(height: 10),
-                      const Text('图片加载失败', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                      const Text('图片加载失败',
+                          style:
+                              TextStyle(color: Colors.white54, fontSize: 12)),
                       const SizedBox(height: 12),
                       TextButton.icon(
                         onPressed: () => setState(() => _reloadKey++),
-                        icon: Icon(Icons.refresh, color: AppColors.cyan, size: 16),
-                        label: Text('重试', style: TextStyle(color: AppColors.cyan)),
+                        icon: Icon(Icons.refresh,
+                            color: AppColors.cyan, size: 16),
+                        label:
+                            Text('重试', style: TextStyle(color: AppColors.cyan)),
                       ),
                     ],
                   ),

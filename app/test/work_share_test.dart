@@ -39,6 +39,7 @@ void main() {
       expect(request.followRedirects, false);
       expect(request.headers.containsKey('authorization'), false);
       expect(request.url.path, endsWith('/v.mp4'));
+      expect(request.url.host, 'media.openelfai.com');
       return http.Response.bytes(bytes, 200);
     });
     addTearDown(client.close);

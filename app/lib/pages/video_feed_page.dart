@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../config/video_delivery.dart';
 import 'package:video_player/video_player.dart';
 
 import '../models/elf.dart';
@@ -181,7 +182,7 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
   void _play(ElfPost post) {
     // 列表刷新但当前这条没变时不要重建播放器，避免播放中被打断。
     if (_activeId == post.id && _vc != null) return;
-    final url = post.videoUrl;
+    final url = VideoDelivery.url(post.videoUrl);
     if (url == null || url.isEmpty) {
       setState(() {
         _activeId = post.id;
@@ -194,6 +195,7 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
     _vc?.dispose();
     _vc = null;
     final c = VideoPlayerController.networkUrl(Uri.parse(url));
+    final preparation = Stopwatch()..start();
     _vc = c;
     setState(() {
       _activeId = post.id;
@@ -203,15 +205,18 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
     c.setVolume(_muted ? 0 : 1);
     c.setLooping(true);
     c.initialize().then((_) {
-      if (!mounted || _activeId != post.id) {
-        c.dispose();
+      if (!mounted || _activeId != post.id || !identical(_vc, c)) {
         return;
       }
-      c.play();
+      debugPrint('[OpenElfVideo] initialized post=${post.id} '
+          'elapsedMs=${preparation.elapsedMilliseconds}');
+      if (widget.active) c.play();
       c.addListener(_tick);
       setState(() => _loading = false);
     }).catchError((_) {
-      if (!mounted) return;
+      if (!mounted || _activeId != post.id || !identical(_vc, c)) return;
+      debugPrint('[OpenElfVideo] initialization failed post=${post.id} '
+          'elapsedMs=${preparation.elapsedMilliseconds}');
       setState(() {
         _failed = true;
         _loading = false;

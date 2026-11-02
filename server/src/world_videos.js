@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { videoDeliveryUrl } = require('./video_delivery');
 const fs = require('fs/promises');
 const path = require('path');
 const { execFile } = require('child_process');
@@ -257,7 +258,7 @@ function createWorldVideoService({
       // 视频同样计入账号作品数，主页作品列表能看到。
       elf.works = (Number(elf.works) || 0) + 1;
       await tx.put('elf', ELF_ID, elf, { owner: null });
-      return post;
+      return { ...post, videoUrl: videoDeliveryUrl(post.videoUrl) };
     });
   }
 

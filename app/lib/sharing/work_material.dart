@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import '../models/elf.dart';
+import '../config/video_delivery.dart';
 
 class WorkMaterial {
   final String postId;
@@ -41,7 +42,8 @@ class WorkMaterialLoader {
         throw const FormatException('声音作品暂不支持直接发布，请使用作品链接');
       return WorkMaterial(post.id, text);
     }
-    final url = post.kind == 'video' ? post.videoUrl : post.imageUrl;
+    final url =
+        post.kind == 'video' ? VideoDelivery.url(post.videoUrl) : post.imageUrl;
     final uri = Uri.tryParse(url ?? '');
     if (uri == null || !allowed(uri))
       throw const FormatException('作品素材地址不可用，请刷新作品后重试');

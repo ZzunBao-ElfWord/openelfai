@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('node:crypto');
+const { videoDeliveryUrl } = require('./video_delivery');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { execFile } = require('node:child_process');
@@ -142,7 +143,7 @@ function createWorldUploadService({
         await tx.put('elf', elf.id, elf, { owner: elf.ownerId });
         return record;
       });
-      return { post, reviewState: 'pending_review' };
+      return { post: { ...post, videoUrl: videoDeliveryUrl(post.videoUrl) }, reviewState: 'pending_review' };
     } catch (error) {
       // 发布失败（如归属变化）时删掉刚落盘的视频与封面。
       await fs.rm(path.join(mediaDir, file), { force: true }).catch(() => {});

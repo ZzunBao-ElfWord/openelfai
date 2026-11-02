@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('node:crypto');
+const { videoDeliveryUrl } = require('./video_delivery');
 const { changeBalance, fingerprint, fail } = require('./payment_store');
 const { RESOURCE_POLICY, assertResourceAction } = require('./resource_policy');
 const { earningsRows, incomeRisk } = require('./earnings_safety');
@@ -215,6 +216,9 @@ function bump(elf, delta) {
 
 /// 兼容旧数据：缺时间戳的帖子保留原有文案，互动计数缺省补 0。
 function normalizePost(post) {
+  // Work on a response copy: never migrate database URLs during a feed read.
+  post = { ...post };
+  if (post.kind === 'video') post.videoUrl = videoDeliveryUrl(post.videoUrl);
   const stamp = post.createdAt || post.time;
   if (stamp) {
     post.createdAt = stamp;

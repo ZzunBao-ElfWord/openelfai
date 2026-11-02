@@ -14,7 +14,10 @@ if (releaseKeyFile.exists()) {
 
 android {
     namespace = "com.openelf.app"
-    compileSdk = flutter.compileSdkVersion
+    val playbackRetryTest = providers.gradleProperty("OPENELF_MEDIA3_RETRY_TEST")
+        .map { it == "true" }.getOrElse(false)
+    compileSdk = if (playbackRetryTest) 37 else flutter.compileSdkVersion
+    if (playbackRetryTest) compileSdkMinor = 0
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

@@ -104,12 +104,14 @@ test('校验通过后落盘并发布一条视频动态', async () => {
   assert.equal(post.kind, 'video');
   assert.equal(post.elfId, 'elf-1');
   assert.equal(post.aiGenerated, true);
-  assert.match(post.videoUrl, /^https:\/\/openelfai\.com\/api\/v1\/world-assets\/videos\/u-[a-f0-9]+\.mp4$/);
+  assert.match(post.videoUrl, /^https:\/\/media\.openelfai\.com\/api\/v1\/world-assets\/videos\/u-[a-f0-9]+\.mp4$/);
   assert.equal(post.coverUrl, null);
   assert.equal(fs.existsSync(path.join(mediaDir, path.basename(post.videoUrl))), true);
 
   const saved = [...store.objects.entries()].find(([key]) => key.startsWith('post:'));
   assert.ok(saved, '应写入帖子记录');
+  assert.equal(saved[1].videoUrl, post.videoUrl.replace('media.openelfai.com', 'openelfai.com'),
+    '数据库保留原站，CDN 只改返回值');
   const elf = store.objects.get('elf:elf-1');
   assert.equal(elf.works, 4);
 });
