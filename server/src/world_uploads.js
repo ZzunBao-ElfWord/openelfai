@@ -1,12 +1,12 @@
 'use strict';
 
 const crypto = require('node:crypto');
+const { videoDeliveryUrl } = require('./video_delivery');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const { moderateText } = require('./compliance');
-const { videoDeliveryUrl } = require('./video_delivery');
 
 const execFileAsync = promisify(execFile);
 

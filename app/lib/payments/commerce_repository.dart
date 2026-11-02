@@ -75,7 +75,10 @@ class CommerceRepository {
 
   /// 信息流分页：排序、分页、去重由服务端决定，客户端只按页追加。
   Future<Map<String, dynamic>> feed(String userId, String mode,
-      {required String channel, String sort = 'recommend', int page = 0, int size = 20}) async {
+      {required String channel,
+      String sort = 'recommend',
+      int page = 0,
+      int size = 20}) async {
     if ((await _auth.currentUser)?.id != userId) {
       throw const AuthException('ACCOUNT_CHANGED', '账号已切换，请重新加载信息流');
     }
@@ -198,7 +201,8 @@ class CommerceRepository {
         'signature': signature,
         'body': {...content, 'requestId': id}
       };
-      if (!await prefs.setString(_withdrawKey(userId, mode), jsonEncode(record))) {
+      if (!await prefs.setString(
+          _withdrawKey(userId, mode), jsonEncode(record))) {
         throw const AuthException('STORAGE_ERROR', '无法保存提现编号，请稍后重试');
       }
     }

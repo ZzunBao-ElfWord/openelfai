@@ -39,7 +39,7 @@ jobs:
           DB_USER: root
           DB_PASSWORD: ci-root-password-0123
           DB_NAME: openelf_test
-        run: node --test --test-concurrency=1 test/
+        run: node --test --test-concurrency=1 test/*.test.js
 
   payment:
     name: payment (Web 支付宝充值链路)
@@ -81,6 +81,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Build the actual frontend required by go embed
+        run: |
+          npm ci --prefix admin/web
+          npm run build --prefix admin/web
+          mkdir -p admin/bff/internal/web/dist
+          cp -a admin/web/dist/. admin/bff/internal/web/dist/
       - uses: actions/setup-go@v5
         with:
           go-version: '1.23'
@@ -90,6 +99,9 @@ jobs:
       - run: go vet ./...
         working-directory: admin/bff
       - run: go test ./...
+        working-directory: admin/bff
+      - name: Verify Linux single-binary build
+        run: GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o "$RUNNER_TEMP/openelf-admin-check" ./cmd/server
         working-directory: admin/bff
 
   admin-web:
@@ -124,7 +136,8 @@ jobs:
 
   app:
     name: app (Flutter)
-    runs-on: ubuntu-latest
+    # Match the reviewed recharge image baselines; keep all test assertions.
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2

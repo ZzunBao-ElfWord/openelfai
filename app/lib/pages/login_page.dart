@@ -8,6 +8,8 @@ import 'package:openelf_ali_captcha/openelf_ali_captcha.dart';
 
 import '../auth/auth_factory.dart';
 import '../auth/auth_repository.dart';
+import '../auth/web_captcha_stub.dart'
+    if (dart.library.js_interop) '../auth/web_captcha_web.dart';
 import '../config/captcha_config.dart';
 import '../config/runtime_platform.dart';
 import '../services/app_content_service.dart';
@@ -15,6 +17,8 @@ import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'home_shell.dart';
+import 'privacy_policy_page.dart';
+import 'user_agreement_page.dart';
 
 /// 登录页：手机号 + 短信验证码（服务端下发）。
 class LoginPage extends StatefulWidget {
@@ -56,8 +60,8 @@ bool checkLoginOrPrompt(BuildContext context) {
             );
           },
           child: Text('去登录',
-              style:
-                  TextStyle(color: AppColors.cyan, fontWeight: FontWeight.w700)),
+              style: TextStyle(
+                  color: AppColors.cyan, fontWeight: FontWeight.w700)),
         ),
       ],
     ),
@@ -88,7 +92,7 @@ class _LoginPageState extends State<LoginPage> {
     return p.length == 11 && RegExp(r'^1\d{10}$').hasMatch(p);
   }
 
-  bool get _codeOk => _codeCtrl.text.trim().length == 6;
+  bool get _codeOk => RegExp(r'^\d{6}$').hasMatch(_codeCtrl.text.trim());
 
   Future<void> _sendCode() async {
     if (!_phoneOk) {
@@ -127,15 +131,13 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<CaptchaProof?> _verifyCaptcha() async {
-    // Web / 桌面端没有阿里云原生图形验证 SDK，发送依赖服务端 IP/手机号频率限制兜底。
+    if (kIsWeb) {
+      return verifyWebCaptcha();
+    }
+    // Preserve desktop browsing, but never fabricate an H5 verification proof.
     if (usesBrowserAuthFlow) {
-      return const CaptchaProof(
-        platform: 'web',
-        lotNumber: 'web',
-        passToken: 'web',
-        genTime: 'web',
-        captchaOutput: 'web',
-      );
+      throw const AuthException(
+          'CAPTCHA_UNAVAILABLE', '桌面端暂不支持图形验证，请通过网页或手机端登录');
     }
     final String platform;
     final String captchaId;
@@ -239,6 +241,9 @@ class _LoginPageState extends State<LoginPage> {
 
   Widget _policyLink(String label, String slug, String title) {
     return GestureDetector(
+      key: slug == 'privacy'
+          ? const ValueKey('login-open-privacy')
+          : const ValueKey('login-open-terms'),
       onTap: () => _showPolicy(slug, title),
       child: Text(
         '《$label》',
@@ -254,14 +259,21 @@ class _LoginPageState extends State<LoginPage> {
 
   /// 登录前可查看协议原文，内容由服务端运营配置下发。
   void _showPolicy(String slug, String title) {
+    if (slug == 'privacy' || slug == 'terms') {
+      Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => slug == 'privacy'
+              ? const PrivacyPolicyPage()
+              : const UserAgreementPage()));
+      return;
+    }
     final document = AppContentService.instance.content.value.document(slug);
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: Text(title,
-            style: TextStyle(color: AppColors.text, fontSize: 16)),
+        title:
+            Text(title, style: TextStyle(color: AppColors.text, fontSize: 16)),
         content: SizedBox(
           width: 520,
           child: SingleChildScrollView(
@@ -294,101 +306,71 @@ class _LoginPageState extends State<LoginPage> {
             SafeArea(
               bottom: false,
               child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
-            // 桌面宽屏：登录表单收窄居中
-            child: WideContent(
-              maxWidth: 420,
-              child: Column(
-              children: [
-                // Logo + 标题
-                const SizedBox(height: 40),
-                Container(
-                  width: 88,
-                  height: 88,
-                  clipBehavior: Clip.antiAlias,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(88 * 0.222),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.violet.withOpacity(0.34),
-                        blurRadius: 38,
-                        offset: const Offset(0, 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
+                // 桌面宽屏：登录表单收窄居中
+                child: WideContent(
+                  maxWidth: 420,
+                  child: Column(
+                    children: [
+                      // Logo + 标题
+                      const SizedBox(height: 40),
+                      Container(
+                        width: 88,
+                        height: 88,
+                        clipBehavior: Clip.antiAlias,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(88 * 0.222),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.violet.withOpacity(0.34),
+                              blurRadius: 38,
+                              offset: const Offset(0, 12),
+                            ),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(20),
+                          child: Image.asset(
+                            'assets/brand/app_icon.png',
+                            fit: BoxFit.cover,
+                          ),
+                        ),
                       ),
-                    ],
-                  ),
-                  child: Image.asset(
-                    'assets/brand/app_icon.png',
-                    fit: BoxFit.cover,
-                  ),
-                ),
-                const SizedBox(height: 22),
-                ShaderMask(
-                  blendMode: BlendMode.srcIn,
-                  shaderCallback: (rect) =>
-                      AppColors.brandGradient.createShader(rect),
-                  child: const Text(
-                    'OpenElf',
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
-                      letterSpacing: 2,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  AppContentService.instance.content.value
-                      .text('app.brand.slogan'),
-                  style: TextStyle(fontSize: 12, color: AppColors.textSub),
-                ),
-                const SizedBox(height: 40),
+                      const SizedBox(height: 22),
+                      ShaderMask(
+                        blendMode: BlendMode.srcIn,
+                        shaderCallback: (rect) =>
+                            AppColors.brandGradient.createShader(rect),
+                        child: const Text(
+                          'OpenElf',
+                          style: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                            letterSpacing: 2,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        AppContentService.instance.content.value
+                            .text('app.brand.slogan'),
+                        style:
+                            TextStyle(fontSize: 12, color: AppColors.textSub),
+                      ),
+                      const SizedBox(height: 40),
 
-                // 手机号
-                TextField(
-                  controller: _phoneCtrl,
-                  keyboardType: TextInputType.phone,
-                  maxLength: 11,
-                  style: TextStyle(color: AppColors.text),
-                  decoration: InputDecoration(
-                    counterText: '',
-                    hintText: '输入手机号',
-                    hintStyle: TextStyle(color: AppColors.textMuted),
-                    filled: true,
-                    fillColor: AppColors.surface,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide.none,
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide.none,
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(
-                          color: AppColors.cyan.withOpacity(0.6), width: 1),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 14),
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // 验证码
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _codeCtrl,
-                        keyboardType: TextInputType.number,
-                        maxLength: 6,
+                      // 手机号
+                      TextField(
+                        controller: _phoneCtrl,
+                        keyboardType: TextInputType.phone,
+                        maxLength: 11,
                         style: TextStyle(color: AppColors.text),
                         decoration: InputDecoration(
                           counterText: '',
-                          hintText: '验证码',
-                          hintStyle:
-                              TextStyle(color: AppColors.textMuted),
+                          hintText: '输入手机号',
+                          hintStyle: TextStyle(color: AppColors.textMuted),
                           filled: true,
                           fillColor: AppColors.surface,
                           border: OutlineInputBorder(
@@ -409,140 +391,179 @@ class _LoginPageState extends State<LoginPage> {
                               horizontal: 14, vertical: 14),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    SizedBox(
-                      width: 120,
-                      height: 48,
-                      child: ElevatedButton(
-                        onPressed:
-                            (_sending || _countdown > 0) ? null : _sendCode,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.violet.withOpacity(0.25),
-                          foregroundColor: AppColors.violetSoft,
-                          elevation: 0,
-                          padding: EdgeInsets.zero,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                        child: Text(
-                          _sending
-                              ? '发送中…'
-                              : (_countdown > 0
-                                  ? '${_countdown}s 后重发'
-                                  : '发送验证码'),
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 28),
+                      const SizedBox(height: 12),
 
-                // 登录
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: AppColors.brandGradient,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(12),
-                        onTap: _loading ? null : _login,
-                        child: Center(
-                          child: _loading
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                      strokeWidth: 2, color: Colors.white),
-                                )
-                              : Text(
-                                  '登录',
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.onBrand,
-                                  ),
-                                ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: Checkbox(
-                        value: _agreed,
-                        onChanged: (value) =>
-                            setState(() => _agreed = value == true),
-                        visualDensity: VisualDensity.compact,
-                        materialTapTargetSize:
-                            MaterialTapTargetSize.shrinkWrap,
-                        side: BorderSide(color: AppColors.textMuted),
-                        activeColor: AppColors.cyan,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Wrap(
-                        crossAxisAlignment: WrapCrossAlignment.center,
+                      // 验证码
+                      Row(
                         children: [
-                          Text('我已阅读并同意',
-                              style: TextStyle(
-                                  fontSize: 10.5,
-                                  color: AppColors.textFaint)),
-                          _policyLink('用户协议', 'terms', '用户协议'),
-                          Text('与',
-                              style: TextStyle(
-                                  fontSize: 10.5,
-                                  color: AppColors.textFaint)),
-                          _policyLink('隐私政策', 'privacy', '隐私政策'),
+                          Expanded(
+                            child: TextField(
+                              controller: _codeCtrl,
+                              keyboardType: TextInputType.number,
+                              maxLength: 6,
+                              style: TextStyle(color: AppColors.text),
+                              decoration: InputDecoration(
+                                counterText: '',
+                                hintText: '验证码',
+                                hintStyle:
+                                    TextStyle(color: AppColors.textMuted),
+                                filled: true,
+                                fillColor: AppColors.surface,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: BorderSide.none,
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: BorderSide.none,
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: BorderSide(
+                                      color: AppColors.cyan.withOpacity(0.6),
+                                      width: 1),
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 14, vertical: 14),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          SizedBox(
+                            width: 120,
+                            height: 48,
+                            child: ElevatedButton(
+                              onPressed: (_sending || _countdown > 0)
+                                  ? null
+                                  : _sendCode,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor:
+                                    AppColors.violet.withOpacity(0.25),
+                                foregroundColor: AppColors.violetSoft,
+                                elevation: 0,
+                                padding: EdgeInsets.zero,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              child: Text(
+                                _sending
+                                    ? '发送中…'
+                                    : (_countdown > 0
+                                        ? '${_countdown}s 后重发'
+                                        : '发送验证码'),
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ),
+                          ),
                         ],
                       ),
-                    ),
-                  ],
-                ),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: Checkbox(
-                        value: _adult,
-                        onChanged: (value) =>
-                            setState(() => _adult = value == true),
-                        visualDensity: VisualDensity.compact,
-                        materialTapTargetSize:
-                            MaterialTapTargetSize.shrinkWrap,
-                        side: BorderSide(color: AppColors.textMuted),
-                        activeColor: AppColors.cyan,
+                      const SizedBox(height: 28),
+
+                      // 登录
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: AppColors.brandGradient,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(12),
+                              onTap: _loading ? null : _login,
+                              child: Center(
+                                child: _loading
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white),
+                                      )
+                                    : Text(
+                                        '登录',
+                                        style: TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.onBrand,
+                                        ),
+                                      ),
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text('我已年满 18 周岁，并知悉平台含 AI 生成内容',
-                          style: TextStyle(
-                              fontSize: 10.5,
-                              color: AppColors.textFaint)),
-                    ),
-                  ],
+                      const SizedBox(height: 12),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: Checkbox(
+                              value: _agreed,
+                              onChanged: (value) =>
+                                  setState(() => _agreed = value == true),
+                              visualDensity: VisualDensity.compact,
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                              side: BorderSide(color: AppColors.textMuted),
+                              activeColor: AppColors.cyan,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Wrap(
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                Text('我已阅读并同意',
+                                    style: TextStyle(
+                                        fontSize: 10.5,
+                                        color: AppColors.textFaint)),
+                                _policyLink('用户协议', 'terms', '用户协议'),
+                                Text('与',
+                                    style: TextStyle(
+                                        fontSize: 10.5,
+                                        color: AppColors.textFaint)),
+                                _policyLink('隐私政策', 'privacy', '隐私政策'),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: Checkbox(
+                              value: _adult,
+                              onChanged: (value) =>
+                                  setState(() => _adult = value == true),
+                              visualDensity: VisualDensity.compact,
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                              side: BorderSide(color: AppColors.textMuted),
+                              activeColor: AppColors.cyan,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text('我已年满 18 周岁，并知悉平台含 AI 生成内容',
+                                style: TextStyle(
+                                    fontSize: 10.5,
+                                    color: AppColors.textFaint)),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ],
-            ),
-            ),
-          ),
+              ),
             ),
             // 游客从提醒弹层 push 进来时提供返回入口
             if (Navigator.canPop(context))

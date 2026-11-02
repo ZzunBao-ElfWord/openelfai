@@ -1,0 +1,19 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <queries>
+        <package android:name="com.ss.android.ugc.aweme" />
+        <package android:name="com.ss.android.ugc.aweme.lite" />
+        <package android:name="com.ss.android.ugc.live" />
+    </queries>
+    <application>
+        <provider android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.douyin.share.files"
+            android:exported="false" android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/openelf_douyin_paths" />
+        </provider>
+        <activity android:name="cn.openelfai.sharing.DouyinCallbackActivity"
+            android:exported="true" android:excludeFromRecents="true"
+            android:launchMode="singleTask" android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+    </application>
+</manifest>

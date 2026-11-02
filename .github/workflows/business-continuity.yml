@@ -1,0 +1,64 @@
+name: Business continuity
+
+on:
+  pull_request:
+  push:
+    branches: [main, 'codex/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  business-continuity:
+    # Existing pixel-perfect recharge goldens were reviewed on Windows.
+    # Match that rendering platform; do not disable golden/payment assertions.
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Guard platform payment entries and captcha default
+        run: |
+          node server/deploy/verify_business.cjs
+          node --test server/test/release_continuity.test.js
+          bash -n server/deploy/web_recovery/install.sh
+      - name: Install server test dependencies
+        run: npm ci
+        working-directory: server
+      - name: Test payment/security contracts without production services
+        working-directory: server
+        run: npm run test:payments
+      - name: Test reconciled character mint and shared web ledger
+        working-directory: server
+        run: node --test test/business_merge.test.js test/character_mint.test.js test/web_recharge_registration.test.js
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.6'
+          channel: stable
+          cache: true
+      - name: Resolve client dependencies
+        run: flutter pub get
+        working-directory: app
+      - name: Test client platform isolation and existing features
+        run: flutter test
+        working-directory: app
+      - name: Build web with the deployed API origin
+        run: flutter build web --release --no-pub --pwa-strategy=none --dart-define=OPENELF_API_BASE=https://openelfai.com --dart-define=VIDEO_CDN_ENABLED=true
+        working-directory: app
+      - name: Verify the actual bundle contains recharge and captcha
+        run: node server/deploy/verify_business.cjs app/build/web
+      - name: Record tested source and artifact hash
+        run: |
+          git rev-parse HEAD > app/build/web/verified-source.txt
+          sha256sum app/build/web/main.dart.js >> app/build/web/verified-source.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verified-web-${{ github.sha }}
+          path: app/build/web/
+          retention-days: 14

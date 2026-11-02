@@ -1,13 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../config/video_delivery.dart';
 import 'package:video_player/video_player.dart';
 
 import '../models/elf.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
-import '../widgets/stage_share_sheet.dart';
+import '../widgets/work_share_sheet.dart';
+import '../widgets/content_safety.dart';
 import 'elf_chat_page.dart';
 import 'login_page.dart';
 
@@ -46,7 +48,6 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
   List<ElfPost> _posts = [];
   int _index = 0;
   bool _seeded = false;
-  int _serverCount = 0;
   VideoPlayerController? _vc;
   String? _activeId;
   bool _loading = false;
@@ -119,8 +120,9 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
     // 服务端追加了新的一页时把列表接上，保持当前这条不变。
     // 按服务端条数判断，避免「种子列表 + 追加」造成重复刷新。
     final latest = _state.feedVideo();
-    if (latest.isNotEmpty && latest.length != _serverCount) {
-      _serverCount = latest.length;
+    if (latest.length != _posts.length ||
+        List.generate(latest.length, (i) => i)
+            .any((i) => latest[i].id != _posts[i].id)) {
       _loadFeed(keepIndex: true);
     }
   }
@@ -139,7 +141,8 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
     } else {
       list = server;
     }
-    final prevId = (_posts.isEmpty || _index >= _posts.length) ? null : _posts[_index].id;
+    final prevId =
+        (_posts.isEmpty || _index >= _posts.length) ? null : _posts[_index].id;
     setState(() {
       _posts = list;
       if (!keepIndex || prevId == null) {
@@ -184,7 +187,7 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
   void _play(ElfPost post) {
     // 列表刷新但当前这条没变时不要重建播放器，避免播放中被打断。
     if (_activeId == post.id && _vc != null) return;
-    final url = post.videoUrl;
+    final url = VideoDelivery.url(post.videoUrl);
     if (url == null || url.isEmpty) {
       setState(() {
         _activeId = post.id;
@@ -197,6 +200,7 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
     _vc?.dispose();
     _vc = null;
     final c = VideoPlayerController.networkUrl(Uri.parse(url));
+    final preparation = Stopwatch()..start();
     _vc = c;
     setState(() {
       _activeId = post.id;
@@ -206,15 +210,18 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
     c.setVolume(_muted ? 0 : 1);
     c.setLooping(true);
     c.initialize().then((_) {
-      if (!mounted || _activeId != post.id) {
-        c.dispose();
+      if (!mounted || _activeId != post.id || !identical(_vc, c)) {
         return;
       }
-      c.play();
+      debugPrint('[OpenElfVideo] initialized post=${post.id} '
+          'elapsedMs=${preparation.elapsedMilliseconds}');
+      if (widget.active) c.play();
       c.addListener(_tick);
       setState(() => _loading = false);
     }).catchError((_) {
-      if (!mounted) return;
+      if (!mounted || _activeId != post.id || !identical(_vc, c)) return;
+      debugPrint('[OpenElfVideo] initialization failed post=${post.id} '
+          'elapsedMs=${preparation.elapsedMilliseconds}');
       setState(() {
         _failed = true;
         _loading = false;
@@ -348,7 +355,8 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                     const SizedBox(width: 8),
                     Text(
                       '${rest.length} 条',
-                      style: TextStyle(fontSize: 11, color: AppColors.textFaint),
+                      style:
+                          TextStyle(fontSize: 11, color: AppColors.textFaint),
                     ),
                   ],
                 ),
@@ -585,7 +593,8 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
           shape: BoxShape.circle,
           border: Border.all(color: Colors.white24),
         ),
-        child: Icon(Icons.play_arrow_rounded, size: size * 0.56, color: Colors.white),
+        child: Icon(Icons.play_arrow_rounded,
+            size: size * 0.56, color: Colors.white),
       ),
     );
   }
@@ -725,13 +734,16 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(Icons.arrow_back_ios_new,
-                              size: 15, color: Colors.white, semanticLabel: '返回'),
+                              size: 15,
+                              color: Colors.white,
+                              semanticLabel: '返回'),
                         ),
                       ),
                       const SizedBox(width: 8),
                     ],
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 9, vertical: 4),
                       decoration: BoxDecoration(
                         color: Colors.black.withOpacity(0.35),
                         borderRadius: BorderRadius.circular(20),
@@ -739,9 +751,12 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.play_circle_fill, size: 13, color: Colors.white),
+                          Icon(Icons.play_circle_fill,
+                              size: 13, color: Colors.white),
                           SizedBox(width: 4),
-                          Text('AI 生成', style: TextStyle(fontSize: 10.5, color: Colors.white)),
+                          Text('AI 生成',
+                              style: TextStyle(
+                                  fontSize: 10.5, color: Colors.white)),
                         ],
                       ),
                     ),
@@ -771,7 +786,10 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                           color: Colors.black.withOpacity(0.35),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.refresh, size: 16, color: Colors.white, semanticLabel: '刷新视频流'),
+                        child: const Icon(Icons.refresh,
+                            size: 16,
+                            color: Colors.white,
+                            semanticLabel: '刷新视频流'),
                       ),
                     ),
                   ],
@@ -792,7 +810,8 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                       // 进对话页时先暂停，回来再继续播。
                       _vc?.pause();
                       await Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => ElfChatPage(elfId: elf.id)),
+                        MaterialPageRoute(
+                            builder: (_) => ElfChatPage(elfId: elf.id)),
                       );
                       if (mounted && widget.active) _vc?.play();
                     },
@@ -806,8 +825,11 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                   ),
                   const SizedBox(height: 18),
                   _railButton(
-                    icon: _state.isLiked(p.id) ? Icons.favorite : Icons.favorite_border,
-                    color: _state.isLiked(p.id) ? AppColors.danger : Colors.white,
+                    icon: _state.isLiked(p.id)
+                        ? Icons.favorite
+                        : Icons.favorite_border,
+                    color:
+                        _state.isLiked(p.id) ? AppColors.danger : Colors.white,
                     label: _fmt(p.likes),
                     semantic: '点赞',
                     onTap: () {
@@ -825,12 +847,17 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                   ),
                   const SizedBox(height: 16),
                   _railButton(
-                    icon: _state.isCollected(p.id) ? Icons.star : Icons.star_border,
-                    color: _state.isCollected(p.id) ? AppColors.warn : Colors.white,
+                    icon: _state.isCollected(p.id)
+                        ? Icons.star
+                        : Icons.star_border,
+                    color: _state.isCollected(p.id)
+                        ? AppColors.warn
+                        : Colors.white,
                     label: _fmt(p.collects),
                     semantic: '收藏',
                     onTap: () {
-                      if (checkLoginOrPrompt(context)) _state.toggleCollect(p.id);
+                      if (checkLoginOrPrompt(context))
+                        _state.toggleCollect(p.id);
                     },
                   ),
                   const SizedBox(height: 16),
@@ -838,14 +865,9 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                     icon: Icons.ios_share,
                     label: '分享',
                     semantic: '分享',
-                    onTap: () => showStageShare(
-                      context,
-                      elf: elf,
-                      excerpt: p.body.length > 40 ? '${p.body.substring(0, 40)}…' : p.body,
-                    ),
+                    onTap: () => WorkShareHelper.share(context, p),
                   ),
-                  // 💎 打赏：官方账号无持有人、自己的 AI 不支持打赏，
-                  // 与世界页同一口径——入口直接隐藏，不是置灰。
+                  // Ordinary AI tips remain available; own/official AI are not tipped.
                   if (!elf.isMine && !elf.isOfficial) ...[
                     const SizedBox(height: 16),
                     _railButton(
@@ -858,6 +880,17 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                       },
                     ),
                   ],
+                  const SizedBox(height: 12),
+                  _railButton(
+                    icon: Icons.flag_outlined,
+                    label: '举报',
+                    semantic: '举报与屏蔽',
+                    onTap: () => ContentSafety.show(context,
+                        targetKind: 'post',
+                        targetId: p.id,
+                        elfId: elf.id,
+                        ownerId: elf.ownerId),
+                  ),
                 ],
               ),
             ),
@@ -888,7 +921,8 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                       const SizedBox(width: 6),
                       Text(
                         elf.serial,
-                        style: const TextStyle(fontSize: 10.5, color: Colors.white54),
+                        style: const TextStyle(
+                            fontSize: 10.5, color: Colors.white54),
                       ),
                     ],
                   ),
@@ -896,20 +930,23 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
                           color: Colors.white.withOpacity(0.16),
                           borderRadius: BorderRadius.circular(5),
                         ),
                         child: Text(
                           'Lv${elf.level} · ${elf.levelName}',
-                          style: const TextStyle(fontSize: 9.5, color: Colors.white70),
+                          style: const TextStyle(
+                              fontSize: 9.5, color: Colors.white70),
                         ),
                       ),
                       const SizedBox(width: 6),
                       Text(
                         '${p.views} 次注视 · 均停 ${p.dwell}s',
-                        style: const TextStyle(fontSize: 9.5, color: Colors.white54),
+                        style: const TextStyle(
+                            fontSize: 9.5, color: Colors.white54),
                       ),
                     ],
                   ),
@@ -918,13 +955,15 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                     p.body,
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 12.5, color: Colors.white, height: 1.55),
+                    style: const TextStyle(
+                        fontSize: 12.5, color: Colors.white, height: 1.55),
                   ),
                   if (p.context != null) ...[
                     const SizedBox(height: 5),
                     Text(
                       p.context!,
-                      style: const TextStyle(fontSize: 9.5, color: Colors.white38),
+                      style:
+                          const TextStyle(fontSize: 9.5, color: Colors.white38),
                     ),
                   ],
                 ],
@@ -959,19 +998,23 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.videocam_off_outlined, size: 34, color: Colors.white38),
+            const Icon(Icons.videocam_off_outlined,
+                size: 34, color: Colors.white38),
             const SizedBox(height: 10),
-            const Text('视频加载失败', style: TextStyle(fontSize: 12, color: Colors.white54)),
+            const Text('视频加载失败',
+                style: TextStyle(fontSize: 12, color: Colors.white54)),
             const SizedBox(height: 12),
             GestureDetector(
               onTap: _retry,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.14),
                   borderRadius: BorderRadius.circular(18),
                 ),
-                child: const Text('重试', style: TextStyle(fontSize: 12, color: Colors.white)),
+                child: const Text('重试',
+                    style: TextStyle(fontSize: 12, color: Colors.white)),
               ),
             ),
           ],
@@ -1002,7 +1045,8 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                 color: Colors.black.withOpacity(0.45),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.play_arrow, color: Colors.white, size: 34),
+              child:
+                  const Icon(Icons.play_arrow, color: Colors.white, size: 34),
             ),
           ),
       ],
@@ -1023,7 +1067,8 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
         children: [
           Icon(icon, size: 27, color: color, semanticLabel: semantic),
           const SizedBox(height: 4),
-          Text(label, style: const TextStyle(fontSize: 10, color: Colors.white70)),
+          Text(label,
+              style: const TextStyle(fontSize: 10, color: Colors.white70)),
         ],
       ),
     );
@@ -1041,25 +1086,36 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.play_circle_outline, size: 58, color: AppColors.textMuted),
+              Icon(Icons.play_circle_outline,
+                  size: 58, color: AppColors.textMuted),
               const SizedBox(height: 14),
               Text(
-                '视频流还是空的。',
+                _state.feedLoading('video', sort: 'hot')
+                    ? '正在加载公共视频…'
+                    : _state.feedError('video', sort: 'hot') ?? '暂无可展示的公开视频',
                 style: TextStyle(fontSize: 14, color: AppColors.textSub),
               ),
               const SizedBox(height: 6),
+              TextButton(
+                  onPressed: _state.feedLoading('video', sort: 'hot')
+                      ? null
+                      : () => _state.loadFeed(
+                          channel: 'video', sort: 'hot', reset: true),
+                  child: const Text('重新加载')),
               Text(
                 mine == null
                     ? '先去市场买一只 AI，再给它装上「视频生成」。'
                     : '给它装上「视频生成」，然后在它的 AI 控制台里让它创作，视频会出现在这里。',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 11.5, color: AppColors.textMuted, height: 1.7),
+                style: TextStyle(
+                    fontSize: 11.5, color: AppColors.textMuted, height: 1.7),
               ),
               const SizedBox(height: 16),
               GhostButton(
                 label: '刷新视频流',
                 icon: Icons.refresh,
-                onTap: () => _loadFeed(),
+                onTap: () =>
+                    _state.loadFeed(channel: 'video', sort: 'hot', reset: true),
               ),
             ],
           ),
@@ -1081,6 +1137,7 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
         return;
       }
       input.clear();
+      messenger.showSnackBar(const SnackBar(content: Text('评论已发布')));
     }
 
     showModalBottomSheet(
@@ -1096,7 +1153,8 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
           builder: (ctx, _) {
             final list = _state.commentsOf(p.id);
             return Padding(
-              padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+              padding:
+                  EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
               child: SizedBox(
                 height: MediaQuery.of(ctx).size.height * 0.6,
                 child: Column(
@@ -1107,11 +1165,15 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                         children: [
                           Text(
                             '评论 · ${p.replies}',
-                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.text),
+                            style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.text),
                           ),
                           const Spacer(),
                           IconButton(
-                            icon: Icon(Icons.close, size: 18, color: AppColors.textMuted),
+                            icon: Icon(Icons.close,
+                                size: 18, color: AppColors.textMuted),
                             onPressed: () => Navigator.of(ctx).pop(),
                           ),
                         ],
@@ -1123,13 +1185,16 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                           ? Center(
                               child: Text(
                                 '还没有评论。说第一句。',
-                                style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                                style: TextStyle(
+                                    fontSize: 12, color: AppColors.textMuted),
                               ),
                             )
                           : ListView.separated(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 10),
                               itemCount: list.length,
-                              separatorBuilder: (_, __) => const SizedBox(height: 12),
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 12),
                               itemBuilder: (_, i) {
                                 final c = list[i];
                                 return Row(
@@ -1146,17 +1211,22 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                                             : AppColors.violet.withOpacity(0.2),
                                       ),
                                       child: Text(
-                                        c.isMine ? '我' : c.authorLabel.characters.first,
+                                        c.isMine
+                                            ? '我'
+                                            : c.authorLabel.characters.first,
                                         style: TextStyle(
                                           fontSize: 11,
-                                          color: c.isMine ? AppColors.cyan : AppColors.violetSoft,
+                                          color: c.isMine
+                                              ? AppColors.cyan
+                                              : AppColors.violetSoft,
                                         ),
                                       ),
                                     ),
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           Row(
                                             children: [
@@ -1171,14 +1241,32 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                                               const SizedBox(width: 6),
                                               Text(
                                                 c.time,
-                                                style: TextStyle(fontSize: 10, color: AppColors.textFaint),
+                                                style: TextStyle(
+                                                    fontSize: 10,
+                                                    color: AppColors.textFaint),
                                               ),
+                                              const Spacer(),
+                                              IconButton(
+                                                  icon: const Icon(
+                                                      Icons.flag_outlined,
+                                                      size: 16),
+                                                  tooltip: '举报与屏蔽',
+                                                  onPressed: () =>
+                                                      ContentSafety.show(
+                                                          context,
+                                                          targetKind: 'comment',
+                                                          targetId: c.id,
+                                                          elfId: c.authorElfId,
+                                                          ownerId: c.userId)),
                                             ],
                                           ),
                                           const SizedBox(height: 3),
                                           Text(
                                             c.text,
-                                            style: TextStyle(fontSize: 13, color: AppColors.text, height: 1.5),
+                                            style: TextStyle(
+                                                fontSize: 13,
+                                                color: AppColors.text,
+                                                height: 1.5),
                                           ),
                                         ],
                                       ),
@@ -1196,13 +1284,16 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                           Expanded(
                             child: TextField(
                               controller: input,
-                              style: TextStyle(fontSize: 13, color: AppColors.text),
+                              style: TextStyle(
+                                  fontSize: 13, color: AppColors.text),
                               decoration: InputDecoration(
                                 hintText: '回应 ${elf.name} …',
-                                hintStyle: TextStyle(fontSize: 13, color: AppColors.textFaint),
+                                hintStyle: TextStyle(
+                                    fontSize: 13, color: AppColors.textFaint),
                                 filled: true,
                                 fillColor: AppColors.surface,
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 10),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(20),
                                   borderSide: BorderSide.none,
@@ -1215,7 +1306,8 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                           GestureDetector(
                             onTap: send,
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 10),
                               decoration: BoxDecoration(
                                 gradient: AppColors.brandGradient,
                                 borderRadius: BorderRadius.circular(20),
@@ -1265,7 +1357,10 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                 children: [
                   Text(
                     '打赏 ${elf.name}',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.text),
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.text),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -1277,11 +1372,13 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                     children: tiers.map((t) {
                       return Expanded(
                         child: Padding(
-                          padding: EdgeInsets.only(right: t == tiers.last ? 0 : 8),
+                          padding:
+                              EdgeInsets.only(right: t == tiers.last ? 0 : 8),
                           child: GhostButton(
                             label: '💎 $t',
                             onTap: () async {
-                              final err = await _state.tip(elfId: elf.id, postId: p.id, amount: t);
+                              final err = await _state.tip(
+                                  elfId: elf.id, postId: p.id, amount: t);
                               if (!mounted || !ctx.mounted) return;
                               if (err != null) {
                                 ScaffoldMessenger.of(context).showSnackBar(

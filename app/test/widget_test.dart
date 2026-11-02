@@ -11,7 +11,7 @@ import 'package:openelf/main.dart';
 import 'package:openelf/models/user.dart';
 import 'package:openelf/pages/character_studio_page.dart';
 import 'package:openelf/pages/create_elf_page.dart';
-import 'package:openelf/pages/discover_page.dart';
+import 'package:openelf/pages/market_page.dart';
 import 'package:openelf/pages/home_shell.dart';
 import 'package:openelf/pages/login_page.dart';
 import 'package:openelf/pages/profile_page.dart';
@@ -235,7 +235,7 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
   });
 
-  testWidgets('发现页：WorkBuddy 式分组入口，且不再出现充值入口', (WidgetTester tester) async {
+  testWidgets('发现页保留实际AI与技能书市场，充值仍在钱包', (WidgetTester tester) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.windows;
     addTearDown(() => debugDefaultTargetPlatformOverride = null);
     tester.view.physicalSize = const Size(390, 844);
@@ -245,14 +245,15 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     AppState.instance.bootstrapSync();
 
-    await tester.pumpWidget(const MaterialApp(home: DiscoverPage()));
+    await tester
+        .pumpWidget(const MaterialApp(home: MarketPage(embedded: true)));
     await tester.pump();
 
-    for (final label in ['资料库', '专家', '技能', '连接器', '项目']) {
-      expect(find.text(label), findsOneWidget);
-    }
-    // 充值入口统一收敛到「我」里的钱包，发现页不再出现
-    expect(find.text('💎'), findsNothing);
+    expect(find.textContaining('AI 智能体'), findsWidgets);
+    expect(find.textContaining('AI 技能书'), findsWidgets);
+    // A market price/balance icon is not an embedded checkout panel.
+    expect(find.text('充值钻石'), findsNothing);
+    expect(find.text('支付宝充值 · 请选择充值金额'), findsNothing);
     debugDefaultTargetPlatformOverride = null;
   });
 
@@ -274,15 +275,22 @@ void main() {
       createdAt: DateTime.now(),
     );
 
-    await tester.pumpWidget(const MaterialApp(home: ProfilePage()));
+    await tester
+        .pumpWidget(const MaterialApp(home: Scaffold(body: ProfilePage())));
     await tester.pump();
 
     expect(find.text('我的'), findsWidgets);
     expect(find.text('钻石余额'), findsOneWidget);
-    expect(find.text('充值'), findsOneWidget);
-    for (final label in ['我的 AI', '收益', '仓库', '我的 API Key', '设置']) {
+    expect(find.text('钱包'), findsOneWidget);
+    expect(find.textContaining('仓库'), findsOneWidget);
+    expect(find.text('我的 AI 资源'), findsOneWidget);
+    for (final label in ['收益', '我的 API Key']) {
       expect(find.text(label), findsOneWidget);
     }
+    expect(find.byIcon(Icons.settings_outlined), findsOneWidget);
+    await tester.tap(find.text('钱包'));
+    await tester.pumpAndSettle();
+    expect(find.text('充值钻石'), findsOneWidget);
     debugDefaultTargetPlatformOverride = null;
   });
 
@@ -350,7 +358,7 @@ void main() {
       final elf = state.myElves.firstWhere((e) => e.name == '小满');
       expect(elf.isMine, isTrue);
       expect(elf.serial, startsWith('#U'));
-      expect(elf.chainAddress, startsWith('0x'));
+      expect(elf.chainAddress, elf.id);
       expect(elf.avatarPrompt, contains('短发女孩'));
       expect(elf.avatarStyle, '通用');
       expect(state.activeElfId, elf.id);
@@ -606,8 +614,7 @@ void main() {
     // 第 1 步：角色设定（名字 + 形象描述 + 合规声明）。
     expect(find.text('输入你脑海中的形象'), findsOneWidget);
     await tester.enterText(find.byType(TextField).first, '小满');
-    await tester.enterText(
-        find.byType(TextField).at(1), '一个安静的短发女孩，黄昏的天台');
+    await tester.enterText(find.byType(TextField).at(1), '一个安静的短发女孩，黄昏的天台');
     await tester.pump();
     for (final box in tester.widgetList<Checkbox>(find.byType(Checkbox))) {
       box.onChanged!(true);

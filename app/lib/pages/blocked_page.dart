@@ -61,8 +61,8 @@ class _BlockedPageState extends State<BlockedPage> {
         userId: type == 'user' ? id : null,
       );
       if (!mounted) return;
-      setState(() => _blocks.removeWhere(
-          (item) => item['type'] == type && item['id'] == id));
+      setState(() => _blocks
+          .removeWhere((item) => item['type'] == type && item['id'] == id));
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('已取消拉黑，内容会重新出现在信息流中')),
       );
@@ -105,8 +105,8 @@ class _BlockedPageState extends State<BlockedPage> {
         child: SizedBox(
           width: 22,
           height: 22,
-          child: CircularProgressIndicator(
-              strokeWidth: 2, color: AppColors.cyan),
+          child:
+              CircularProgressIndicator(strokeWidth: 2, color: AppColors.cyan),
         ),
       );
     }
@@ -149,8 +149,12 @@ class _BlockedPageState extends State<BlockedPage> {
           padding: const EdgeInsets.symmetric(vertical: 10),
           child: Row(
             children: [
-              Icon(type == 'elf' ? Icons.smart_toy_outlined : Icons.person_outline,
-                  size: 18, color: AppColors.textMuted),
+              Icon(
+                  type == 'elf'
+                      ? Icons.smart_toy_outlined
+                      : Icons.person_outline,
+                  size: 18,
+                  color: AppColors.textMuted),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(

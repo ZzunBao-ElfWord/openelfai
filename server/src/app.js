@@ -12,9 +12,8 @@ const { createPool } = require('./db');
 const { createAppleIapService, createAppleVerifier } = require('./apple_iap');
 const { createPaymentStore, changeBalance } = require('./payment_store');
 const { createCommerceService } = require('./commerce');
-const { createComplianceService, moderateText } = require('./compliance');
-// 社区规范发布门禁与社区审核队列（wrapStore 装饰 store，registerCommunity 挂路由）。
 const { wrapStore, registerCommunity } = require('./community');
+const { createComplianceService, moderateText } = require('./compliance');
 const { createRealnameVerifier } = require('./realname');
 const { createAlipayGateway } = require('./alipay_gateway');
 const { createAlipayService } = require('./alipay');
@@ -570,6 +569,11 @@ async function buildApp(options = {}) {
     return { user, session };
   }
 
+  require('./account_deletion').registerAccountDeletion(app, { db, authenticate });
+  require('./push_routes').registerPush(app, { db, authenticate,
+    settings: options.pushSettings, fetchImpl: options.pushFetch });
+  registerCommunity(app, { store: paymentStore, reviewStore: communityReviewStore,
+    authenticate, compliance, reviewToken: process.env.COMMUNITY_REVIEW_TOKEN || '' });
   /// 审核账号预置钻石：保证审核员可以完整体验打赏、购买与AI对话。
   /// 只对 REVIEW_LOGIN_ACCOUNTS 白名单内的手机号生效，且按自然日幂等补足。
   async function seedReviewAccount(userId) {
@@ -721,11 +725,7 @@ async function buildApp(options = {}) {
     });
   });
 
-  // 社区规范：条款同意状态、社区快照、举报/屏蔽与内部审核队列（/api/v1/community/*）。
-  registerCommunity(app, { store: paymentStore, reviewStore: communityReviewStore,
-    authenticate, reviewToken: process.env.COMMUNITY_REVIEW_TOKEN || '' });
-
-  require('./push_routes').registerPush(app, { db, authenticate });
+  // Community and push were registered above with compliance and test hooks.
 
   // 官方账号头像：静态资源体积小，直接按文件名白名单读取，避免额外挂静态目录。
   // 官方账号生成的短视频与封面：文件名由服务端生成，只允许访问这一层目录。
@@ -906,7 +906,8 @@ async function buildApp(options = {}) {
     const token = config.withdrawReviewToken;
     if (!token) throw fail(404, 'NOT_FOUND', '接口不存在');
     const given = String(request.headers['x-review-token'] || '');
-    if (given.length !== token.length || !crypto.timingSafeEqual(Buffer.from(given), Buffer.from(token))) {
+    const digest = value => crypto.createHash('sha256').update(value).digest();
+    if (!crypto.timingSafeEqual(digest(given), digest(token))) {
       throw fail(401, 'UNAUTHORIZED', '审核令牌无效');
     }
   }
@@ -919,6 +920,17 @@ async function buildApp(options = {}) {
       const service = environment === 'Sandbox' ? commerce : androidCommerce;
       reply.header('cache-control', 'no-store');
       return service.listAllWithdrawals(environment, status);
+    });
+  const earningsReview = require('./earnings_review').createEarningsReview(paymentStore);
+  app.get('/internal/earnings-risk/:userId', async (request, reply) => {
+    requireReviewToken(request);
+    reply.header('cache-control', 'no-store');
+    return earningsReview.inspect(request.params.userId);
+  });
+  app.post('/internal/earnings-risk/:userId/review',
+    { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async request => {
+      requireReviewToken(request);
+      return earningsReview.review(request.params.userId, request.body);
     });
   app.post('/internal/withdrawals/:id/review',
     { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
@@ -952,8 +964,8 @@ async function buildApp(options = {}) {
     async (request) => {
       let user = null;
       try { ({ user } = await authenticate(request)); } catch (_) { /* 游客访问 */ }
-      return commerce.listFeed(user,
-        { ...request.query, environment: 'Production' }, { publicFeed: true });
+      return require('./public_feed').publicFeed(communityReviewStore, user,
+        { ...request.query, environment: 'Production' }, compliance);
     });
 
   app.post('/api/v1/commerce/actions',
@@ -1374,7 +1386,10 @@ async function buildApp(options = {}) {
 
   // —— 平台余额充值（支付宝 App 支付） ——
 
-  require('./platform/web_topup').registerWebTopup(app, { db, authenticate });
+  require('./platform/web_topup').registerWebTopup(app, { db, authenticate,
+    store: paymentStore, realname, identityPolicy, payout, payoutQuery, compliance,
+    settings: options.webTopupSettings, gateway: options.webPaymentGateway,
+    service: options.webTopupService, legacy: options.webLegacy });
 
   app.get('/api/v1/platform/topup/products', async (request) => {
     await authenticate(request);

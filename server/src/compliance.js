@@ -367,74 +367,8 @@ function createComplianceService({ db, store }) {
 
   /// 注销账号：清除个人资料与内容，保留依法必须留存的交易账本。
   async function deleteAccount(user) {
-    const purged = { environments: [], objects: 0 };
-
-    for (const environment of ['Production', 'Sandbox']) {
-      await store.transaction(environment, async (tx) => {
-        const wallet = await tx.lockWallet(user.id);
-        if (wallet.pendingCents + wallet.availableCents > 0) {
-          throw fail(409, 'WITHDRAW_BEFORE_DELETE', '请先提现全部创作收益后再注销');
-        }
-        for (const state of ['pending_review', 'paying']) {
-          const rows = await tx.list('withdrawal', { owner: user.id, state, limit: 1 });
-          if (rows.length) throw fail(409, 'WITHDRAW_IN_PROGRESS', '有提现正在处理中，请稍后再注销');
-        }
-
-        const ownedElves = await tx.list('elf', { owner: user.id, limit: 500 });
-        for (const elf of ownedElves) {
-          const posts = await tx.list('post', { ref: elf.id, limit: 500 });
-          for (const post of posts) {
-            await tx.removeBy('comment', { ref: post.id });
-            await tx.removeBy('like', { ref: post.id });
-            await tx.removeBy('collect', { ref: post.id });
-            await tx.removeBy('watch', { ref: post.id });
-            await tx.removeBy('report', { ref: post.id });
-            await tx.remove('post', post.id);
-          }
-          await tx.removeBy('follow', { ref: elf.id });
-          await tx.remove('elf', elf.id);
-        }
-
-        // 交易、收益与提现记录依法留存，不随注销删除；只清除个人内容与关系数据。
-        const personalKinds = ['profile', 'book', 'chat', 'follow', 'like', 'collect',
-          'watch', 'comment', 'referral', 'notice', 'notice_mark', 'request', 'identity',
-          'identityLock', 'creator_agreement'];
-        for (const kind of personalKinds) {
-          await tx.removeBy(kind, { owner: user.id });
-        }
-        await tx.removeBy('report', { owner: user.id });
-
-        // 钻石为消费凭证，注销后清空；充值/消费账本保留用于财务稽核。
-        await tx.saveWallet(user.id, { ...wallet, diamonds: 0 });
-        purged.environments.push(environment);
-      });
-    }
-
-    const now = Date.now();
-    await db.execute(
-      `UPDATE platform_wallets SET balance_micro = 0, frozen_micro = 0, updated_at = ? WHERE user_id = ?`,
-      [now, user.id],
-    );
-    await db.execute(
-      'UPDATE platform_api_keys SET revoked_at = ?, key_cipher = NULL WHERE user_id = ? AND revoked_at IS NULL',
-      [now, user.id],
-    );
-    await db.execute('DELETE FROM platform_developers WHERE user_id = ?', [user.id]);
-    await db.execute('DELETE FROM compliance_blocks WHERE user_id = ?', [user.id]);
-    await db.execute("UPDATE compliance_reports SET state = 'dismissed', note = '举报人已注销账号' WHERE user_id = ? AND state = 'open'", [user.id]);
-
-    // 手机号脱敏并释放，允许原号码重新注册；账号行保留以维持外键与财务记录。
-    await db.execute(
-      `UPDATE users SET phone = ?, nickname = '已注销用户', avatar_initial = '注', status = 'deleted'
-       WHERE id = ?`,
-      ['del_' + crypto.createHash('sha256').update(user.id).digest('hex').slice(0, 12), user.id],
-    );
-    await db.execute(
-      'UPDATE refresh_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL',
-      [now, user.id],
-    );
-
-    return { deleted: true, environments: purged.environments };
+    // Both HTTP entry points share the audited, transactional balance checks.
+    return require('./account_deletion').deleteAccount(db, user.id);
   }
 
   return {

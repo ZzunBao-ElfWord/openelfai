@@ -7,5 +7,7 @@
 		<string>applinks:openelfai.com</string>
 		<string>applinks:www.openelfai.com</string>
 	</array>
+    <key>aps-environment</key>
+    <string>$(APS_ENVIRONMENT)</string>
 </dict>
 </plist>

@@ -1,0 +1,5 @@
+# Text fixtures and incremental deployment anchors must remain byte-identical
+# across Windows CI and Linux production; binary assets are auto-detected.
+* text=auto eol=lf
+# Deployment scripts must remain executable by Bash on Linux/Windows runners.
+*.sh text eol=lf

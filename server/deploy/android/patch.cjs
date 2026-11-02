@@ -31,10 +31,12 @@ function prepare(original) {
   for (const [file, symbol] of [['alipay_gateway', 'createAlipayGateway'], ['alipay', 'createAlipayService']]) {
     if (!app.includes(`require('./${file}')`)) app = app.replace("const config = require('./config');", `const config = require('./config');\nconst { ${symbol} } = require('./${file}');`);
   }
-  const setup = alignEol(section(desiredApp, '  const androidCommerce =', '\n\n  const app = Fastify'), app);
+  // Preserve main's LF/CRLF alignment without copying independent top-up setup.
+  const setup = alignEol(section(desiredApp, '  const androidCommerce =',
+    desiredApp.includes('  // 平台余额充值：') ? '\n  // 平台余额充值：' : '\n\n  const app = Fastify'), app);
   if (app.includes('  const androidCommerce =')) {
-    // 兼容旧版单行网关初始化与当前拆分后的支付宝/充值初始化。
-    const pattern = /  const androidCommerce = createCommerceService\([\s\S]*?(?:gateway: options\.alipayGateway \|\| createAlipayGateway\(config\.alipay\) }\);|const platformTopup = createTopupService\([\s\S]*?\n  \}\);)/g;
+    // Known constructor layouts only, including main's added db argument.
+    const pattern = /  const androidCommerce = createCommerceService\(\{ (?:db, )?store: paymentStore, settings: config\.androidCommerce, payout(?:, payoutQuery)?(?:,\s*realname, identityPolicy(?:, compliance)?)? \}\);\r?\n  const alipay = createAlipayService\(\{ store: paymentStore, settings: config\.alipay,\r?\n    commerceSettings: config\.androidCommerce,\r?\n    gateway: (?:options\.alipayGateway \|\| createAlipayGateway\(config\.alipay\)|alipayGateway) \}\);/g;
     if ([...app.matchAll(pattern)].length !== 1) throw new Error('已有安卓初始化无法识别');
     app = app.replace(pattern, setup);
   } else {

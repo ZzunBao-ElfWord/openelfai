@@ -4,10 +4,12 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import '../models/elf.dart';
+import '../config/payment_features.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
-import '../widgets/stage_share_sheet.dart';
+import '../widgets/share_card.dart';
+import '../widgets/content_safety.dart';
 import 'api_key_page.dart';
 import 'elf_console_page.dart';
 import 'login_page.dart';
@@ -74,6 +76,10 @@ class _ElfChatPageState extends State<ElfChatPage> {
 
   Future<void> _send() async {
     if (_sending) return;
+    if (_state.isElfBlocked(widget.elfId)) {
+      _toast('此AI已被屏蔽，请先在设置中解除屏蔽');
+      return;
+    }
     final text = _input.text.trim();
     if (text.isEmpty) return;
     // 游客（Web 免登录体验）：发消息前先提醒登录
@@ -110,6 +116,10 @@ class _ElfChatPageState extends State<ElfChatPage> {
   @override
   Widget build(BuildContext context) {
     final elf = _state.elf(widget.elfId);
+    if (_state.isElfBlocked(elf.id))
+      return Scaffold(
+          appBar: AppBar(title: const Text('已屏蔽此AI')),
+          body: const Center(child: Text('不再展示该AI的内容。可在设置→内容安全与反馈中解除屏蔽。')));
     final msgs = _state.chatOf(widget.elfId);
 
     return Scaffold(
@@ -366,7 +376,6 @@ class _ElfChatPageState extends State<ElfChatPage> {
     final userBubble = AppColors.palette.isDark
         ? AppColors.brand.withOpacity(0.22)
         : const Color(0xFFDBEAFE);
-
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Align(
@@ -375,40 +384,39 @@ class _ElfChatPageState extends State<ElfChatPage> {
           builder: (context, c) => GestureDetector(
             onLongPress: fromElf ? () => _reportChatMessage(msg) : null,
             child: Container(
-            constraints: BoxConstraints(maxWidth: c.maxWidth * 0.78),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: fromElf ? AppColors.surfaceAlt : userBubble,
-              borderRadius: const BorderRadius.all(Radius.circular(18)),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text.rich(
-                  TextSpan(children: _spans(_bubbleText(msg))),
-                  style: TextStyle(
-                    fontSize: 15,
-                    height: 1.55,
-                    color: AppColors.text,
+              constraints: BoxConstraints(maxWidth: c.maxWidth * 0.78),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: fromElf ? AppColors.surfaceAlt : userBubble,
+                borderRadius: const BorderRadius.all(Radius.circular(18)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text.rich(
+                    TextSpan(children: _spans(_bubbleText(msg))),
+                    style: TextStyle(
+                        fontSize: 15, height: 1.55, color: AppColors.text),
                   ),
-                ),
-                if (msg.images.isNotEmpty) _chatImages(msg.images),
-                if (_needsTopUp(msg))
-                  TextButton(
-                    onPressed: _openApiKey,
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppColors.brand,
-                      minimumSize: const Size(0, 26),
-                      padding: EdgeInsets.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      textStyle: const TextStyle(
-                          fontSize: 12.5, fontWeight: FontWeight.w600),
+                  if (msg.images.isNotEmpty) _chatImages(msg.images),
+                  if (_needsTopUp(msg))
+                    TextButton(
+                      onPressed: _openApiKey,
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.brand,
+                        minimumSize: const Size(0, 26),
+                        padding: EdgeInsets.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        textStyle: const TextStyle(
+                            fontSize: 12.5, fontWeight: FontWeight.w600),
+                      ),
+                      child: Text(PaymentFeatures.apiTopupEnabled
+                          ? '去充值'
+                          : '查看 API 账户'),
                     ),
-                    child: const Text('去充值'),
-                  ),
-              ],
-            ),
+                ],
+              ),
             ),
           ),
         ),
@@ -664,10 +672,12 @@ class _ElfChatPageState extends State<ElfChatPage> {
         child: Container(
           padding: const EdgeInsets.fromLTRB(10, 6, 8, 6),
           decoration: BoxDecoration(
-            color: on ? AppColors.brand.withOpacity(0.12) : AppColors.surfaceAlt,
+            color:
+                on ? AppColors.brand.withOpacity(0.12) : AppColors.surfaceAlt,
             borderRadius: BorderRadius.circular(999),
             border: Border.all(
-              color: on ? AppColors.brand.withOpacity(0.45) : AppColors.strokeSoft,
+              color:
+                  on ? AppColors.brand.withOpacity(0.45) : AppColors.strokeSoft,
             ),
           ),
           child: Row(
@@ -774,8 +784,8 @@ class _ElfChatPageState extends State<ElfChatPage> {
                         color: AppColors.textFaint,
                       ),
                       border: InputBorder.none,
-                      contentPadding:
-                          const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 10),
                     ),
                   ),
                 ),
@@ -846,6 +856,17 @@ class _ElfChatPageState extends State<ElfChatPage> {
                 _share(elf);
               },
             ),
+            ListTile(
+                leading: const Icon(Icons.flag_outlined),
+                title: const Text('举报与屏蔽'),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  ContentSafety.show(context,
+                      targetKind: 'elf',
+                      targetId: elf.id,
+                      elfId: elf.id,
+                      ownerId: elf.ownerId);
+                }),
             if (elf.isMine)
               ListTile(
                 leading: const Icon(Icons.tune_rounded),
@@ -870,7 +891,7 @@ class _ElfChatPageState extends State<ElfChatPage> {
   }
 
   void _share(Elf elf) {
-    showStageShare(context, elf: elf, excerpt: elf.persona);
+    ShareHelper.shareElf(context, elf, excerpt: elf.persona);
   }
 
   String _fmt(int n) {

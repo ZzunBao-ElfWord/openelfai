@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../push/push_service.dart';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -6,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../auth/auth_repository.dart';
 import '../compliance/ai_creation_policy.dart';
 import '../compliance/identity_verification.dart';
+import '../compliance/community_repository.dart';
 import '../config/iap_config.dart';
 import '../config/commerce_config.dart';
 import '../data/world_data.dart';
@@ -54,8 +56,14 @@ class AppState extends ChangeNotifier {
   /// 帖子评论（按 postId 分组）。
   final Map<String, List<PostComment>> comments = {};
 
-  /// 举报记录（客户端临时存储，服务端审核接口待对接）。
+  /// 举报回执来自服务器，换号时清除；不包含审核证据或他人举报信息。
   final List<Map<String, String>> reports = [];
+  final List<Map<String, dynamic>> communityBlocks = [];
+  bool _communityReady = false;
+  bool _publicFeedReady = false;
+  bool _resourcePolicyReady = false;
+  bool get communityReady => _communityReady;
+  String get communityMode => 'production';
 
   User? currentUser;
 
@@ -70,9 +78,11 @@ class AppState extends ChangeNotifier {
   int _paymentVersion = -1;
   int _commerceRevision = -1;
   int _creatorEarningsFen = 0;
+
   /// 创作者收益三档与提现规则：全部以服务端快照为准。
   EarningsSummary creatorEarnings = const EarningsSummary();
   final List<WithdrawalRecord> withdrawals = [];
+
   /// 个性化推荐开关（合规要求可关闭）。关闭后「推荐」按时间倒序展示。
   bool personalizedRecommendation = true;
   bool _commerceBusy = false;
@@ -84,6 +94,10 @@ class AppState extends ChangeNotifier {
   final Map<String, int> _feedPage = {};
   final Map<String, bool> _feedHasMore = {};
   final Set<String> _feedLoading = {};
+  final Map<String, String> _feedErrors = {};
+  int _feedEpoch = 0;
+  String? feedError(String channel, {String sort = 'recommend'}) =>
+      _feedErrors['$channel:$sort'];
   final Set<String> _ownedModules = {};
   final Map<String, int> _modulePrices = {};
   bool get commerceReady => _commerceReady;
@@ -151,8 +165,7 @@ class AppState extends ChangeNotifier {
     try {
       await _data.init();
       final prefs = await SharedPreferences.getInstance();
-      personalizedRecommendation =
-          prefs.getBool('feed.personalized') ?? true;
+      personalizedRecommendation = prefs.getBool('feed.personalized') ?? true;
       final loaded = await _data.load();
       if (loaded != null) {
         _localDataLoaded = true;
@@ -254,6 +267,7 @@ class AppState extends ChangeNotifier {
     _resetCommerce();
     _ensureUserAddress(user);
     currentUser = user;
+    unawaited(PushService.instance.setAccount(user.id));
     // 第三方账号（舞台）绑定态跟随当前账号加载。
     await StageBindService.instance.load(user.id);
     if (CommerceConfig.enabled) wallet = Wallet();
@@ -267,6 +281,7 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     // 登录后异步刷新真实钱包余额，不阻塞登录流程。
     unawaited(refreshPlatformBalance());
+    unawaited(loadFeed(reset: true));
     // 单一真源：登录后即拉取服务端权益快照（AI/技能书/挂单/钱包）。
     if (CommerceConfig.alipay) unawaited(_ensureCommerceReady());
   }
@@ -289,8 +304,7 @@ class AppState extends ChangeNotifier {
   Future<String?> refreshEarnings() async {
     final user = currentUser;
     if (user == null) return '请先登录';
-    final mode =
-        _paymentMode ?? CommerceConfig.defaultMode;
+    final mode = _paymentMode ?? CommerceConfig.defaultMode;
     if (mode == null) return '请先打开钱包，刷新服务端权益';
     try {
       final response =
@@ -344,6 +358,8 @@ class AppState extends ChangeNotifier {
       if (ready != null) return ready;
       final mode = _paymentMode;
       if (mode == null) return '请先打开钱包，刷新服务端权益';
+      if (!_resourcePolicyReady) return '服务端资源规则尚未升级，请先安装build15配套补丁';
+      if (mode.toLowerCase() == 'sandbox') return '沙盒收益仅供测试，不能真实提现';
       await CommerceRepository.instance.requestWithdraw(user.id, mode,
           amountCents: amountCents, account: account);
     } on AuthException catch (error) {
@@ -381,6 +397,8 @@ class AppState extends ChangeNotifier {
     books.clear();
     _chats.clear();
     reports.clear();
+    communityBlocks.clear();
+    _communityReady = false;
     identity = null;
     currentUser = null;
     StageBindService.instance.reset();
@@ -615,11 +633,15 @@ class AppState extends ChangeNotifier {
   }
 
   List<ElfPost> _feedOf(String channel, String sort) {
-    final key = '$channel:${_effectiveSort(sort)}';
-    final cached = _feedCache[key];
-    if (cached != null && cached.isNotEmpty) return List.unmodifiable(cached);
+    if (CommerceConfig.enabled && !_publicFeedReady) return const [];
+    final cached = _feedCache['$channel:${_effectiveSort(sort)}'];
+    if (cached != null)
+      return List.unmodifiable(cached.where((p) => !isElfBlocked(p.elfId)));
     final local = _localFeed(channel, _effectiveSort(sort));
-    if (local.isNotEmpty) return List.unmodifiable(local);
+    if (local.isNotEmpty)
+      return List.unmodifiable(local.where((p) =>
+          !isElfBlocked(p.elfId) &&
+          (!CommerceConfig.enabled || _remotePostIds.contains(p.id))));
     return cached ?? const [];
   }
 
@@ -634,6 +656,9 @@ class AppState extends ChangeNotifier {
       _feedHasMore['$channel:${_effectiveSort(sort)}'] ?? false;
 
   void _clearFeedCache() {
+    _feedEpoch++;
+    _publicFeedReady = false;
+    _feedErrors.clear();
     _feedCache.clear();
     _feedPage.clear();
     _feedHasMore.clear();
@@ -645,7 +670,10 @@ class AppState extends ChangeNotifier {
   /// 全端可看：已登录的商业端（Android/iOS）走带权益的私有流，
   /// 其余情况（桌面/Web/游客）走公开流，数据同源。
   Future<String?> loadFeed(
-      {String channel = 'world', String sort = 'recommend', bool reset = false}) async {
+      {String channel = 'world',
+      String sort = 'recommend',
+      bool reset = false,
+      CommunityRepository? repository}) async {
     final user = currentUser;
     sort = _effectiveSort(sort);
     // 「我的 AI」流是私有数据，必须登录。
@@ -653,27 +681,35 @@ class AppState extends ChangeNotifier {
     final key = '$channel:$sort';
     if (_feedLoading.contains(key)) return null;
     if (!reset && !(_feedHasMore[key] ?? true)) return null;
-    // 商业端已登录时走私有流（需要计费环境），其余走公开流。
-    final usePrivate = CommerceConfig.enabled && user != null;
-    final mode = !usePrivate
-        ? null
-        : _paymentMode ?? CommerceConfig.defaultMode;
-    if (usePrivate && mode == null) return '请先打开钱包，刷新服务端权益';
+    final epoch = _feedEpoch;
+    _feedErrors.remove(key);
     _feedLoading.add(key);
     notifyListeners();
     try {
       final page = reset ? 0 : (_feedPage[key] ?? -1) + 1;
-      final response = usePrivate
+      // Both guest browsing and authenticated community use Production content,
+      // independently of a StoreKit/Alipay wallet or its payment environment.
+      final response = user == null && repository == null
           ? await CommerceRepository.instance
-              .feed(user.id, mode!, channel: channel, sort: sort, page: page)
-          : await CommerceRepository.instance
-              .publicFeed(channel: channel, sort: sort, page: page);
-      if (user != null && currentUser?.id != user.id) return null;
+              .publicFeed(channel: channel, sort: sort, page: page)
+          : await (repository ?? CommunityRepository.instance)
+              .feed(channel: channel, sort: sort, page: page);
+      if (currentUser?.id != user?.id || epoch != _feedEpoch) return null;
+      if (response['protocol'] != 1 ||
+          response['contentEnvironment'] != 'production' ||
+          response['community'] is! Map ||
+          response['community']['version'] != 1) {
+        throw const AuthException('CONTENT_PROTOCOL', '公共内容服务尚未更新，请联系管理员');
+      }
       final incoming = (response['posts'] as List)
-          .map((v) => _data.decodePaymentPost(Map<String, dynamic>.from(v as Map)))
+          .map((v) =>
+              _data.decodePaymentPost(Map<String, dynamic>.from(v as Map)))
           .toList();
       _mergeFeedElves(response['elves']);
-      final list = reset ? <ElfPost>[] : List<ElfPost>.from(_feedCache[key] ?? const []);
+      _applyCommunity(response['community']);
+      _publicFeedReady = true;
+      final list =
+          reset ? <ElfPost>[] : List<ElfPost>.from(_feedCache[key] ?? const []);
       final seen = list.map((p) => p.id).toSet();
       final fresh = incoming.where((p) => seen.add(p.id)).toList();
       list.addAll(fresh);
@@ -684,12 +720,21 @@ class AppState extends ChangeNotifier {
       notifyListeners();
       return null;
     } on AuthException catch (error) {
+      if (currentUser?.id == user?.id && epoch == _feedEpoch) {
+        _feedErrors[key] =
+            error.code == 'NOT_FOUND' ? '公共内容接口尚未部署，请联系管理员' : error.message;
+      }
       return error.message;
     } catch (_) {
+      if (currentUser?.id == user?.id && epoch == _feedEpoch) {
+        _feedErrors[key] = '信息流加载失败，请检查网络后重试';
+      }
       return '信息流加载失败，请稍后重试';
     } finally {
-      _feedLoading.remove(key);
-      notifyListeners();
+      if (currentUser?.id == user?.id && epoch == _feedEpoch) {
+        _feedLoading.remove(key);
+        notifyListeners();
+      }
     }
   }
 
@@ -767,7 +812,9 @@ class AppState extends ChangeNotifier {
           .where((p) => p.kind == 'video')
           .map((p) => _ScoredPost(
               p,
-              p.views * 0.3 + p.likes * 2.0 + p.replies * 1.5 +
+              p.views * 0.3 +
+                  p.likes * 2.0 +
+                  p.replies * 1.5 +
                   1.0 / (1.0 + _hoursSince(p.timeAgo, now))))
           .toList()
         ..sort((a, b) => b.score.compareTo(a.score));
@@ -777,8 +824,7 @@ class AppState extends ChangeNotifier {
     if (sort == 'latest') return posts.take(20).toList();
     final now = DateTime.now();
     final scored = posts.map((p) {
-      final dwellFactor =
-          p.dwell > 10 ? 1.5 : (p.dwell / 10).clamp(0.3, 1.5);
+      final dwellFactor = p.dwell > 10 ? 1.5 : (p.dwell / 10).clamp(0.3, 1.5);
       final score = sort == 'hot'
           ? p.views * 0.6 + p.replies * 0.4 + dwellFactor * 0.2
           : (dwellFactor * 0.5) +
@@ -859,8 +905,7 @@ class AppState extends ChangeNotifier {
   /// 学习：销毁一本书 → 技能永久写入这只 AI。返回 null 表示成功。
   Future<String?> learn(String moduleId, String elfId) async {
     if (CommerceConfig.enabled)
-      return _performCommerce(
-          'learn', {'moduleId': moduleId, 'elfId': elfId});
+      return _performCommerce('learn', {'moduleId': moduleId, 'elfId': elfId});
     final m = module(moduleId);
     if (m == null) return '技能不存在';
     final target = elf(elfId);
@@ -893,8 +938,7 @@ class AppState extends ChangeNotifier {
   /// 遗忘：扣钻石腾出学习位。返回 null 表示成功。
   Future<String?> forget(String moduleId, String elfId) async {
     if (CommerceConfig.enabled)
-      return _performCommerce(
-          'forget', {'moduleId': moduleId, 'elfId': elfId});
+      return _performCommerce('forget', {'moduleId': moduleId, 'elfId': elfId});
     final m = module(moduleId);
     if (m == null) return '技能不存在';
     final target = elf(elfId);
@@ -1286,9 +1330,8 @@ class AppState extends ChangeNotifier {
     _setCollected(postId, next);
     notifyListeners();
     if (!_remotePostIds.contains(postId)) return;
-    unawaited(_performInteraction(
-        next ? 'collect' : 'uncollect', {'postId': postId},
-        () => _setCollected(postId, !next)));
+    unawaited(_performInteraction(next ? 'collect' : 'uncollect',
+        {'postId': postId}, () => _setCollected(postId, !next)));
   }
 
   /// 7 日 lazy 衰减：每天衰减 15%（×0.85^days）。echo 不衰减。
@@ -1310,13 +1353,14 @@ class AppState extends ChangeNotifier {
   Future<int?> countReferral(String elfId) async {
     if (CommerceConfig.enabled) {
       final user = currentUser;
-      final mode = _paymentMode ??
-          CommerceConfig.defaultMode;
+      final mode = _paymentMode ?? CommerceConfig.defaultMode;
       if (user == null || mode == null) return null;
       try {
         final response = await CommerceRepository.instance.action(
-            user.id, mode, 'referral',
-            {'elfId': elfId, 'deviceId': await CommerceRepository.instance.deviceId()});
+            user.id, mode, 'referral', {
+          'elfId': elfId,
+          'deviceId': await CommerceRepository.instance.deviceId()
+        });
         applyPaymentResponse(user.id, response);
         final raw = response['referral'];
         final delta = raw is Map ? raw['delta'] : null;
@@ -1340,8 +1384,17 @@ class AppState extends ChangeNotifier {
 
   // —— 评论 ——
 
-  List<PostComment> commentsOf(String postId) =>
-      comments[postId] ?? const <PostComment>[];
+  List<PostComment> commentsOf(String postId) {
+    final parent = _postById(postId);
+    if (parent != null && isElfBlocked(parent.elfId) ||
+        CommerceConfig.enabled && parent == null) return const [];
+    return (comments[postId] ?? const <PostComment>[])
+        .where((comment) => !communityBlocks.any((row) =>
+            row['targetKind'] == 'user' && row['targetId'] == comment.userId ||
+            row['targetKind'] == 'elf' &&
+                row['targetId'] == comment.authorElfId))
+        .toList();
+  }
 
   /// 当前用户对一条帖子发评论。返回 null 表示成功。
   Future<String?> addComment(String postId, String text) async {
@@ -1350,8 +1403,10 @@ class AppState extends ChangeNotifier {
     final target = _postById(postId);
     if (target == null) return '帖子不存在';
     if (CommerceConfig.enabled && _remotePostIds.contains(postId)) {
-      return _performInteraction('comment', {'postId': postId, 'text': body}, null);
+      return _performInteraction(
+          'comment', {'postId': postId, 'text': body}, null);
     }
+    if (CommerceConfig.enabled) return '内容尚未通过服务端确认，不能评论';
     _appendComment(target, body);
     return null;
   }
@@ -1377,13 +1432,96 @@ class AppState extends ChangeNotifier {
 
   // —— 举报 ——
 
-  void report({required String targetId, required String reason}) {
-    reports.add({
-      'targetId': targetId,
-      'reason': reason,
-      'time': _now(),
-    });
-    // 举报不需要触发 UI 刷新，也不持久化（临时存储）
+  Future<String?> report(
+      {required String targetId,
+      required String reason,
+      String details = '',
+      required String requestId}) async {
+    final user = currentUser;
+    if (user == null) return '请先登录';
+    final separator = targetId.indexOf(':');
+    if (separator < 1) return '举报对象无效';
+    try {
+      final response = await CommunityRepository.instance.report(
+          mode: communityMode,
+          requestId: requestId,
+          targetKind: targetId.substring(0, separator),
+          targetId: targetId.substring(separator + 1),
+          reason: reason,
+          details: details);
+      if (currentUser?.id != user.id) return '账号已切换，请重新提交';
+      if (response['id'] is! String) return '未取得举报回执，请稍后重试';
+      reports.insert(0, {
+        'id': response['id'],
+        'targetId': targetId,
+        'reason': reason,
+        'status': response['status']?.toString() ?? 'pending'
+      });
+      notifyListeners();
+      return null;
+    } on AuthException catch (error) {
+      return error.message;
+    } catch (_) {
+      return '提交未确认，请重试；不会显示为已提交';
+    }
+  }
+
+  bool isElfBlocked(String elfId) {
+    final owner = elves.where((e) => e.id == elfId).firstOrNull?.ownerId;
+    return communityBlocks.any((row) =>
+        row['targetKind'] == 'elf' && row['targetId'] == elfId ||
+        row['targetKind'] == 'user' && row['targetId'] == owner);
+  }
+
+  Future<String?> setCommunityBlock(String kind, String id, bool value) async {
+    final user = currentUser;
+    if (user == null) return '请先登录';
+    try {
+      final response = await CommunityRepository.instance.setBlock(
+          mode: communityMode, targetKind: kind, targetId: id, blocked: value);
+      if (currentUser?.id != user.id) return '账号已切换';
+      communityBlocks
+        ..clear()
+        ..addAll((response['blocks'] as List)
+            .map((row) => Map<String, dynamic>.from(row)));
+      notifyListeners();
+      return null;
+    } on AuthException catch (error) {
+      return error.message;
+    } catch (_) {
+      return '屏蔽设置未保存，请重试';
+    }
+  }
+
+  Future<String?> refreshCommunity() async {
+    final user = currentUser;
+    if (user == null) return '请先登录';
+    try {
+      final response =
+          await CommunityRepository.instance.snapshot(communityMode);
+      if (currentUser?.id != user.id) return '账号已切换';
+      _applyCommunity(response);
+      notifyListeners();
+      return null;
+    } on AuthException catch (error) {
+      return error.message;
+    } catch (_) {
+      return '暂时无法加载安全设置';
+    }
+  }
+
+  void _applyCommunity(dynamic data) {
+    _communityReady = data is Map && data['version'] == 1;
+    if (!_communityReady) return;
+    communityBlocks
+      ..clear()
+      ..addAll((data['blocks'] as List)
+          .map((row) => Map<String, dynamic>.from(row)));
+    reports
+      ..clear()
+      ..addAll((data['reports'] as List).map((row) => Map<String, String>.from(
+          (row as Map).map((key, value) =>
+              MapEntry(key.toString(), value?.toString() ?? '')))));
   }
 
   /// 服务端举报。返回 null 表示成功，否则返回可直接展示的错误文案。
@@ -1478,8 +1616,8 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     // 服务端没有的演示 AI 只做本地示意，不向服务器提交无效互动。
     if (!_remoteElfIds.contains(elfId)) return;
-    unawaited(_performInteraction(next ? 'follow' : 'unfollow', {'elfId': elfId},
-        () => _setFollowed(elfId, !next)));
+    unawaited(_performInteraction(next ? 'follow' : 'unfollow',
+        {'elfId': elfId}, () => _setFollowed(elfId, !next)));
   }
 
   // —— 私聊 ——
@@ -1499,8 +1637,7 @@ class AppState extends ChangeNotifier {
   Future<void> loadChat(String elfId) async {
     if (!CommerceConfig.enabled) return;
     final user = currentUser;
-    final mode =
-        _paymentMode ?? CommerceConfig.defaultMode;
+    final mode = _paymentMode ?? CommerceConfig.defaultMode;
     if (user == null || mode == null) return;
     try {
       final response =
@@ -1535,7 +1672,8 @@ class AppState extends ChangeNotifier {
   /// 人类发一条，AI 回一条（真实对话）。休眠的精灵不回复。
   /// skills 非空时挂载技能（如形象工坊），由模型自行调用工具后再回复。
   /// 网络异常或服务端 502 时插入本地兜底文案，不向 UI 抛异常。
-  Future<void> sendChat(String elfId, String text, {List<String> skills = const []}) async {
+  Future<void> sendChat(String elfId, String text,
+      {List<String> skills = const []}) async {
     final list = chatOf(elfId);
     list.add(ChatMsg(text: text, fromElf: false, time: _now()));
     notifyListeners();
@@ -1544,8 +1682,11 @@ class AppState extends ChangeNotifier {
     if (target.liveStatus == ElfStatus.lowEnergy) return;
 
     // 上下文取当前会话最近 12 条，但排除刚插入的这条（服务端会单独追加本次 text）。
-    final previous = list.length > 1 ? list.sublist(0, list.length - 1) : const <ChatMsg>[];
-    final recent = previous.length > 12 ? previous.sublist(previous.length - 12) : previous;
+    final previous =
+        list.length > 1 ? list.sublist(0, list.length - 1) : const <ChatMsg>[];
+    final recent = previous.length > 12
+        ? previous.sublist(previous.length - 12)
+        : previous;
     final history = [
       for (final msg in recent)
         {
@@ -1686,15 +1827,17 @@ class AppState extends ChangeNotifier {
       if (CommerceConfig.enabled) {
         // 单一真源：服务端核验并落库，客户端只保留脱敏结果与本地影像路径。
         final mode = _paymentMode ??
-            (CommerceConfig.android ? CommerceConfig.androidMode : 'production');
+            (CommerceConfig.android
+                ? CommerceConfig.androidMode
+                : 'production');
         final payload = <String, dynamic>{
           'realName': realName,
           'idNumber': idNumber,
           if (frontImageBase64 != null) 'frontImage': frontImageBase64,
           if (backImageBase64 != null) 'backImage': backImageBase64,
         };
-        final response = await CommerceRepository.instance.verifyIdentity(
-            user.id, mode, payload);
+        final response = await CommerceRepository.instance
+            .verifyIdentity(user.id, mode, payload);
         final raw = response['identity'];
         if (raw is! Map || raw['status'] != 'verified') {
           return '实名核验未通过，请核对后重试';
@@ -1838,7 +1981,8 @@ class AppState extends ChangeNotifier {
         elves[at] = elf;
       } else {
         elves.insert(0, elf);
-        seats.add(Seat(elfId: elf.id, days: 0, edition: elf.edition, injected: 0));
+        seats.add(
+            Seat(elfId: elf.id, days: 0, edition: elf.edition, injected: 0));
       }
       activeElfId = elf.id;
       notifyListeners();
@@ -1905,6 +2049,9 @@ class AppState extends ChangeNotifier {
   /// 钻石是消费凭证：扣掉后直接销毁，按 10💎=¥1 结算成创作者收益。
   Future<String?> tip(
       {required String elfId, String? postId, required int amount}) async {
+    if (CommerceConfig.enabled && _paymentMode != 'production') {
+      return '测试环境钻石不能打赏正式公共内容，不会扣费';
+    }
     if (CommerceConfig.enabled)
       return _performCommerce(
           'tip', {'elfId': elfId, 'postId': postId, 'amount': amount});
@@ -1952,6 +2099,10 @@ class AppState extends ChangeNotifier {
 
   /// Server responses replace the balance; callbacks never add diamonds locally.
   void _resetCommerce() {
+    _communityReady = false;
+    _resourcePolicyReady = false;
+    communityBlocks.clear();
+    reports.clear();
     _paymentMode = null;
     _paymentVersion = -1;
     _commerceRevision = -1;
@@ -1999,6 +2150,7 @@ class AppState extends ChangeNotifier {
       final mode = _paymentMode;
       if (mode == null) return '请先打开钱包，刷新服务端权益';
       if (wallet.refundDebt > 0) return '请先充值补足 ${wallet.refundDebt} 钻石退款欠额';
+      if (!_resourcePolicyReady) return '服务端资源规则尚未升级，请先安装build15配套补丁';
       final response = await CommerceRepository.instance
           .action(user.id, mode, type, payload);
       applyPaymentResponse(user.id, response);
@@ -2015,21 +2167,25 @@ class AppState extends ChangeNotifier {
   /// 互动同样以服务端为真源：先乐观更新本地，再以服务端快照覆盖；
   /// 请求失败时回滚乐观更新，保证界面不出现「只在本机成立」的数据。
   /// 互动不扣费，因此不占用 _commerceBusy 操作位，也不做退款欠额拦截。
-  Future<String?> _performInteraction(String type, Map<String, dynamic> payload,
-      VoidCallback? rollback) async {
+  Future<String?> _performInteraction(
+      String type, Map<String, dynamic> payload, VoidCallback? rollback) async {
     if (!CommerceConfig.enabled) return null;
     final user = currentUser;
     if (user == null) return null;
-    final mode =
-        _paymentMode ?? CommerceConfig.defaultMode;
+    if (_paymentMode != 'production') {
+      rollback?.call();
+      notifyListeners();
+      return '当前测试环境仅浏览正式公共内容，互动尚未开放';
+    }
+    final mode = _paymentMode ?? CommerceConfig.defaultMode;
     if (mode == null) {
       rollback?.call();
       notifyListeners();
       return '请先打开钱包，刷新服务端权益';
     }
     try {
-      final response =
-          await CommerceRepository.instance.action(user.id, mode, type, payload);
+      final response = await CommerceRepository.instance
+          .action(user.id, mode, type, payload);
       applyPaymentResponse(user.id, response);
       return null;
     } catch (_) {
@@ -2077,6 +2233,8 @@ class AppState extends ChangeNotifier {
             settleDays: _centsOf(rawEarnings['settleDays'], 7),
             minWithdrawCents: _centsOf(rawEarnings['minWithdrawCents'], 1000),
             feeBps: _centsOf(rawEarnings['feeBps'], 60),
+            withdrawalBlockedReason:
+                rawEarnings['withdrawalBlockedReason'] as String?,
             dailyLimitCents: _centsOf(rawEarnings['dailyLimitCents'], 200000),
             tipSharePercent: _centsOf(
                 (rawEarnings['sharePercent'] is Map)
@@ -2084,11 +2242,11 @@ class AppState extends ChangeNotifier {
                     : null,
                 50),
             verified: rawEarnings['verified'] == true,
-            agreementAccepted:
-                (rawEarnings['agreement'] is Map) &&
-                    (rawEarnings['agreement'] as Map)['accepted'] == true,
+            agreementAccepted: (rawEarnings['agreement'] is Map) &&
+                (rawEarnings['agreement'] as Map)['accepted'] == true,
             agreementVersion: (rawEarnings['agreement'] is Map)
-                ? ((rawEarnings['agreement'] as Map)['version'] as String? ?? '')
+                ? ((rawEarnings['agreement'] as Map)['version'] as String? ??
+                    '')
                 : '',
             agreementAcceptedAt: (rawEarnings['agreement'] is Map)
                 ? (rawEarnings['agreement'] as Map)['acceptedAt'] as String?
@@ -2124,7 +2282,8 @@ class AppState extends ChangeNotifier {
     final nextPosts = decode('posts', _data.decodePaymentPost);
     final nextLogs = decode('logs', _data.decodePaymentLog);
     final nextBooks = (commerce['books'] as List? ?? const [])
-        .map((v) => _data.decodePaymentBook(Map<String, dynamic>.from(v as Map)))
+        .map(
+            (v) => _data.decodePaymentBook(Map<String, dynamic>.from(v as Map)))
         .toList();
     final nextPrices = Map<String, int>.from(commerce['modulePrices'] as Map);
     // 技能书目录以服务端为准；空列表说明旧服务端，保留本地种子目录。
@@ -2151,7 +2310,14 @@ class AppState extends ChangeNotifier {
     withdrawals
       ..clear()
       ..addAll(nextWithdrawals);
-    // Keep free demonstration content, never its simulated ownership or market.
+    if (mode == 'production') _applyCommunity(commerce['community']);
+    final policy = commerce['resourcePolicy'];
+    _resourcePolicyReady = policy is Map &&
+        policy['version'] == 1 &&
+        policy['onChain'] == false &&
+        policy['diamondCashout'] == false;
+    // A payment snapshot must not clear shared public content or replace its mode.
+    // Keep free demonstration AI profiles, but never reinsert unreviewed demo posts.
     final ids = nextElves.map((e) => e.id).toSet();
     final demos = elves
         .where((e) => !_remoteElfIds.contains(e.id) && !ids.contains(e.id))
@@ -2163,10 +2329,13 @@ class AppState extends ChangeNotifier {
     final postIds = nextPosts.map((p) => p.id).toSet();
     // 只做并集：信息流分页加载过的帖子同样来自服务端，不能被快照冲掉标记。
     _remotePostIds.addAll(postIds);
-    posts = [
-      ...nextPosts,
-      ...posts.where((p) => !postIds.contains(p.id) && !p.id.startsWith('p_'))
-    ];
+    posts = {
+      for (final post in [
+        ...nextPosts,
+        ..._feedCache.values.expand((rows) => rows)
+      ])
+        post.id: post
+    }.values.toList();
     primaryListings = nextPrimary;
     if (nextModules != null) modules = nextModules;
     seats = nextElves
@@ -2238,6 +2407,8 @@ class AppState extends ChangeNotifier {
               text: item['text'] as String? ?? '',
               time: _formatCommentTime(item['time'] as String?),
               isMine: item['isMine'] == true,
+              userId: item['userId'] as String?,
+              authorElfId: item['authorElfId'] as String?,
             ));
       }
     }
@@ -2282,30 +2453,18 @@ class AppState extends ChangeNotifier {
 
   // —— AI 专属地址 ——
 
-  /// 确保 AI 有专属地址。MVP：由 elfId 确定性派生 0x 地址，接链后替换为真实上链逻辑。
+  /// 兼容旧字段名，内容仅为站内账号/AI编号，不派生区块链钱包。
   /// 用户专属地址（人类持有 AI 与 AI 流转用）。
   static void _ensureUserAddress(User u) {
-    u.chainAddress ??= _deriveChainAddress(u.id);
+    u.chainAddress = _deriveChainAddress(u.id);
   }
 
   void _ensureChainAddress(Elf e) {
-    e.chainAddress ??= _deriveChainAddress(e.id);
+    e.chainAddress = _deriveChainAddress(e.id);
   }
 
   static String _deriveChainAddress(String seed) {
-    // FNV-1a 64bit 做三轮搅拌得 48 位 hex，取前 40 位，保证同 id 恒定同地址。
-    final out = StringBuffer('0x');
-    var h = BigInt.parse('cbf29ce484222325', radix: 16);
-    final prime = BigInt.parse('100000001b3', radix: 16);
-    final mask = BigInt.parse('ffffffffffffffff', radix: 16);
-    for (var round = 0; round < 3; round++) {
-      for (final unit in '$seed:$round'.codeUnits) {
-        h = (h ^ BigInt.from(unit)) & mask;
-        h = (h * prime) & mask;
-      }
-      out.write(h.toRadixString(16).padLeft(16, '0'));
-    }
-    return out.toString().substring(0, 42);
+    return seed;
   }
 
   // —— utils ——

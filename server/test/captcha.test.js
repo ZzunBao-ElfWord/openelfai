@@ -78,15 +78,29 @@ test('上游异常可按配置使用限流兜底放行', async () => {
   assert.deepEqual(await verifier.verify(proof), { passed: true, fallback: true });
 });
 
-test('网页端默认不要求图形验证，仅走频控', async () => {
+test('网页默认强制验证，配置缺失不能静默跳过', async () => {
   const verifier = createCaptchaVerifier(settings, {
-    fetchImpl: async () => assert.fail('网页端 off 模式不应请求阿里云'),
+    fetchImpl: async () => assert.fail('缺少配置时不应请求阿里云'),
   });
+  await assert.rejects(verifier.verify({ platform: 'web' }), { code: 'CAPTCHA_NOT_CONFIGURED' });
+  const disabled = createCaptchaVerifier({ ...settings, enabled: false });
+  await assert.rejects(disabled.verify({ platform: 'web' }), { code: 'CAPTCHA_UNAVAILABLE' });
+});
 
-  assert.deepEqual(
-    await verifier.verify({ platform: 'web' }),
-    { passed: true, skipped: 'web_captcha_off' },
-  );
+test('网页已配置时默认、空值和未知模式均要求真实凭证', async () => {
+  const schemes = { ...settings.schemes, web: { appId: 'web-id', appKey: 'web-secret' } };
+  for (const webMode of [undefined, '', 'enforce', 'typo']) {
+    const verifier = createCaptchaVerifier({ ...settings, schemes, webMode }, {
+      fetchImpl: async () => ({ ok: true, json: async () => ({ result: 'success' }) }),
+    });
+    await assert.rejects(verifier.verify({ platform: 'web' }), { code: 'CAPTCHA_REQUIRED' });
+    assert.deepEqual(await verifier.verify({ ...proof, platform: 'web' }), { passed: true });
+    const config = require('../src/web_captcha').publicWebCaptcha({ ...settings, schemes, webMode });
+    assert.equal(config.enabled, true);
+    assert.equal(config.mode, 'enforce');
+    assert.equal(config.appId, 'web-id');
+    assert.equal(config.appKey, undefined);
+  }
 });
 
 test('网页端 enforce 模式必须带完整凭证', async () => {

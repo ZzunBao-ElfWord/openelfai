@@ -195,7 +195,7 @@ test('UGC 创建在服务端扣费、生成专属地址并切换当前 AI', asyn
   const mine = s.commerce.elves.filter(e => e.isMine);
   assert.equal(mine.length, 2);
   const created = mine.find(e => e.id.startsWith('ugc_'));
-  assert.ok(created.chainAddress.startsWith('0x'));
+  assert.equal(created.chainAddress, created.id);
   assert.equal(s.commerce.activeElfId, created.id);
 });
 test('官方购买使用服务器价格，可同时持有多只 AI', async () => {
@@ -549,8 +549,8 @@ test('创作者服务费：打赏入待结算、签协议+实名后可提现，�
   assert.equal(replay.withdrawal.id, created.withdrawal.id);
   assert.equal((await f.iap.wallet(A.id)).availableCents, 0);
   // 审核通过 → 出款成功。
-  const paid = await svc.reviewWithdrawal({ environment: 'Production', withdrawalId: created.withdrawal.id,
-    action: 'approve', payeeVerified: true });
+  await assert.rejects(() => svc.reviewWithdrawal({ environment: 'Production', withdrawalId: created.withdrawal.id, action: 'approve' }), { code: 'PAYEE_REVIEW_REQUIRED' });
+  const paid = await svc.reviewWithdrawal({ environment: 'Production', withdrawalId: created.withdrawal.id, action: 'approve', payeeVerified: true });
   assert.equal(paid.withdrawal.status, 'paid');
   wallet = await f.iap.wallet(A.id);
   assert.equal(wallet.withdrawnCents, 994);

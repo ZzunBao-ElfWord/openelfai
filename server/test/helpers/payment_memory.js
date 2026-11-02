@@ -51,6 +51,13 @@ function memoryStore() {
             next.wallets.set(prefix + id, clone(wallet));
           },
           async get(kind, id) { return clone(next.objects.get(objectKey(kind, id))?.value || null); },
+          async scan(kind, { owner, state: status, after = '', limit = 200 } = {}) {
+            return [...next.objects.values()].filter(row => row.environment === environment && row.kind === kind &&
+              row.id > after && (owner === undefined || row.owner === owner) &&
+              (status === undefined || row.state === status))
+              .sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0).slice(0, limit)
+              .map(row => ({ key: row.id, value: clone(row.value) }));
+          },
           // 与真实 payment_store 对齐：put 未显式指定时 state 默认为 ''。
           async put(kind, id, value, options = {}) { next.objects.set(objectKey(kind, id), { environment, kind, id, value: clone(value), state: '', ...options }); },
           async list(kind, { owner, state: status, ref, limit = 200 } = {}) {

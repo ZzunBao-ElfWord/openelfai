@@ -19,6 +19,10 @@ import 'profile_page.dart';
 import 'settings_page.dart';
 import 'video_feed_page.dart';
 import 'world_page.dart';
+import 'wallet_page.dart';
+import 'identity_verify_page.dart';
+import 'elf_works_page.dart';
+import '../push/push_service.dart';
 
 /// 主容器：底栏 5 格 —— 世界 / 视频 / 创建（居中）/ 发现 / 我。
 /// 世界与视频是两个独立的站内曝光渠道；「我的 AI」与设置合并进「我」；
@@ -35,6 +39,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   int _current = 0;
   StreamSubscription<Uri>? _linkSub;
   Timer? _autoTimer;
+  bool _pushScheduled = false;
 
   List<Widget> get _pages => [
         const WorldPage(),
@@ -52,10 +57,13 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     });
     WidgetsBinding.instance.addPostFrameCallback((_) => _refreshPayments());
     _initAppLinks();
+    PushService.instance.addListener(_onPush);
+    _onPush();
   }
 
   @override
   void dispose() {
+    PushService.instance.removeListener(_onPush);
     _linkSub?.cancel();
     _autoTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
@@ -64,13 +72,61 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _refreshPayments();
+    if (state == AppLifecycleState.resumed) {
+      _refreshPayments();
+      unawaited(PushService.instance.refresh());
+      _onPush();
+    }
+  }
+
+  void _onPush() {
+    if (_pushScheduled) return;
+    _pushScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _pushScheduled = false;
+      if (!mounted) return;
+      final user = AppState.instance.currentUser;
+      if (user == null) return;
+      final destination = PushService.instance.takeDestination(user.id);
+      if (destination == null) return;
+      Widget? page;
+      switch (destination.route) {
+        case 'home':
+          Navigator.of(context).popUntil((route) => route.isFirst);
+          setState(() => _current = 0);
+          return;
+        case 'wallet':
+          page = const WalletPage();
+          break;
+        case 'identity':
+          page = const IdentityVerifyPage();
+          break;
+        case 'chat':
+        case 'elf':
+          final id = destination.elfId!;
+          if (!AppState.instance.elves.any((elf) => elf.id == id)) {
+            ScaffoldMessenger.of(context)
+                .showSnackBar(const SnackBar(content: Text('通知对应的 AI 暂不可用')));
+            return;
+          }
+          page = destination.route == 'chat'
+              ? ElfChatPage(elfId: id)
+              : ElfWorksPage(elfId: id);
+          break;
+      }
+      if (page != null) {
+        Navigator.of(context).push(MaterialPageRoute(builder: (_) => page!));
+      }
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   void _refreshPayments() {
     // 桌面端没有支付宝 / StoreKit 支付通道，跳过支付初始化。
     if (isDesktopPlatform) return;
-    if (CommerceConfig.alipay) {
+    // Web uses its independent QR checkout/pending-order service in the wallet.
+    // Do not start the generic Android-style Alipay service alongside it.
+    if (CommerceConfig.android) {
       unawaited(AlipayService.instance.initialize());
     } else {
       unawaited(IosIapService.instance.initialize());
@@ -83,9 +139,8 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       final appLinks = AppLinks();
       final initial = await appLinks.getInitialLink();
       if (initial != null) unawaited(_handleLink(initial));
-      _linkSub = appLinks.uriLinkStream.listen(
-          (uri) => unawaited(_handleLink(uri)),
-          onError: (_) {});
+      _linkSub = appLinks.uriLinkStream
+          .listen((uri) => unawaited(_handleLink(uri)), onError: (_) {});
     } catch (_) {
       // 插件不可用时静默，不影响主流程
     }
@@ -187,11 +242,11 @@ class _SideRail extends StatelessWidget {
                   padding: const EdgeInsets.fromLTRB(10, 0, 0, 4),
                   child: Text(
                     '最近',
-                    style:
-                        TextStyle(fontSize: 11, color: AppColors.textMuted),
+                    style: TextStyle(fontSize: 11, color: AppColors.textMuted),
                   ),
                 ),
-                for (final elf in state.myElves.take(4)) _recentItem(context, elf),
+                for (final elf in state.myElves.take(4))
+                  _recentItem(context, elf),
               ],
               const Spacer(),
               _promoCard(context),
@@ -461,7 +516,8 @@ class _BottomBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final items = [
       _BarItem(icon: Icons.public, label: '世界', semantics: '世界信息流'),
-      _BarItem(icon: Icons.play_circle_outline, label: '视频', semantics: 'AI 视频流'),
+      _BarItem(
+          icon: Icons.play_circle_outline, label: '视频', semantics: 'AI 视频流'),
       _BarItem(icon: Icons.add, label: '创建', semantics: '创建 AI', create: true),
       _BarItem(icon: Icons.explore_outlined, label: '发现', semantics: '发现 AI'),
       _BarItem(icon: Icons.person_outline, label: '我', semantics: '我的主页'),
@@ -475,56 +531,91 @@ class _BottomBar extends StatelessWidget {
           border: Border(top: BorderSide(color: AppColors.strokeSoft)),
         ),
         child: Row(
-        children: List.generate(items.length, (i) {
-          final item = items[i];
-          if (item.create) {
+          children: List.generate(items.length, (i) {
+            final item = items[i];
+            if (item.create) {
+              return Expanded(
+                child: Semantics(
+                  label: item.semantics,
+                  button: true,
+                  child: InkWell(
+                    onTap: () => onTap(i),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Transform.translate(
+                          offset: const Offset(0, -9),
+                          child: Container(
+                            width: 42,
+                            height: 42,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: AppColors.brandGradient,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.violet.withOpacity(0.45),
+                                  blurRadius: 16,
+                                  offset: const Offset(0, 6),
+                                ),
+                              ],
+                            ),
+                            child: const Icon(Icons.add,
+                                size: 22, color: Colors.white),
+                          ),
+                        ),
+                        Transform.translate(
+                          offset: const Offset(0, -7),
+                          child: Text(
+                            '创建',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.cyan,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }
+            final pageIndex = i < 2 ? i : i - 1;
+            final selected = pageIndex == current;
             return Expanded(
               child: Semantics(
                 label: item.semantics,
                 button: true,
+                selected: selected,
                 child: InkWell(
                   onTap: () => onTap(i),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Transform.translate(
-                        offset: const Offset(0, -9),
-                        child: Container(
-                          width: 42,
-                          height: 42,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: AppColors.brandGradient,
-                            boxShadow: [
-                              BoxShadow(
-                                color: AppColors.violet.withOpacity(0.45),
-                                blurRadius: 16,
-                                offset: const Offset(0, 6),
-                              ),
-                            ],
-                          ),
-                          child: const Center(
-                            child: Text(
-                              'AI',
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 0.5,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                          gradient: selected ? AppColors.brandGradient : null,
+                        ),
+                        child: Icon(
+                          item.icon,
+                          size: 18,
+                          color: selected
+                              ? AppColors.onBrand
+                              : AppColors.textMuted,
+                          semanticLabel: item.semantics,
                         ),
                       ),
-                      Transform.translate(
-                        offset: const Offset(0, -7),
-                        child: Text(
-                          '创建',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.cyan,
-                          ),
+                      const SizedBox(height: 4),
+                      Text(
+                        item.label,
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight:
+                              selected ? FontWeight.w600 : FontWeight.w400,
+                          color:
+                              selected ? AppColors.text : AppColors.textMuted,
                         ),
                       ),
                     ],
@@ -532,49 +623,7 @@ class _BottomBar extends StatelessWidget {
                 ),
               ),
             );
-          }
-          final pageIndex = i < 2 ? i : i - 1;
-          final selected = pageIndex == current;
-          return Expanded(
-            child: Semantics(
-              label: item.semantics,
-              button: true,
-              selected: selected,
-              child: InkWell(
-                onTap: () => onTap(i),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(10),
-                        gradient: selected ? AppColors.brandGradient : null,
-                      ),
-                      child: Icon(
-                        item.icon,
-                        size: 18,
-                        color:
-                            selected ? AppColors.onBrand : AppColors.textMuted,
-                        semanticLabel: item.semantics,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      item.label,
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight:
-                            selected ? FontWeight.w600 : FontWeight.w400,
-                        color: selected ? AppColors.text : AppColors.textMuted,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        }),
+          }),
         ),
       ),
     );

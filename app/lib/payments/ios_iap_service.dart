@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:in_app_purchase_storekit/in_app_purchase_storekit.dart';
+import 'package:in_app_purchase_storekit/store_kit_2_wrappers.dart' as sk2;
 
 import '../auth/remote_auth_repository.dart';
 import '../config/iap_config.dart';
@@ -46,6 +47,7 @@ class IosIapService extends ChangeNotifier {
       String? Function()? currentUserId,
       void Function(String, int, int)? applyWallet,
       Future<String> Function()? environment,
+      Future<String?> Function()? storefront,
       bool? enabled})
       : _store = store ?? _AppleStore(),
         _request =
@@ -59,6 +61,7 @@ class IosIapService extends ChangeNotifier {
                 response['wallet']['diamonds'] as int,
                 response['wallet']['totalRecharged'] as int)),
         _environmentDetector = environment ?? _detectEnvironment,
+        _storefront = storefront ?? _readStorefront,
         _usingRealBackend = request == null,
         _enabled = enabled ?? IapConfig.enabled;
 
@@ -68,13 +71,15 @@ class IosIapService extends ChangeNotifier {
       required IapRequest request,
       required String? Function() currentUserId,
       required void Function(String, int, int) applyWallet,
-      Future<String> Function()? environment})
+      Future<String> Function()? environment,
+      Future<String?> Function()? storefront})
       : this._(
             store: store,
             request: request,
             currentUserId: currentUserId,
             applyWallet: applyWallet,
             environment: environment ?? (() async => 'Sandbox'),
+            storefront: storefront ?? (() async => 'CHN'),
             enabled: true);
   static final IosIapService instance = IosIapService._();
 
@@ -83,6 +88,7 @@ class IosIapService extends ChangeNotifier {
   final String? Function() _currentUserId;
   final void Function(String, Map<String, dynamic>) _applyResponse;
   final Future<String> Function() _environmentDetector;
+  final Future<String?> Function() _storefront;
   final bool _usingRealBackend;
   final bool _enabled;
   StreamSubscription<List<PurchaseDetails>>? _updates;
@@ -95,6 +101,8 @@ class IosIapService extends ChangeNotifier {
   String? _accountToken;
   String? _buying;
   String? _environment;
+  String? _storeCountry;
+  final Set<String> _uncertainPrices = {};
   bool get isSandbox => _environment == 'Sandbox';
   bool loading = false;
   String? error;
@@ -107,6 +115,72 @@ class IosIapService extends ChangeNotifier {
   List<ProductDetails> get products => _products.values.toList()
     ..sort((a, b) => diamondsFor(a.id).compareTo(diamondsFor(b.id)));
   int diamondsFor(String id) => _amounts[id] ?? 0;
+
+  String priceTextFor(ProductDetails product) =>
+      _uncertainPrices.contains(product.id) ? '点击查看付款价格' : product.price;
+
+  static Future<String?> _readStorefront() async {
+    try {
+      return await sk2.Storefront()
+          .countryCode()
+          .timeout(const Duration(seconds: 3));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<String?> _country() async {
+    try {
+      final value = await _storefront().timeout(const Duration(seconds: 3));
+      return value != null && RegExp(r'^[A-Z]{3}$').hasMatch(value)
+          ? value
+          : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  bool _priceLooksWrong(ProductDetails product, String? country) {
+    if (product.price.trim().isEmpty ||
+        !product.rawPrice.isFinite ||
+        product.rawPrice < 0) {
+      return true;
+    }
+    if (country == 'CHN' && product.currencyCode != 'CNY') return true;
+    if (country == 'USA' && product.currencyCode != 'USD') return true;
+    // Known TestFlight symptom: USD metadata while the payment sheet uses a
+    // non-US storefront. Do not convert an amount or guess its RMB equivalent.
+    return isSandbox && product.currencyCode == 'USD' && country != 'USA';
+  }
+
+  Future<void> _refreshStorePrices(String userId) async {
+    for (var attempt = 0; attempt < 2; attempt++) {
+      final before = await _country();
+      final response = await _store
+          .queryProductDetails(_amounts.keys.toSet())
+          .timeout(const Duration(seconds: 15));
+      final after = await _country();
+      if (_currentUserId() != userId) throw StateError('账号已切换，请重新打开充值页面');
+      if (response.error != null) throw StateError('读取 App Store 商品失败');
+      final changed = before != after;
+      final items = response.productDetails
+          .where((p) => _amounts.containsKey(p.id))
+          .toList();
+      final suspicious = items.any((p) => _priceLooksWrong(p, after));
+      if (attempt == 0 && (changed || suspicious)) continue;
+      _storeCountry = after;
+      _products.clear();
+      _uncertainPrices.clear();
+      for (final item in items) {
+        _products[item.id] = item;
+        if (changed || _priceLooksWrong(item, after)) {
+          _uncertainPrices.add(item.id);
+        }
+      }
+      if (response.notFoundIDs.isNotEmpty) error = '部分商品暂不可购买';
+      return;
+    }
+  }
 
   Future<void> initialize() async {
     if (!supported) return;
@@ -126,12 +200,12 @@ class IosIapService extends ChangeNotifier {
         notifyListeners();
       },
     );
-    await loadProducts();
+    if (_buying == null) await loadProducts();
     await retryUnconfirmed();
   }
 
   Future<void> loadProducts() {
-    if (!supported) return Future<void>.value();
+    if (!supported || _buying != null) return Future<void>.value();
     return _loading ??= _load().whenComplete(() => _loading = null);
   }
 
@@ -139,6 +213,8 @@ class IosIapService extends ChangeNotifier {
     loading = true;
     error = null;
     _products.clear();
+    _uncertainPrices.clear();
+    _storeCountry = null;
     _amounts.clear();
     _accountToken = null;
     notifyListeners();
@@ -146,13 +222,16 @@ class IosIapService extends ChangeNotifier {
     try {
       if (userId == null) throw StateError('请先登录');
       _environment = await _environmentDetector();
-      if (!['Production', 'Sandbox'].contains(_environment))
+      if (!['Production', 'Sandbox'].contains(_environment)) {
         throw StateError('请在真机测试 App Store 内购');
+      }
       final body =
           await _request('/api/v1/ios/products?environment=$_environment');
       if (_currentUserId() != userId) return;
-      if (body['protocol'] != 2 || body['mode'] != _environment!.toLowerCase())
+      if (body['protocol'] != 2 ||
+          body['mode'] != _environment!.toLowerCase()) {
         throw StateError('充值暂未开放');
+      }
       final token = body['appAccountToken'];
       if (token is! String || !_isUuid(token)) throw StateError('账号绑定信息异常');
       _ownerId = userId;
@@ -167,13 +246,7 @@ class IosIapService extends ChangeNotifier {
       await refreshWallet();
       if (_amounts.isNotEmpty) {
         if (!await _store.isAvailable()) throw StateError('App Store 暂不可用');
-        final result = await _store.queryProductDetails(_amounts.keys.toSet());
-        if (_currentUserId() != userId) return;
-        if (result.error != null) throw StateError('读取 App Store 商品失败');
-        for (final item in result.productDetails) {
-          _products[item.id] = item;
-        }
-        if (result.notFoundIDs.isNotEmpty) error = '部分商品暂不可购买';
+        await _refreshStorePrices(userId);
       }
     } catch (_) {
       _products.clear();
@@ -192,15 +265,17 @@ class IosIapService extends ChangeNotifier {
     final body = _usingRealBackend
         ? await CommerceRepository.instance.snapshot(userId, _environment!)
         : await _request('/api/v1/wallet?environment=$_environment');
-    if (body['mode'] != _environment!.toLowerCase())
+    if (body['mode'] != _environment!.toLowerCase()) {
       throw StateError('钱包环境不匹配');
+    }
     _applyWallet(userId, body);
   }
 
   Future<void> buy(String id) async {
-    final product = _products[id];
+    var product = _products[id];
     if (!supported ||
         busy ||
+        loading ||
         product == null ||
         _accountToken == null ||
         _ownerId != _currentUserId()) {
@@ -209,7 +284,18 @@ class IosIapService extends ChangeNotifier {
     _buying = id;
     error = null;
     notifyListeners();
+    String? priceWarning;
     try {
+      final oldPrice = priceTextFor(product);
+      final oldCountry = _storeCountry;
+      final userId = _ownerId!;
+      await _refreshStorePrices(userId);
+      product = _products[id];
+      if (product == null) throw StateError('商品暂不可购买');
+      if (oldCountry != _storeCountry || oldPrice != priceTextFor(product)) {
+        priceWarning = '商品价格已更新，请核对后重新选择';
+        throw StateError(priceWarning);
+      }
       final started = await _store.buyConsumable(
         purchaseParam: Sk2PurchaseParam(
           productDetails: product,
@@ -219,7 +305,7 @@ class IosIapService extends ChangeNotifier {
       if (!started) throw StateError('无法启动 App Store 付款');
     } catch (_) {
       _buying = null;
-      error = '无法启动付款，请稍后重试';
+      error = priceWarning ?? '无法启动付款，请刷新商品后重试';
       notifyListeners();
       rethrow;
     }
@@ -260,8 +346,9 @@ class IosIapService extends ChangeNotifier {
         'productId': purchase.productID,
         'transactionId': id,
       });
-      if (body['mode'] != _environment?.toLowerCase())
+      if (body['mode'] != _environment?.toLowerCase()) {
         throw StateError('交易环境不符');
+      }
       _applyWallet(userId, body);
       // Finish only after the server confirms the idempotent ledger write.
       if (purchase.pendingCompletePurchase) {
@@ -304,10 +391,12 @@ class IosIapService extends ChangeNotifier {
   static Future<String> _detectEnvironment() async {
     final value = await const MethodChannel('openelf/payments')
         .invokeMethod<String>('getEnvironment');
-    if (IapConfig.testBuild && value != 'Sandbox')
+    if (IapConfig.testBuild && value != 'Sandbox') {
       throw StateError('当前包只用于沙盒测试');
-    if (value != 'Production' && value != 'Sandbox')
+    }
+    if (value != 'Production' && value != 'Sandbox') {
       throw StateError('无法确认 App Store 环境');
+    }
     return value!;
   }
 

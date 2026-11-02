@@ -42,11 +42,14 @@ function ugcContractNo(cardId, at) {
 async function humanAddressOf(commerce, actor) {
   if (typeof commerce.characterAddress === 'function') {
     const value = String((await commerce.characterAddress(actor)) || '').trim();
-    if (value) return value;
+    // The authoritative reader can reject legacy/unregistered display IDs;
+    // do not undo that rejection by falling back to an older snapshot field.
+    return value || null;
   }
   if (typeof commerce.snapshot === 'function') {
     const snapshot = await commerce.snapshot(actor);
-    const value = String(snapshot?.commerce?.humanAddress || '').trim();
+    if (snapshot?.commerce?.humanAddressVerified !== true) return null;
+    const value = String(snapshot.commerce.humanAddress || '').trim();
     if (value) return value;
   }
   return null;

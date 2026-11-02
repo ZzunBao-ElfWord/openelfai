@@ -1,7 +1,8 @@
 name: openelf
 description: OpenElf - 持有制 AI 社区
 publish_to: 'none'
-version: 1.0.6+7
+# Preserve the user's release baseline; merging does not issue a new package.
+version: 1.0.4+22
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -19,8 +20,15 @@ dependencies:
   share_plus: ^10.1.4
   app_links: ^6.3.2
   image_picker: ^1.2.3
+  jpush_flutter: 3.5.9
   openelf_ali_captcha:
     path: third_party/openelf_ali_captcha
+  openelf_douyin_share:
+    path: third_party/openelf_douyin_share
+  openelf_wechat_share:
+    path: third_party/openelf_wechat_share
+  openelf_kwai_share:
+    path: third_party/openelf_kwai_share
 
 dependency_overrides:
   # shared_preferences_android / path_provider_android 新版引入 jni 原生构建，
@@ -29,6 +37,7 @@ dependency_overrides:
   path_provider_android: 2.2.23
 
 dev_dependencies:
+  share_plus_platform_interface: ^5.0.2
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0

@@ -23,7 +23,9 @@ List<int> previewRefreshIndices(int slotCount, int? selected) {
   if (selected == null || selected < 0 || selected >= slotCount) {
     return List.generate(slotCount, (i) => i);
   }
-  return List.generate(slotCount, (i) => i).where((i) => i != selected).toList();
+  return List.generate(slotCount, (i) => i)
+      .where((i) => i != selected)
+      .toList();
 }
 
 enum _SlotStatus { loading, ready, failed }
@@ -137,6 +139,7 @@ class _CreateElfPageState extends State<CreateElfPage> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
+  // Keep the server draft/preview/on-chain flow explicitly selected by the user.
   /// 角色设定的指纹：任一项变化都要用一张新的服务端草稿。
   String get _signature => [
         _nameCtrl.text.trim(),
@@ -403,7 +406,8 @@ class _CreateElfPageState extends State<CreateElfPage> {
   /// 为指定索引列表生成新 seed 并占位为 loading。indices 为 null 时全量初始化。
   void _initSlotsFor({List<int>? indices}) {
     if (indices == null) {
-      _slots = List.generate(_previewSlotCount, (i) => _PreviewSlot(seed: _nextSeed()));
+      _slots = List.generate(
+          _previewSlotCount, (i) => _PreviewSlot(seed: _nextSeed()));
     } else {
       for (final i in indices) {
         _slots[i] = _PreviewSlot(seed: _nextSeed());
@@ -423,12 +427,14 @@ class _CreateElfPageState extends State<CreateElfPage> {
     final ids = indices ?? List.generate(_previewSlotCount, (i) => i);
     final tasks = ids.map((i) async {
       try {
-        final p = await PlatformApi.instance.previewCharacter(id, seed: _slots[i].seed);
-        if (mounted) setState(() {
-          _slots[i].preview = p;
-          _slots[i].bytes = _decodeThumb(p.thumbDataUrl);
-          _slots[i].status = _SlotStatus.ready;
-        });
+        final p = await PlatformApi.instance
+            .previewCharacter(id, seed: _slots[i].seed);
+        if (mounted)
+          setState(() {
+            _slots[i].preview = p;
+            _slots[i].bytes = _decodeThumb(p.thumbDataUrl);
+            _slots[i].status = _SlotStatus.ready;
+          });
       } catch (_) {
         if (mounted) setState(() => _slots[i].status = _SlotStatus.failed);
       }
@@ -562,7 +568,8 @@ class _CreateElfPageState extends State<CreateElfPage> {
               ),
             Text(
               '${elf?.name ?? result.card?.name ?? '你的 AI'} 已铸造并归入你的账户资产。',
-              style: TextStyle(fontSize: 13, height: 1.6, color: AppColors.text),
+              style:
+                  TextStyle(fontSize: 13, height: 1.6, color: AppColors.text),
             ),
             const SizedBox(height: 8),
             Text('铸造序号',
@@ -955,8 +962,8 @@ class _CreateElfPageState extends State<CreateElfPage> {
             Text(
               '上传身份证并通过核验后，身份证人像面将作为你本人形象的唯一授权来源。我们不提供任意照片上传。',
               textAlign: TextAlign.center,
-              style:
-                  TextStyle(fontSize: 11, height: 1.6, color: AppColors.textSub),
+              style: TextStyle(
+                  fontSize: 11, height: 1.6, color: AppColors.textSub),
             ),
             const SizedBox(height: 16),
             SizedBox(
@@ -1013,8 +1020,7 @@ class _CreateElfPageState extends State<CreateElfPage> {
                         fontFamily: 'monospace')),
                 const SizedBox(height: 4),
                 Text('已授权使用身份证人像面作为本人形象来源',
-                    style:
-                        TextStyle(fontSize: 10.5, color: AppColors.textSub)),
+                    style: TextStyle(fontSize: 10.5, color: AppColors.textSub)),
               ],
             ),
           ),
@@ -1269,30 +1275,32 @@ class _CreateElfPageState extends State<CreateElfPage> {
   Widget _stepPreview(AppState state) {
     final generated = _card?.generated ?? false;
     final selected = _selectedIndex != null ? _slots[_selectedIndex!] : null;
-    final tier = generated
-        ? (_card?.rarityTier)
-        : (selected?.preview?.rarityTier);
+    final tier =
+        generated ? (_card?.rarityTier) : (selected?.preview?.rarityTier);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
             Text('形象预览',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.text)),
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.text)),
             const Spacer(),
             if (tier != null) _rarityChip(tier),
           ],
         ),
         const SizedBox(height: 10),
-        if (generated)
-          _generatedImageBox()
-        else
-          _previewGrid(),
+        if (generated) _generatedImageBox() else _previewGrid(),
         const SizedBox(height: 14),
         if (!generated)
           Row(
             children: [
-              _ghostChip(icon: Icons.shuffle, label: '换一组', onTap: _loadingAll || _generating ? () {} : _changePreview),
+              _ghostChip(
+                  icon: Icons.shuffle,
+                  label: '换一组',
+                  onTap: _loadingAll || _generating ? () {} : _changePreview),
             ],
           ),
         const SizedBox(height: 14),
@@ -1300,7 +1308,8 @@ class _CreateElfPageState extends State<CreateElfPage> {
           generated
               ? '形象已生成并锁定组合。形象生成免费，下一步铸造才会扣除钻石。'
               : '预览由站内形象工坊免费合成；挑一版最有感觉的，确认生成同样不收费。',
-          style: TextStyle(fontSize: 10.5, height: 1.6, color: AppColors.textMuted),
+          style: TextStyle(
+              fontSize: 10.5, height: 1.6, color: AppColors.textMuted),
         ),
         const SizedBox(height: 10),
         if (state.wallet.diamonds < AppState.createElfCost)
@@ -1320,14 +1329,18 @@ class _CreateElfPageState extends State<CreateElfPage> {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
-        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight,
+        gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
             colors: [AppColors.surface, AppColors.surfaceAlt]),
         border: Border.all(color: AppColors.stroke),
       ),
       clipBehavior: Clip.antiAlias,
       child: url != null
-          ? ClipRRect(borderRadius: BorderRadius.circular(16),
-              child: Image.network(url, fit: BoxFit.contain,
+          ? ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Image.network(url,
+                  fit: BoxFit.contain,
                   errorBuilder: (_, __, ___) => _fallbackArt('形象图加载失败，可换一组重试')))
           : _fallbackArt('还没有预览'),
     );
@@ -1339,7 +1352,9 @@ class _CreateElfPageState extends State<CreateElfPage> {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
-        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight,
+        gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
             colors: [AppColors.surface, AppColors.surfaceAlt]),
         border: Border.all(color: AppColors.stroke),
       ),
@@ -1373,7 +1388,9 @@ class _CreateElfPageState extends State<CreateElfPage> {
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: selected ? AppColors.cyan : AppColors.stroke, width: selected ? 2 : 1),
+          border: Border.all(
+              color: selected ? AppColors.cyan : AppColors.stroke,
+              width: selected ? 2 : 1),
         ),
         clipBehavior: Clip.antiAlias,
         child: AspectRatio(
@@ -1387,22 +1404,33 @@ class _CreateElfPageState extends State<CreateElfPage> {
   Widget _slotContent(_PreviewSlot slot, bool selected) {
     switch (slot.status) {
       case _SlotStatus.loading:
-        return Center(child: SizedBox(width: 18, height: 18,
-            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.cyan)));
+        return Center(
+            child: SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: AppColors.cyan)));
       case _SlotStatus.failed:
         return GestureDetector(
           onTap: () => _retrySlot(slot.seed),
-          child: Center(child: Icon(Icons.refresh, size: 18, color: AppColors.textMuted)),
+          child: Center(
+              child: Icon(Icons.refresh, size: 18, color: AppColors.textMuted)),
         );
       case _SlotStatus.ready:
         return Stack(
           fit: StackFit.expand,
           children: [
             if (slot.bytes != null)
-              Image.memory(slot.bytes!, fit: BoxFit.cover, gaplessPlayback: true, filterQuality: FilterQuality.medium),
+              Image.memory(slot.bytes!,
+                  fit: BoxFit.cover,
+                  gaplessPlayback: true,
+                  filterQuality: FilterQuality.medium),
             if (selected)
-              Positioned(top: 6, right: 6,
-                  child: Icon(Icons.check_circle, color: AppColors.cyan, size: 18)),
+              Positioned(
+                  top: 6,
+                  right: 6,
+                  child: Icon(Icons.check_circle,
+                      color: AppColors.cyan, size: 18)),
           ],
         );
     }
@@ -1447,7 +1475,8 @@ class _CreateElfPageState extends State<CreateElfPage> {
         backgroundColor: Colors.black87,
         insetPadding: const EdgeInsets.all(24),
         child: InteractiveViewer(
-          child: Image.memory(bytes, fit: BoxFit.contain, filterQuality: FilterQuality.medium),
+          child: Image.memory(bytes,
+              fit: BoxFit.contain, filterQuality: FilterQuality.medium),
         ),
       ),
     );
@@ -1515,9 +1544,7 @@ class _CreateElfPageState extends State<CreateElfPage> {
         const SizedBox(height: 7),
         Text('铸造将扣除 ${AppState.createElfCost} 钻石，形象生成免费。',
             style: TextStyle(
-                fontSize: 11.5,
-                height: 1.6,
-                color: AppColors.textSub)),
+                fontSize: 11.5, height: 1.6, color: AppColors.textSub)),
         const SizedBox(height: 14),
         Container(
           padding: const EdgeInsets.all(14),
@@ -1613,13 +1640,11 @@ class _CreateElfPageState extends State<CreateElfPage> {
               children: [
                 Expanded(
                   child: Text('钻石不足，先充值再铸造（10 钻石 = 1 元）。',
-                      style:
-                          TextStyle(fontSize: 10.5, color: AppColors.warn)),
+                      style: TextStyle(fontSize: 10.5, color: AppColors.warn)),
                 ),
                 TextButton(
                   onPressed: _guideWallet,
-                  child:
-                      Text('去钱包', style: TextStyle(color: AppColors.cyan)),
+                  child: Text('去钱包', style: TextStyle(color: AppColors.cyan)),
                 ),
               ],
             ),
@@ -1632,7 +1657,8 @@ class _CreateElfPageState extends State<CreateElfPage> {
         Text(
           '铸造是给这只 AI 做资产登记，不是投资或炒作。形象本身由站内形象工坊生成，'
           '不涉及外部钱包或加密资产风险。',
-          style: TextStyle(fontSize: 10.5, height: 1.6, color: AppColors.textMuted),
+          style: TextStyle(
+              fontSize: 10.5, height: 1.6, color: AppColors.textMuted),
         ),
       ],
     );
@@ -1641,7 +1667,8 @@ class _CreateElfPageState extends State<CreateElfPage> {
   Widget _previewThumb() {
     final bytes = _selectedIndex != null ? _slots[_selectedIndex!].bytes : null;
     if (bytes != null) {
-      return Image.memory(bytes, fit: BoxFit.cover, filterQuality: FilterQuality.medium);
+      return Image.memory(bytes,
+          fit: BoxFit.cover, filterQuality: FilterQuality.medium);
     }
     return ColoredBox(
       color: AppColors.surfaceHigh,
@@ -1664,9 +1691,8 @@ class _CreateElfPageState extends State<CreateElfPage> {
       case 1:
         final generated = _card?.generated ?? false;
         final hasSelection = _selectedIndex != null;
-        label = generated
-            ? '下一步 · 铸造'
-            : (hasSelection ? '确认生成所选形象' : '先挑一版最有感觉的');
+        label =
+            generated ? '下一步 · 铸造' : (hasSelection ? '确认生成所选形象' : '先挑一版最有感觉的');
         enabled = generated
             ? (!_loadingAll && !_generating)
             : (hasSelection && !_loadingAll && !_generating);

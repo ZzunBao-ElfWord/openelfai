@@ -1,9 +1,9 @@
 const crypto = require('crypto');
+const { videoDeliveryUrl } = require('./video_delivery');
 const fs = require('fs/promises');
 const path = require('path');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
-const { videoDeliveryUrl } = require('./video_delivery');
 
 const execFileAsync = promisify(execFile);
 

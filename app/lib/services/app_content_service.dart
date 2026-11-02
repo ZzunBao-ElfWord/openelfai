@@ -30,7 +30,8 @@ class AppContentService {
   Future<void> loadCached() => _loadCache();
 
   /// 打开设置页等场景主动刷新（60 秒内不重复请求）。
-  Future<void> refreshIfStale({Duration maxAge = const Duration(seconds: 60)}) async {
+  Future<void> refreshIfStale(
+      {Duration maxAge = const Duration(seconds: 60)}) async {
     final last = _lastFetchedAt;
     if (last != null && DateTime.now().difference(last) < maxAge) return;
     await refresh();
@@ -38,12 +39,10 @@ class AppContentService {
 
   Future<void> refresh() async {
     try {
-      final resp = await http
-          .get(
-            Uri.parse('${ApiConfig.baseUrl}${ApiConfig.appContentPath}'),
-            headers: const {'Accept': 'application/json'},
-          )
-          .timeout(const Duration(seconds: 8));
+      final resp = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}${ApiConfig.appContentPath}'),
+        headers: const {'Accept': 'application/json'},
+      ).timeout(const Duration(seconds: 8));
       if (resp.statusCode != 200) return;
       final decoded = jsonDecode(utf8.decode(resp.bodyBytes));
       if (decoded is! Map) return;
@@ -81,6 +80,7 @@ class AppContentService {
 
   /// 用户从未手动选择外观时，跟随运营配置的默认外观。
   Future<void> _applyDefaultTheme(AppContent value) async {
-    await ThemeController.instance.applyRemoteDefault(value.text('app.theme.default'));
+    await ThemeController.instance
+        .applyRemoteDefault(value.text('app.theme.default'));
   }
 }

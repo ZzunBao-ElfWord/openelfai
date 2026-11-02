@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../auth/auth_factory.dart';
+import '../config/release_info.dart';
+import 'account_deletion_page.dart';
+import 'push_settings_page.dart';
+import 'community_safety_page.dart';
+import 'privacy_policy_page.dart';
+import 'user_agreement_page.dart';
 import '../data/world_data.dart';
 import '../models/app_content.dart';
 import '../services/app_content_service.dart';
-import '../services/platform_api.dart';
 import 'blocked_page.dart';
 import '../services/stage_bind_service.dart';
 import '../state/app_state.dart';
@@ -61,7 +66,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       icon: Icons.account_balance_wallet_outlined,
                       label: '钻石钱包',
                       subtitle:
-                          '💎${state.wallet.diamonds} · 累计收益 ${WorldData.formatYuan(state.myElf?.earningsYuan ?? 0)}',
+                          '💎${state.wallet.diamonds} · 累计收益 ${WorldData.formatYuan(state.creatorEarningsYuan)}',
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute(builder: (_) => const WalletPage()),
                       ),
@@ -79,7 +84,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                     _tile(
                       icon: Icons.public_rounded,
-                      label: '第三方账号（舞台）',
+                      label: '作品分享平台',
                       subtitle: _stageBindSubtitle(),
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute(
@@ -93,14 +98,14 @@ class _SettingsPageState extends State<SettingsPage> {
                       value: state.personalizedRecommendation,
                       activeColor: AppColors.cyan,
                       title: Text('个性化推荐',
-                          style: TextStyle(
-                              fontSize: 13.5, color: AppColors.text)),
+                          style:
+                              TextStyle(fontSize: 13.5, color: AppColors.text)),
                       subtitle: Text(
                         state.personalizedRecommendation
                             ? '已开启：按互动与兴趣排序'
                             : '已关闭：信息流按发布时间排序',
-                        style: TextStyle(
-                            fontSize: 11, color: AppColors.textMuted),
+                        style:
+                            TextStyle(fontSize: 11, color: AppColors.textMuted),
                       ),
                       onChanged: (value) =>
                           state.setPersonalizedRecommendation(value),
@@ -110,8 +115,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       label: '已拉黑',
                       subtitle: '管理被拉黑的 AI 与用户，可随时取消',
                       onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                            builder: (_) => const BlockedPage()),
+                        MaterialPageRoute(builder: (_) => const BlockedPage()),
                       ),
                     ),
                     const SizedBox(height: 18),
@@ -146,10 +150,24 @@ class _SettingsPageState extends State<SettingsPage> {
                     const SizedBox(height: 18),
                     _section('其他'),
                     _tile(
+                        icon: Icons.notifications_outlined,
+                        label: '消息通知',
+                        subtitle: '管理消息提醒和系统通知权限',
+                        onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                                builder: (_) => const PushSettingsPage()))),
+                    _tile(
+                        icon: Icons.shield_outlined,
+                        label: '内容安全与反馈',
+                        subtitle: '举报、屏蔽与社区规范',
+                        onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                                builder: (_) => const CommunitySafetyPage()))),
+                    _tile(
                       icon: Icons.info_outline,
                       label: '关于 ${content.text('app.about.name')}',
                       subtitle:
-                          '${content.text('app.about.version')} · ${content.text('app.about.slogan')}',
+                          '${ReleaseInfo.label} · ${content.text('app.about.slogan')}',
                       onTap: () => _openAbout(context, content),
                     ),
                     _tile(
@@ -345,9 +363,9 @@ class _SettingsPageState extends State<SettingsPage> {
     final binds = StageBindService.instance;
     final bound = StagePlatform.values.where(binds.isBound).toList();
     if (bound.isEmpty) {
-      return '绑定抖音、快手、微信、哔哩哔哩，一键分发 AI 内容';
+      return '分享作品到抖音等平台，由你确认发布';
     }
-    return '已绑定 ${bound.length} 个 · ${bound.map((p) => p.label).join('、')}';
+    return '常用 ${bound.length} 个 · ${bound.map((p) => p.label).join('、')}';
   }
 
   Widget _tile({
@@ -442,6 +460,16 @@ class _SettingsPageState extends State<SettingsPage> {
   // —— 交互 ——
 
   void _openPolicy(BuildContext ctx, PolicyKind kind) {
+    if (kind == PolicyKind.privacy) {
+      Navigator.of(ctx)
+          .push(MaterialPageRoute(builder: (_) => const PrivacyPolicyPage()));
+      return;
+    }
+    if (kind == PolicyKind.terms) {
+      Navigator.of(ctx)
+          .push(MaterialPageRoute(builder: (_) => const UserAgreementPage()));
+      return;
+    }
     final title = switch (kind) {
       PolicyKind.privacy => '隐私政策',
       PolicyKind.terms => '用户协议',
@@ -466,7 +494,7 @@ class _SettingsPageState extends State<SettingsPage> {
     showAboutDialog(
       context: ctx,
       applicationName: content.text('app.about.name'),
-      applicationVersion: content.text('app.about.version'),
+      applicationVersion: ReleaseInfo.label,
       children: [
         const SizedBox(height: 8),
         Text(content.text('app.about.intro')),
@@ -489,6 +517,7 @@ class _SettingsPageState extends State<SettingsPage> {
   /// PIPL 要求的第三方 SDK 目录：说明名称、用途与处理的个人信息类型。
   void _openSdkList(BuildContext ctx) {
     const items = <List<String>>[
+      ['极光推送 JPush', '经你同意后发送消息通知', '推送注册标识、设备与网络信息'],
       ['shared_preferences', '本地保存主题与浏览偏好', '设备本地偏好，不含身份信息'],
       ['flutter_secure_storage', '加密保存登录令牌', '登录凭证'],
       ['in_app_purchase', 'iOS 数字商品内购', '购买凭证与订单号'],
@@ -511,21 +540,26 @@ class _SettingsPageState extends State<SettingsPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 for (final item in items) ...[
-                  Text(item[0], style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.text)),
+                  Text(item[0],
+                      style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.text)),
                   Text('用途：${item[1]}',
                       style: TextStyle(
                           fontSize: 11, color: AppColors.textSub, height: 1.5)),
                   Text('处理信息：${item[2]}',
                       style: TextStyle(
-                          fontSize: 11, color: AppColors.textMuted, height: 1.5)),
+                          fontSize: 11,
+                          color: AppColors.textMuted,
+                          height: 1.5)),
                   const SizedBox(height: 10),
                 ],
                 Text('以上 SDK 仅在对应功能被使用时初始化，不进行个性化广告投放。',
                     style: TextStyle(
-                        fontSize: 10.5, color: AppColors.textFaint, height: 1.5)),
+                        fontSize: 10.5,
+                        color: AppColors.textFaint,
+                        height: 1.5)),
               ],
             ),
           ),
@@ -569,12 +603,14 @@ class _SettingsPageState extends State<SettingsPage> {
           children: [
             Text(
               content.text('app.feedback.note'),
-              style: TextStyle(fontSize: 12.5, color: AppColors.textMuted, height: 1.6),
+              style: TextStyle(
+                  fontSize: 12.5, color: AppColors.textMuted, height: 1.6),
             ),
             const SizedBox(height: 12),
             SelectableText(
               target,
-              style: TextStyle(fontSize: 13, color: AppColors.text, height: 1.5),
+              style:
+                  TextStyle(fontSize: 13, color: AppColors.text, height: 1.5),
             ),
           ],
         ),
@@ -641,81 +677,15 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  void _confirmDeleteAccount(BuildContext ctx) {
-    showDialog(
-      context: ctx,
-      builder: (dctx) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title:
-            Text('删除账号', style: TextStyle(color: AppColors.warn, fontSize: 16)),
-        content: Text(
-          '注销后，你的个人资料、AI、作品、评论与聊天记录将被删除，钻石余额会清空，且无法恢复。'
-          '\n\n若仍有待提现收益或提现正在处理中，请先完成提现。'
-          '\n\n确认注销账号？',
-          style: TextStyle(
-              fontSize: 12.5, color: AppColors.textMuted, height: 1.6),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dctx).pop(),
-            child: Text('取消', style: TextStyle(color: AppColors.textMuted)),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.of(dctx).pop();
-              String? failure;
-              try {
-                await PlatformApi.instance.deleteAccount();
-              } on PlatformApiException catch (error) {
-                failure = error.message;
-              } catch (_) {
-                failure = '注销失败，请稍后重试';
-              }
-              if (!ctx.mounted) return;
-              final message = failure;
-              if (message != null) {
-                await showDialog<void>(
-                  context: ctx,
-                  builder: (ec) => AlertDialog(
-                    backgroundColor: AppColors.surface,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14)),
-                    title: Text('暂时无法注销',
-                        style:
-                            TextStyle(color: AppColors.text, fontSize: 16)),
-                    content: Text(message,
-                        style: TextStyle(
-                            fontSize: 12.5,
-                            color: AppColors.textMuted,
-                            height: 1.6)),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.of(ec).pop(),
-                        child: Text('知道了',
-                            style: TextStyle(color: AppColors.cyan)),
-                      ),
-                    ],
-                  ),
-                );
-                return;
-              }
-              try {
-                await createAuth().logout();
-              } catch (_) {
-                // 服务端已吊销会话，本地撤销失败也不阻断退出
-              }
-              await AppState.instance.onLogout();
-              if (!ctx.mounted) return;
-              ScaffoldMessenger.of(ctx).showSnackBar(
-                const SnackBar(content: Text('账号已注销')),
-              );
-            },
-            child: Text('确认注销', style: TextStyle(color: AppColors.warn)),
-          ),
-        ],
-      ),
-    );
+  Future<void> _confirmDeleteAccount(BuildContext ctx) async {
+    final deleted = await Navigator.of(ctx).push<bool>(MaterialPageRoute(
+      builder: (_) => AccountDeletionPage(
+          auth: createAuth(), onDeleted: AppState.instance.onLogout),
+    ));
+    if (deleted != true || !ctx.mounted) return;
+    final messenger = ScaffoldMessenger.of(ctx);
+    Navigator.of(ctx).popUntil((route) => route.isFirst);
+    messenger.showSnackBar(const SnackBar(content: Text('账号已注销')));
   }
 
   static String _maskPhone(String phone) {
@@ -750,8 +720,8 @@ class _PolicyPage extends StatelessWidget {
         Text(
           '正文由平台在后台发布后自动同步到这里',
           textAlign: TextAlign.center,
-          style: TextStyle(
-              fontSize: 11, color: AppColors.textMuted, height: 1.5),
+          style:
+              TextStyle(fontSize: 11, color: AppColors.textMuted, height: 1.5),
         ),
       ];
     }

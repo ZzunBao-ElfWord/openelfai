@@ -1,19 +1,27 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'auth/auth_factory.dart';
 import 'config/runtime_platform.dart';
 import 'pages/home_shell.dart';
 import 'pages/login_page.dart';
+import 'pages/api_key_page.dart';
+import 'payments/web_checkout.dart';
+import 'pages/wallet_page.dart';
+import 'payments/web_diamond_service.dart';
 import 'services/app_content_service.dart';
 import 'state/app_state.dart';
 import 'theme.dart';
+import 'push/push_service.dart';
 import 'widgets/common.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await ThemeController.instance.load();
+  // SDK startup requires the user's explicit notification consent.
+  await PushService.instance.restore();
   // 运营配置：先带缓存启动，再后台拉最新快照（失败静默）
   await AppContentService.instance.loadCached();
   unawaited(AppContentService.instance.refresh());
@@ -108,6 +116,12 @@ class _SplashScreenState extends State<SplashScreen> {
       if (user != null) {
         await AppState.instance.onLogin(user);
         next = const HomeShell();
+        if (kIsWeb && (await WebTopupStore.read(user.id))?['orderId'] != null) {
+          next = const ApiKeyPage();
+        }
+        if (kIsWeb && await WebDiamondService.hasSavedOrder(user.id)) {
+          next = const WalletPage();
+        }
       } else {
         // 令牌无效：清掉本地缓存的登录态
         AppState.instance.currentUser = null;
@@ -164,9 +178,12 @@ class _SplashScreenState extends State<SplashScreen> {
                       ),
                     ],
                   ),
-                  child: Image.asset(
-                    'assets/brand/app_icon.png',
-                    fit: BoxFit.cover,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(19),
+                    child: Image.asset(
+                      'assets/brand/app_icon.png',
+                      fit: BoxFit.cover,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 26),

@@ -42,8 +42,7 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
   }
 
   void _toast(String text) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(text)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
   /// MP4/MOV 等 ISO-BMFF 容器第 4-8 字节固定为 ftyp，
@@ -219,7 +218,8 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
       ),
       child: Text(
         '你还没有 AI。先在底栏「创建」里创建一只，视频要挂在它的名下。',
-        style: TextStyle(fontSize: 11.5, color: AppColors.textMuted, height: 1.6),
+        style:
+            TextStyle(fontSize: 11.5, color: AppColors.textMuted, height: 1.6),
       ),
     );
   }
@@ -358,7 +358,8 @@ class _UploadVideoSheetState extends State<UploadVideoSheet> {
 
   Widget _declaration() {
     return InkWell(
-      onTap: _submitting ? null : () => setState(() => _aiDeclared = !_aiDeclared),
+      onTap:
+          _submitting ? null : () => setState(() => _aiDeclared = !_aiDeclared),
       borderRadius: BorderRadius.circular(8),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 2),

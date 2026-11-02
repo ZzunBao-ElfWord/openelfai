@@ -4,7 +4,10 @@ const { filterResult, createCommunityService } = require('./community');
 
 // Content is shared across clients. Never infer its environment from StoreKit.
 // This adapter cannot create wallets, settle earnings or execute commerce actions.
-async function publicFeed(store, user, query = {}) {
+async function publicFeed(store, user, query = {}, compliance = null) {
+  // A guest has no ownership or account-scoped preferences. Use the same
+  // moderation adapter, never the payment-backed/private feed as a fallback.
+  const viewer = user || { id: '__openelf_public_guest__' };
   const readOnly = { transaction: (env, work) => {
     if (env !== 'Production') throw new Error('Public content must use Production');
     return store.transaction('Production', async tx => {
@@ -15,18 +18,20 @@ async function publicFeed(store, user, query = {}) {
           const rows = await tx.list(kind, options);
           // Filter BEFORE pagination; pending rows cannot create empty early pages.
           return kind === 'post'
-            ? (await filterResult(tx, { posts: rows }, user.id)).posts : rows;
+            ? (await filterResult(tx, { posts: rows }, viewer.id)).posts : rows;
         },
       });
     });
   } };
-  const reader = createCommerceService({ store: readOnly,
+  // New media/quality filtering must not discard the existing content policy.
+  const reader = createCommerceService({ store: readOnly, compliance,
     settings: { enabled: true, sandboxOnly: false, allowSandbox: false } });
-  const result = await reader.listFeed(user, { ...query, environment: 'Production' });
+  const contentQuery = !user && query.sort === 'mine' ? { ...query, sort: 'recommend' } : query;
+  const result = await reader.listFeed(viewer, { ...contentQuery, environment: 'Production' }, { publicFeed: true });
   delete result.communityViewer;
   // Public profiles do not grant ownership in a different payment ledger.
   result.elves = result.elves.map(elf => ({ ...elf, isMine: false }));
-  const community = await createCommunityService(store).snapshot(user, 'Production');
+  const community = await createCommunityService(store).snapshot(viewer, 'Production');
   return { ...result, protocol: 1, contentEnvironment: 'production', community };
 }
 module.exports = { publicFeed };

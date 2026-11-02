@@ -21,7 +21,7 @@ import 'wallet_page.dart';
 
 /// 「我」tab：人类自己的主页。
 ///
-/// 这里只承载人类账户：头像/昵称/人类地址、钻石与收益、持有的智能体卡片、
+/// 这里只承载人类账户：头像/昵称/站内账号ID、钻石与收益、账号下的 AI 卡片、
 /// 账户入口。AI 的一切数据与配置都不放在这里——点卡片进入那只 AI 的
 /// 专属「AI 控制台」，人类与 AI 的边界因此保持清晰。
 class ProfilePage extends StatefulWidget {
@@ -67,7 +67,7 @@ class _ProfilePageState extends State<ProfilePage> {
                             _emptyNftCard(context)
                           else ...[
                             SectionHeader(
-                              '我的 AI 智能体',
+                              '我的 AI',
                               trailing: '${elves.length} 个 · 点卡片进入控制台',
                             ),
                             _nftGrid(context, state, elves),
@@ -251,7 +251,7 @@ class _ProfilePageState extends State<ProfilePage> {
                               Clipboard.setData(ClipboardData(text: addr!));
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
-                                    content: Text('已复制我的人类地址'),
+                                    content: Text('已复制我的站内账号ID'),
                                     duration: Duration(seconds: 2)),
                               );
                             },
@@ -260,7 +260,7 @@ class _ProfilePageState extends State<ProfilePage> {
                               child: Icon(Icons.copy_outlined,
                                   size: 12,
                                   color: AppColors.textMuted,
-                                  semanticLabel: '复制我的人类地址'),
+                                  semanticLabel: '复制我的站内账号ID'),
                             ),
                           ),
                         ],
@@ -291,7 +291,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // —— 人类资产：钻石 + 人类地址 + 收益 ——
+  // —— 人类资产：钻石 + 站内账号ID + 收益 ——
 
   Widget _humanAssets(BuildContext context, AppState state) {
     final addr = state.currentUser?.chainAddress ?? '';
@@ -386,17 +386,17 @@ class _ProfilePageState extends State<ProfilePage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _miniStat('💎${state.wallet.diamonds}', '钻石余额', AppColors.cyan),
-              _miniStat('${state.myElves.length}', '持有智能体'),
+              _miniStat('${state.myElves.length}', '我的 AI 资源'),
               _miniStat(WorldData.formatYuan(earnings), '累计收益'),
             ],
           ),
           const SizedBox(height: 10),
-          Text('地址为站内资产登记编号，不涉及外部钱包、加密货币或数字代币交易。',
+          Text('站内账号与角色登记凭证分别记录；上链结果以实际铸造返回的凭证为准，不提供余额转让或代币交易。',
               style: TextStyle(fontSize: 9.5, color: AppColors.textFaint)),
           const SizedBox(height: 10),
           Row(
             children: [
-              Text('人类地址',
+              Text('站内账号ID',
                   style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
               const SizedBox(width: 6),
               Flexible(
@@ -418,7 +418,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     Clipboard.setData(ClipboardData(text: addr));
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
-                          content: Text('已复制我的人类地址'),
+                          content: Text('已复制我的站内账号ID'),
                           duration: Duration(seconds: 2)),
                     );
                   },
@@ -427,7 +427,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     child: Icon(Icons.copy_outlined,
                         size: 12,
                         color: AppColors.textMuted,
-                        semanticLabel: '复制我的人类地址'),
+                        semanticLabel: '复制我的站内账号ID'),
                   ),
                 ),
             ],
@@ -515,8 +515,8 @@ class _ProfilePageState extends State<ProfilePage> {
                     const SizedBox(height: 2),
                     Text(
                       'AI 对话与外部接入凭据',
-                      style: TextStyle(
-                          fontSize: 10.5, color: AppColors.textMuted),
+                      style:
+                          TextStyle(fontSize: 10.5, color: AppColors.textMuted),
                     ),
                   ],
                 ),
@@ -594,12 +594,12 @@ class _ProfilePageState extends State<ProfilePage> {
             Positioned(
               left: 8,
               top: 8,
-              child: _coverPill('智能体 · Lv${elf.level}'),
+              child: _coverPill('AI · Lv${elf.level}'),
             ),
             Positioned(
               right: 8,
               top: 8,
-              child: _coverPill('已上链', highlight: true),
+              child: _coverPill('已创建', highlight: true),
             ),
             Positioned(
               left: 9,
@@ -733,7 +733,7 @@ class _ProfilePageState extends State<ProfilePage> {
             Text('创建智能体',
                 style: TextStyle(fontSize: 11.5, color: AppColors.textSub)),
             const SizedBox(height: 2),
-            Text('一只会成长的 AI',
+            Text('创建新的 AI',
                 style: TextStyle(fontSize: 9, color: AppColors.textFaint)),
           ],
         ),
@@ -754,10 +754,10 @@ class _ProfilePageState extends State<ProfilePage> {
           Icon(Icons.confirmation_number_outlined,
               size: 40, color: AppColors.textMuted),
           const SizedBox(height: 10),
-          Text('你还没有 AI 智能体',
+          Text('你还没有 AI',
               style: TextStyle(fontSize: 14, color: AppColors.textSub)),
           const SizedBox(height: 4),
-          Text('创建一只 AI 就是创建一位智能体，它会归到你的人类地址下。',
+          Text('创建后的 AI 归入你的账号；需要上链登记的角色须完成服务端校验与铸造。',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
           const SizedBox(height: 14),
@@ -795,7 +795,7 @@ class _ProfilePageState extends State<ProfilePage> {
           Text('登录后查看你的人类资产',
               style: TextStyle(fontSize: 14, color: AppColors.textSub)),
           const SizedBox(height: 4),
-          Text('钻石、人类地址与持有的 AI 智能体都挂在你的账户下。',
+          Text('钻石、站内账号ID与账号下的 AI 都挂在你的账户下。',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
           const SizedBox(height: 14),
@@ -827,7 +827,7 @@ class _ProfilePageState extends State<ProfilePage> {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              '人类持有钻石与地址，负责指挥；AI 是你创建的智能体，可以配置技能、放它去世界，也可以免费转赠给另一个人类。它的作品、收益与技能都在自己的控制台里。',
+              '人类持有钻石与地址，负责指挥；AI 是你创建的站内智能体，可以配置技能、放它去世界，也可以免费转赠给另一个人类。它的作品、收益与技能都在自己的控制台里。',
               style: TextStyle(
                   fontSize: 10.5, color: AppColors.textMuted, height: 1.6),
             ),

@@ -2,13 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../models/elf.dart';
-import '../pages/stage_bind_page.dart';
 import '../services/stage_bind_service.dart';
 import '../theme.dart';
 import 'share_card.dart';
 
-/// 分享面板：系统分享（分享卡片）+ 已绑定的第三方平台一键分发。
-/// 未绑定的平台点击后跳转绑定页，绑定完成再回来分享。
+/// 兼容旧资料卡分享入口；作品原始素材请使用 WorkShareHelper。
+/// 常用平台不是 OAuth 授权，不作为分享门槛。
 Future<void> showStageShare(
   BuildContext context, {
   required Elf elf,
@@ -28,16 +27,6 @@ Future<void> showStageShare(
     return;
   }
 
-  if (!StageBindService.instance.isBound(platform)) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('绑定${platform.label}后即可一键分发')),
-    );
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const StageBindPage()),
-    );
-    return;
-  }
-
   final text = stageCaption(elf, excerpt, platform);
   final png = await ShareHelper.renderCardPng(context, elf, excerpt: excerpt);
   if (!context.mounted) return;
@@ -54,7 +43,8 @@ Future<void> showStageShare(
     final message = status == StageShareStatus.notInstalled
         ? '未检测到${platform.label}，已改用系统分享'
         : '${platform.label}暂不支持直接发布，已改用系统分享';
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
   if (png == null) {
     await Share.share(text, subject: '${elf.name} · OpenElf');
@@ -71,9 +61,10 @@ Future<void> showStageShare(
 String stageCaption(Elf elf, String? excerpt, StagePlatform platform) {
   final body = (excerpt ?? '').trim();
   final head = body.isEmpty ? '「${elf.name}」的新作品' : body;
-  final tags = platform == StagePlatform.bilibili || platform == StagePlatform.wechat
-      ? ''
-      : '\n\n#AI创作 #AI网红 #OpenElf';
+  final tags =
+      platform == StagePlatform.bilibili || platform == StagePlatform.wechat
+          ? ''
+          : '\n\n#AI创作 #AI网红 #OpenElf';
   return '$head\n\n来自 OpenElf 的 AI「${elf.name}」（内容由 AI 生成）$tags\n${shareLinkFor(elf)}';
 }
 
@@ -132,7 +123,8 @@ class _StageShareSheet extends StatelessWidget {
                     onPressed: () => Navigator.of(context).pop(),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
-                    icon: Icon(Icons.close, size: 18, color: AppColors.textMuted),
+                    icon:
+                        Icon(Icons.close, size: 18, color: AppColors.textMuted),
                   ),
                 ],
               ),
@@ -210,7 +202,7 @@ class _StageShareSheet extends StatelessWidget {
       label: platform.label,
       icon: platform.icon,
       background: platform.color,
-      status: bound ? '已绑定' : '去绑定',
+      status: bound ? '常用' : '分享资料卡',
       statusColor: bound ? AppColors.ok : AppColors.cyan,
       onTap: () => _pick(context, _ShareSelection.platform(platform)),
     );
@@ -256,9 +248,7 @@ class _StageShareSheet extends StatelessWidget {
                 child: Icon(
                   icon,
                   size: 22,
-                  color: background == null
-                      ? AppColors.onBrand
-                      : Colors.white,
+                  color: background == null ? AppColors.onBrand : Colors.white,
                 ),
               ),
               const SizedBox(height: 7),

@@ -30,9 +30,8 @@ class AppContentDocument {
   bool get hasBody => content.trim().isNotEmpty;
 
   /// 生效日期（毫秒时间戳），0 表示未设置。
-  DateTime? get effectiveDate => effectiveAt > 0
-      ? DateTime.fromMillisecondsSinceEpoch(effectiveAt)
-      : null;
+  DateTime? get effectiveDate =>
+      effectiveAt > 0 ? DateTime.fromMillisecondsSinceEpoch(effectiveAt) : null;
 }
 
 class AppContent {
@@ -67,8 +66,7 @@ class AppContent {
       '垃圾广告',
       '其他',
     ],
-    'app.wallet.rule':
-        '消费后钻石不再流通：10💎 = ¥1。打赏礼物的 50% 作为服务费结算给创作者，收益过冷静期后可提现。',
+    'app.wallet.rule': '消费后钻石不再流通：10💎 = ¥1。打赏礼物的 50% 作为服务费结算给创作者，收益过冷静期后可提现。',
     'app.identity.note': '上传身份证完成核验，用于创建本人形象 AI',
     'app.create.declarations': [
       '形象为原创，或我已获得肖像权人的明确授权；不使用他人照片、明星或公众人物形象。',
@@ -86,8 +84,8 @@ class AppContent {
     if (rawDocs is Map) {
       rawDocs.forEach((key, value) {
         if (value is Map) {
-          docs[key.toString()] =
-              AppContentDocument.fromJson(key.toString(), Map<String, dynamic>.from(value));
+          docs[key.toString()] = AppContentDocument.fromJson(
+              key.toString(), Map<String, dynamic>.from(value));
         }
       });
     }
@@ -95,7 +93,8 @@ class AppContent {
     return AppContent(
       version: json['version']?.toString() ?? '',
       documents: docs,
-      configs: rawConfigs is Map ? Map<String, dynamic>.from(rawConfigs) : const {},
+      configs:
+          rawConfigs is Map ? Map<String, dynamic>.from(rawConfigs) : const {},
     );
   }
 
@@ -130,7 +129,8 @@ class AppContent {
   List<String> list(String key) {
     final v = configs[key];
     if (v is List) {
-      final items = v.map((e) => e.toString()).where((e) => e.trim().isNotEmpty).toList();
+      final items =
+          v.map((e) => e.toString()).where((e) => e.trim().isNotEmpty).toList();
       if (items.isNotEmpty) return items;
     }
     final fallbackValue = defaults[key];

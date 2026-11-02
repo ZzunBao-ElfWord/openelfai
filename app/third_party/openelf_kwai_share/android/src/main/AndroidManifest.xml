@@ -1,0 +1,13 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+  <queries><package android:name="com.smile.gifmaker" /></queries>
+  <application>
+    <!-- The SDK distribution includes auth; this integration never enables it. -->
+    <activity android:name="com.kwai.auth.login.kwailogin.h5login.KwaiH5LoginActivity" tools:node="remove" />
+    <activity android:name="com.kwai.auth.login.kwailogin.applogin.RouteHandlerActivity" tools:node="remove" />
+    <activity-alias android:name="${applicationId}.kwai.KwaiHandlerActivity" tools:node="remove" />
+    <activity android:name="com.kwai.opensdk.sdk.openapi.KwaiHandlerActivity" android:taskAffinity="${applicationId}" tools:replace="android:taskAffinity" />
+    <provider android:name="cn.openelfai.kwai.KwaiShareFileProvider" android:authorities="${applicationId}.kwai.share.files" android:exported="false" android:grantUriPermissions="true">
+      <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/openelf_kwai_paths" />
+    </provider>
+  </application>
+</manifest>

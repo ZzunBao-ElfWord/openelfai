@@ -3,14 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../data/world_data.dart';
-import '../config/commerce_config.dart';
 import '../models/elf.dart';
-import '../services/app_content_service.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/audio_player_card.dart';
 import '../widgets/common.dart';
-import '../widgets/stage_share_sheet.dart';
+import '../widgets/work_share_sheet.dart';
+import '../widgets/content_safety.dart';
 import '../widgets/workbench_panel.dart';
 import 'elf_chat_page.dart';
 import 'login_page.dart';
@@ -33,8 +32,7 @@ class _WorldPageState extends State<WorldPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tc;
 
-  /// 商业端（Android/iOS）登录后首次拉流要等钱包快照就绪（私有流需要计费环境），
-  /// 所以先监听状态，就绪后补一次拉取；桌面 / Web / 游客直接拉公开流。
+  /// Public content and desktop workbench do not wait for payment readiness.
   bool _kickedOff = false;
 
   @override
@@ -49,10 +47,7 @@ class _WorldPageState extends State<WorldPage>
   void _tryKickoffFeed() {
     if (_kickedOff || !mounted) return;
     final state = AppState.instance;
-    // 已登录的商业端等钱包就绪；其余情况（游客、桌面/Web）立即可拉公开流。
-    if (CommerceConfig.enabled &&
-        state.currentUser != null &&
-        !state.commerceReady) return;
+    // Guest browsing is supported; account-only actions remain authenticated.
     _kickedOff = true;
     state.loadFeed();
   }
@@ -60,7 +55,8 @@ class _WorldPageState extends State<WorldPage>
   /// 切换 tab 时才向服务端要该榜单，避免一次拉三条流。
   void _onTabChanged() {
     if (_tc.indexIsChanging) return;
-    final sort = switch (_tc.index) { 1 => 'hot', 2 => 'mine', _ => 'recommend' };
+    final sort =
+        switch (_tc.index) { 1 => 'hot', 2 => 'mine', _ => 'recommend' };
     AppState.instance.loadFeed(sort: sort);
   }
 
@@ -203,7 +199,8 @@ class _WorldPageState extends State<WorldPage>
               ),
               child: Padding(
                 padding: EdgeInsets.only(right: 10, top: 2, bottom: 2),
-                child: Icon(Icons.leaderboard_outlined, size: 17, color: AppColors.textMuted),
+                child: Icon(Icons.leaderboard_outlined,
+                    size: 17, color: AppColors.textMuted),
               ),
             ),
           ),
@@ -214,8 +211,7 @@ class _WorldPageState extends State<WorldPage>
               const SizedBox(width: 4),
               Text(
                 _fmt(WorldData.watchers),
-                style:
-                    TextStyle(fontSize: 11, color: AppColors.textMuted),
+                style: TextStyle(fontSize: 11, color: AppColors.textMuted),
               ),
             ],
           ),
@@ -248,10 +244,18 @@ class _WorldPageState extends State<WorldPage>
     final loading = state.feedLoading('world', sort: sort);
     if (posts.isEmpty) {
       return Center(
-        child: Text(
-          loading ? '正在加载…' : '这里还没有内容。',
-          style: TextStyle(fontSize: 12, color: AppColors.textMuted),
-        ),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(
+              loading
+                  ? '正在加载公共内容…'
+                  : state.feedError('world', sort: sort) ?? '暂无可展示的公开内容',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
+          if (!loading)
+            TextButton(
+                onPressed: () => state.loadFeed(sort: sort, reset: true),
+                child: const Text('重新加载')),
+        ]),
       );
     }
     final hasMore = state.feedHasMore('world', sort: sort);
@@ -318,7 +322,8 @@ class _WorldPageState extends State<WorldPage>
         Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) => VideoFeedPage(
-              seedPosts: state.posts.where((item) => item.kind == 'video').toList(),
+              seedPosts:
+                  state.posts.where((item) => item.kind == 'video').toList(),
               startPostId: p.id,
               showBack: true,
             ),
@@ -378,7 +383,8 @@ class _WorldPageState extends State<WorldPage>
                         const SizedBox(width: 4),
                         Text(
                           elf.serial,
-                          style: TextStyle(fontSize: 10, color: AppColors.textMuted),
+                          style: TextStyle(
+                              fontSize: 10, color: AppColors.textMuted),
                         ),
                         if (elf.isOfficial) ...[
                           const SizedBox(width: 4),
@@ -391,8 +397,8 @@ class _WorldPageState extends State<WorldPage>
                             ),
                             child: Text(
                               '官方',
-                              style: TextStyle(
-                                  fontSize: 9, color: AppColors.cyan),
+                              style:
+                                  TextStyle(fontSize: 9, color: AppColors.cyan),
                             ),
                           ),
                         ],
@@ -413,7 +419,8 @@ class _WorldPageState extends State<WorldPage>
                         const Spacer(),
                         Text(
                           p.timeAgo,
-                          style: TextStyle(fontSize: 10, color: AppColors.textMuted),
+                          style: TextStyle(
+                              fontSize: 10, color: AppColors.textMuted),
                         ),
                         const SizedBox(width: 2),
                         _reportIcon(
@@ -445,7 +452,9 @@ class _WorldPageState extends State<WorldPage>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (p.isReply) ...[
-                    Text('↩ 回复 某条内容', style: TextStyle(fontSize: 10, color: AppColors.textFaint)),
+                    Text('↩ 回复 某条内容',
+                        style: TextStyle(
+                            fontSize: 10, color: AppColors.textFaint)),
                     const SizedBox(height: 4),
                   ],
                   _renderContent(p),
@@ -468,8 +477,8 @@ class _WorldPageState extends State<WorldPage>
           children: [
             Text(
               p.body,
-              style: TextStyle(
-                  fontSize: 14, color: AppColors.text, height: 1.6),
+              style:
+                  TextStyle(fontSize: 14, color: AppColors.text, height: 1.6),
             ),
             const SizedBox(height: 8),
             ClipRRect(
@@ -523,8 +532,8 @@ class _WorldPageState extends State<WorldPage>
           children: [
             Text(
               p.body,
-              style: TextStyle(
-                  fontSize: 14, color: AppColors.text, height: 1.6),
+              style:
+                  TextStyle(fontSize: 14, color: AppColors.text, height: 1.6),
             ),
             const SizedBox(height: 8),
             ClipRRect(
@@ -571,8 +580,8 @@ class _WorldPageState extends State<WorldPage>
           children: [
             Text(
               p.body,
-              style: TextStyle(
-                  fontSize: 14, color: AppColors.text, height: 1.6),
+              style:
+                  TextStyle(fontSize: 14, color: AppColors.text, height: 1.6),
             ),
             const SizedBox(height: 8),
             AudioPlayerCard(post: p),
@@ -610,15 +619,14 @@ class _WorldPageState extends State<WorldPage>
           ),
           child: Text(
             p.body,
-            style: TextStyle(
-                fontSize: 13, color: AppColors.textSub, height: 1.6),
+            style:
+                TextStyle(fontSize: 13, color: AppColors.textSub, height: 1.6),
           ),
         );
       default: // text
         return Text(
           p.body,
-          style: TextStyle(
-              fontSize: 14, color: AppColors.text, height: 1.65),
+          style: TextStyle(fontSize: 14, color: AppColors.text, height: 1.65),
         );
     }
   }
@@ -650,117 +658,123 @@ class _WorldPageState extends State<WorldPage>
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-        // 点赞（+1 回声/注视，再点取消回滚）
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () {
-            if (checkLoginOrPrompt(context)) state.toggleLike(p.id);
-          },
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Row(
-              children: [
-                Icon(
-                  liked ? Icons.favorite : Icons.favorite_border,
-                  size: 14,
-                  color: liked ? AppColors.cyan : AppColors.textMuted,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  '${p.likes}',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: liked ? AppColors.cyan : AppColors.textMuted,
+                // 点赞（+1 回声/注视，再点取消回滚）
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    if (checkLoginOrPrompt(context)) state.toggleLike(p.id);
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        Icon(
+                          liked ? Icons.favorite : Icons.favorite_border,
+                          size: 14,
+                          color: liked ? AppColors.cyan : AppColors.textMuted,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${p.likes}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: liked ? AppColors.cyan : AppColors.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(width: 16),
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () {
-            if (checkLoginOrPrompt(context)) _showCommentsSheet(state, p);
-          },
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Row(
-              children: [
-                Icon(Icons.chat_bubble_outline,
-                    size: 14, color: AppColors.textMuted),
-                const SizedBox(width: 4),
-                Text(
-                  '${p.replies}',
-                  style:
-                      TextStyle(fontSize: 11, color: AppColors.textMuted),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(width: 16),
-        // 收藏（+3 回声/注视，再点取消回滚）
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () {
-            if (checkLoginOrPrompt(context)) state.toggleCollect(p.id);
-          },
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Row(
-              children: [
-                Icon(
-                  collected ? Icons.bookmark : Icons.bookmark_border,
-                  size: 14,
-                  color: collected ? AppColors.violetSoft : AppColors.textMuted,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  '${p.collects}',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: collected ? AppColors.violetSoft : AppColors.textMuted,
+                const SizedBox(width: 16),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    if (checkLoginOrPrompt(context))
+                      _showCommentsSheet(state, p);
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        Icon(Icons.chat_bubble_outline,
+                            size: 14, color: AppColors.textMuted),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${p.replies}',
+                          style: TextStyle(
+                              fontSize: 11, color: AppColors.textMuted),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Icon(Icons.visibility_outlined, size: 14, color: AppColors.cyan),
-        const SizedBox(width: 4),
-        Text(
-          '${_fmt(p.views)}',
-          style: TextStyle(fontSize: 11, color: AppColors.cyan),
-        ),
-        const SizedBox(width: 10),
-        if (p.dwell > 0)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-            decoration: BoxDecoration(
-              color: AppColors.cyan.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(3),
-            ),
-            child: Text(
-              '均停 ${p.dwell}s',
-              style: TextStyle(fontSize: 9.5, color: AppColors.cyan),
-            ),
-          ),
-        const SizedBox(width: 12),
-        // 分享（v1.3：分享卡片 + 落地页引流，分享行为本身不计分）
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => showStageShare(
-            context,
-            elf: elf,
-            excerpt: p.body.length > 40 ? '${p.body.substring(0, 40)}…' : p.body,
-          ),
-          child: Padding(
-            padding: EdgeInsets.symmetric(vertical: 4),
-            child: Icon(Icons.ios_share, size: 14, color: AppColors.textMuted, semanticLabel: '分享'),
-          ),
-        ),
+                const SizedBox(width: 16),
+                // 收藏（+3 回声/注视，再点取消回滚）
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    if (checkLoginOrPrompt(context)) state.toggleCollect(p.id);
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        Icon(
+                          collected ? Icons.bookmark : Icons.bookmark_border,
+                          size: 14,
+                          color: collected
+                              ? AppColors.violetSoft
+                              : AppColors.textMuted,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${p.collects}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: collected
+                                ? AppColors.violetSoft
+                                : AppColors.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Icon(Icons.visibility_outlined,
+                    size: 14, color: AppColors.cyan),
+                const SizedBox(width: 4),
+                Text(
+                  '${_fmt(p.views)}',
+                  style: TextStyle(fontSize: 11, color: AppColors.cyan),
+                ),
+                const SizedBox(width: 10),
+                if (p.dwell > 0)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppColors.cyan.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                    child: Text(
+                      '均停 ${p.dwell}s',
+                      style: TextStyle(fontSize: 9.5, color: AppColors.cyan),
+                    ),
+                  ),
+                const SizedBox(width: 12),
+                // 分享（v1.3：分享卡片 + 落地页引流，分享行为本身不计分）
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => WorkShareHelper.share(context, p),
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 4),
+                    child: Icon(Icons.ios_share,
+                        size: 14,
+                        color: AppColors.textMuted,
+                        semanticLabel: '分享'),
+                  ),
+                ),
               ],
             ),
           ),
@@ -817,6 +831,7 @@ class _WorldPageState extends State<WorldPage>
         return;
       }
       input.clear();
+      messenger.showSnackBar(const SnackBar(content: Text('评论已发布')));
       // 弹层内的列表和外面卡片的 replies 都会随 state 通知刷新
     }
 
@@ -1150,153 +1165,27 @@ class _WorldPageState extends State<WorldPage>
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(4),
-          child: Icon(Icons.flag_outlined,
-              size: 14, color: AppColors.textFaint),
+          child:
+              Icon(Icons.flag_outlined, size: 14, color: AppColors.textFaint),
         ),
       ),
     );
   }
 
-  /// 举报原因是运营可配置的中文文案，提交时映射为服务端枚举。
-  static String _reasonCode(String label) {
-    const rules = <String, List<String>>{
-      'porn': ['色情', '低俗', '裸露'],
-      'violence': ['暴力', '血腥', '恐怖'],
-      'minors': ['未成年', '儿童'],
-      'politics': ['政治', '涉政'],
-      'illegal': ['违法', '毒品', '赌博', '诈骗'],
-      'harassment': ['骚扰', '辱骂', '人身攻击', '霸凌'],
-      'fraud': ['欺诈', '诈骗', '虚假'],
-      'privacy': ['隐私', '人肉', '泄露'],
-    };
-    for (final entry in rules.entries) {
-      if (entry.value.any(label.contains)) return entry.key;
-    }
-    return 'other';
-  }
-
   void _showReportPostSheet(AppState state, ElfPost p) {
-    _showReportSheet(
-      state: state,
-      targetType: 'post',
-      targetId: p.id,
-      targetLabel: '一条内容',
-      elfId: p.elfId,
-    );
+    ContentSafety.show(context,
+        targetKind: 'post',
+        targetId: p.id,
+        elfId: p.elfId,
+        ownerId: state.elf(p.elfId).ownerId);
   }
 
   void _showReportCommentSheet(AppState state, PostComment c) {
-    _showReportSheet(
-      state: state,
-      targetType: 'comment',
-      targetId: c.id,
-      targetLabel: '一条评论',
-    );
-  }
-
-  void _showReportSheet({
-    required AppState state,
-    required String targetType,
-    required String targetId,
-    required String targetLabel,
-    String? elfId,
-  }) {
-    final content = AppContentService.instance.content.value;
-    if (!content.flag('app.report.enabled')) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('举报入口暂未开放')),
-      );
-      return;
-    }
-    final reasons = content.list('app.report.reasons');
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '举报 $targetLabel',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.text,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '选择举报原因',
-                  style: TextStyle(fontSize: 11, color: AppColors.textMuted),
-                ),
-                const SizedBox(height: 10),
-                ...reasons.map(
-                  (r) => InkWell(
-                    onTap: () async {
-                      Navigator.of(ctx).pop();
-                      final error = await state.submitReport(
-                        targetType: targetType,
-                        targetId: targetId,
-                        reason: _reasonCode(r),
-                        detail: r,
-                      );
-                      if (!mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(error ?? '已收到举报，我们会尽快处理'),
-                        ),
-                      );
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      child: Text(
-                        r,
-                        style: TextStyle(
-                            fontSize: 13, color: AppColors.textSub),
-                      ),
-                    ),
-                  ),
-                ),
-                if (elfId != null) ...[
-                  Divider(height: 18, color: AppColors.strokeSoft),
-                  InkWell(
-                    onTap: () async {
-                      Navigator.of(ctx).pop();
-                      final error = await state.blockElf(elfId);
-                      if (!mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(error ?? '已拉黑这只 AI，将不再看到它的内容')),
-                      );
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      child: Row(
-                        children: [
-                          Icon(Icons.block, size: 15, color: AppColors.warn),
-                          const SizedBox(width: 6),
-                          Text(
-                            '拉黑这只 AI',
-                            style: TextStyle(
-                                fontSize: 13, color: AppColors.warn),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        );
-      },
-    );
+    ContentSafety.show(context,
+        targetKind: 'comment',
+        targetId: c.id,
+        elfId: c.authorElfId,
+        ownerId: c.userId);
   }
 
   static String _fmt(int n) {

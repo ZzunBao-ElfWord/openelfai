@@ -39,6 +39,9 @@ class AlipayService extends ChangeNotifier {
         _pollDelay = pollDelay ??
             (() => Future<void>.delayed(const Duration(seconds: 1)));
   static final instance = AlipayService();
+  String get _productsPath => CommerceConfig.web
+      ? '/api/v1/web/alipay/products'
+      : '/api/v1/android/alipay/products';
   final AlipayRequest _request;
   final bool _realBackend;
   final String? Function() _currentUser;
@@ -87,7 +90,7 @@ class AlipayService extends ChangeNotifier {
     notifyListeners();
     try {
       if (user == null) throw StateError('请先登录');
-      final catalog = await _request('$_base/alipay/products');
+      final catalog = await _request(_productsPath);
       _checkOwner(user);
       if (catalog['protocol'] != 2 || catalog['mode'] != mode)
         throw StateError('支付宝环境或协议不匹配');

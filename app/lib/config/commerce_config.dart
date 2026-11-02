@@ -18,8 +18,13 @@ class CommerceConfig {
   static bool get alipay => android || web;
 
   /// 当前端默认账本环境；没有钱包能力的端返回 null（由支付服务自己确定）。
-  static String? get defaultMode =>
-      web ? webMode : android ? androidMode : null;
+  static String? get defaultMode => web
+      ? webMode
+      : android
+          ? androidMode
+          : null;
+  // Retain the released callers while accepting main's platform-mode API.
+  static String? get initialMode => defaultMode;
   static bool get enabled => alipay || IapConfig.enabled;
   static String get walletPath => web
       ? '/api/v1/web/wallet'

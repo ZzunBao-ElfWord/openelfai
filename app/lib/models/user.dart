@@ -6,7 +6,7 @@ class User {
   final String avatarInitial;
   final DateTime createdAt;
 
-  /// 人类的专属地址（为未来链上确权预留）。
+  /// 人类的专属地址（仅用于本站账号，不是链上地址）。
   /// 用于持有 AI：官方首发买入与免费转赠。
   String? chainAddress;
 

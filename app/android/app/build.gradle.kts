@@ -1,12 +1,23 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val releaseKeyFile = rootProject.file("key.properties")
+val releaseKeys = Properties()
+if (releaseKeyFile.exists()) {
+    releaseKeyFile.reader(Charsets.UTF_8).use { releaseKeys.load(it) }
+}
+
 android {
     namespace = "com.openelf.app"
-    compileSdk = flutter.compileSdkVersion
+    val playbackRetryTest = providers.gradleProperty("OPENELF_MEDIA3_RETRY_TEST")
+        .map { it == "true" }.getOrElse(false)
+    compileSdk = if (playbackRetryTest) 37 else flutter.compileSdkVersion
+    if (playbackRetryTest) compileSdkMinor = 0
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -16,6 +27,11 @@ android {
 
     defaultConfig {
         applicationId = "com.openelf.app"
+        manifestPlaceholders["JPUSH_PKGNAME"] = "com.openelf.app"
+        manifestPlaceholders["JPUSH_APPKEY"] = "3439c18b0c3021ae5e29ba92"
+        manifestPlaceholders["JPUSH_CHANNEL"] = "developer-default"
+        // Public ID only; intentionally blank while the Kwai app is in review.
+        manifestPlaceholders["KWAI_APP_ID"] = providers.gradleProperty("OPENELF_KWAI_APP_ID").getOrElse("")
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -24,17 +40,33 @@ android {
         // is added automatically by Flutter. (https://developer.android.com/studio/build/configure-apk-splits#configure-APK-versions)
         // You can force using the value of versionCode by specifying the `-P force-version-code-ignoring-abi=true`
         // flag during build.
-        versionCode = flutter.versionCode
+        // User policy: next release is 1.0.4 (22), then roll over after build 99.
+        // Already delivered 1.0.5 (2) used code 22. The migration offset keeps
+        // Android updates monotonic: 1.0.4 (22) -> 23; (99) -> 100;
+        // 1.0.5 (1) -> 101. Never rewrite or reissue the delivered APKs.
+        val releaseParts = flutter.versionName.split(".").map { it.toInt() }
+        require(releaseParts.size == 3 && releaseParts[0] == 1 && releaseParts[1] == 0 && releaseParts[2] >= 4)
+        require(flutter.versionCode in 1..99)
+        versionCode = (releaseParts[2] - 4) * 99 + flutter.versionCode + 1
         versionName = flutter.versionName
+    }
+
+    signingConfigs {
+        create("release") {
+            if (releaseKeyFile.exists()) {
+                keyAlias = releaseKeys.getProperty("keyAlias")
+                keyPassword = releaseKeys.getProperty("keyPassword")
+                storeFile = file(releaseKeys.getProperty("storeFile"))
+                storePassword = releaseKeys.getProperty("storePassword")
+            }
+        }
     }
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
             isMinifyEnabled = false
             isShrinkResources = false
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 }

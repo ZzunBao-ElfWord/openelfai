@@ -1,11 +1,12 @@
 'use strict';
 
 const crypto = require('node:crypto');
-const { changeBalance, fingerprint, fail } = require('./payment_store');
-const { moderateText } = require('./compliance');
 const { videoDeliveryUrl } = require('./video_delivery');
-const { scoreWorldPost, QUALITY_FEED_MIN } = require('./quality');
+const { changeBalance, fingerprint, fail } = require('./payment_store');
 const { RESOURCE_POLICY, assertResourceAction } = require('./resource_policy');
+const { earningsRows, incomeRisk } = require('./earnings_safety');
+const { moderateText } = require('./compliance');
+const { scoreWorldPost, QUALITY_FEED_MIN } = require('./quality');
 const { renderElfAvatar, seedFromId, DEFAULT_WORLD_ASSETS_DIR } = require('./elf_avatar');
 
 const CATALOG = [
@@ -42,7 +43,6 @@ const MODULE_META = {
 const USER_RE = /^u_[a-f0-9]{32}$/;
 const REQUEST_RE = /^[A-Za-z0-9_-]{16,100}$/;
 const PHONE_RE = /^1\d{10}$/;
-const ADDRESS_RE = /^0x[a-f0-9]{40}$/;
 const FORGET_COST = 20;
 const CREATE_ELF_COST = 200;
 /// 创作者服务费（百分比）：打赏礼物按 50% 结算给创作者，平台留剩余部分。
@@ -218,7 +218,7 @@ function decodeIdImage(raw, label) {
 
 /// 确定性派生地址：同一个 seed 永远得到同一个地址。
 function address(seed) {
-  return '0x' + crypto.createHash('sha256').update(seed).digest('hex').slice(0, 40);
+  return seed.slice(seed.indexOf(':') + 1);
 }
 
 function levelOf(echo) {
@@ -329,6 +329,8 @@ function normalizeElf(elf) {
   if (!Array.isArray(elf.learnedSkills)) {
     elf.learnedSkills = [...new Set([...(elf.equipped || []), ...(elf.ownedModules || [])])];
   }
+  // Preserve main's character-mint transport fields. Production ownership and
+  // recipient-address provenance need separate verification before chain use.
   if (!elf.chainAddress) elf.chainAddress = address('elf:' + elf.id);
   // 铸造形象图：老数据没有头像字段，统一补 null，保证三端载荷口径一致。
   if (elf.imageUrl === undefined) elf.imageUrl = null;
@@ -393,14 +395,14 @@ function createCommerceService({ db = null, store, settings, payout = null, payo
     return profile;
   }
   /// 一笔创作收益：累加终身收益并进入「待结算」，冷静期后才转为「可提现」。
-  async function creditEarning(tx, ownerId, wallet, { diamonds, source, refId, at }) {
+  async function creditEarning(tx, ownerId, wallet, { diamonds, source, refId, payerId, at }) {
     const cents = Math.round(diamonds * 10 * (CREATOR_SHARE_PERCENT[source] || 0) / 100);
     if (cents <= 0) return 0;
     const id = 'ea_' + crypto.randomUUID().replaceAll('-', '');
     wallet.earningsFen += cents;
     wallet.pendingCents += cents;
     wallet.version++;
-    await tx.put('earning', id, { id, source, refId: refId || null, cents,
+    await tx.put('earning', id, { id, source, refId: refId || null, payerId, cents,
       createdAt: new Date(at).toISOString(), settleAt: at + SETTLE_MS },
     { owner: ownerId, state: 'pending' });
     return cents;
@@ -408,9 +410,8 @@ function createCommerceService({ db = null, store, settings, payout = null, payo
 
   /// 到期收益结算：待结算 → 可提现。由快照与提现申请触发，不额外起定时器。
   async function settleEarnings(tx, userId, wallet, at) {
-    const rows = await tx.list('earning', { owner: userId, state: 'pending', limit: 500, lock: true });
     let moved = 0;
-    for (const row of rows) {
+    for await (const row of earningsRows(tx, userId, { state: 'pending', lock: true })) {
       if (Number(row.settleAt) > at) continue;
       wallet.pendingCents = Math.max(0, wallet.pendingCents - row.cents);
       wallet.availableCents += row.cents;
@@ -455,10 +456,19 @@ function createCommerceService({ db = null, store, settings, payout = null, payo
       if (agreement?.version !== CREATOR_AGREEMENT_VERSION) {
         throw fail(403, 'AGREEMENT_REQUIRED', '提现前请先签署创作者服务协议');
       }
+      const risk = await incomeRisk(tx, user.id, wallet, { lock: true });
+      if (risk) throw fail(409, 'EARNINGS_REVIEW_REQUIRED', risk);
       await settleEarnings(tx, user.id, wallet, Date.now());
       if (wallet.availableCents < amount) throw fail(409, 'INSUFFICIENT_EARNINGS', '可提现收益不足');
       const today = new Date().toISOString().slice(0, 10);
-      const recent = await tx.list('withdrawal', { owner: user.id, limit: 200 });
+      const recent = [];
+      let after = '';
+      for (;;) {
+        const page = await tx.scan('withdrawal', { owner: user.id, after, limit: 200 });
+        recent.push(...page.map(row => row.value));
+        if (page.length < 200) break;
+        after = page[page.length - 1].key;
+      }
       const used = recent.filter((row) => row.status !== 'rejected' && String(row.createdAt).slice(0, 10) === today)
         .reduce((sum, row) => sum + row.amountCents, 0);
       if (used + amount > WITHDRAW_DAILY_LIMIT_CENTS) throw fail(409, 'WITHDRAW_LIMIT', '超过单日提现上限');
@@ -497,6 +507,9 @@ function createCommerceService({ db = null, store, settings, payout = null, payo
         await tx.put('withdrawal', row.id, row, { owner: row.ownerId, state: 'rejected' });
         return { rejected: { withdrawal: publicWithdrawal(row) } };
       }
+      const wallet = await tx.lockWallet(row.ownerId);
+      const risk = await incomeRisk(tx, row.ownerId, wallet, { lock: true });
+      if (risk) throw fail(409, 'EARNINGS_REVIEW_REQUIRED', risk);
       row.status = 'paying';
       row.payeeVerifiedAt = new Date().toISOString();
       await tx.put('withdrawal', row.id, row, { owner: row.ownerId, state: 'paying' });
@@ -582,10 +595,17 @@ function createCommerceService({ db = null, store, settings, payout = null, payo
     return store.transaction(env, async (tx) => {
       const wallet = await tx.lockWallet(user.id);
       await settleEarnings(tx, user.id, wallet, Date.now());
+      const withdrawalBlockedReason = await incomeRisk(tx, user.id, wallet);
+      const earningsByElf = new Map();
+      for await (const row of earningsRows(tx, user.id)) {
+        if (row.source === 'tip' && row.refId) {
+          earningsByElf.set(row.refId, (earningsByElf.get(row.refId) || 0) + row.cents);
+        }
+      }
       const profile = await ensureProfile(tx, user, wallet);
       const assets = new Map((await tx.list('elf')).map((elf) => [elf.id, normalizeElf(elf)]));
       for (const elf of await tx.list('elf', { owner: user.id })) assets.set(elf.id, normalizeElf(elf));
-      const posts = (await tx.list('post', { limit: 100, state: '' })).map(normalizePost)
+      const posts = (await tx.list('post', { limit: 100 })).map(normalizePost)
         .filter((post) => !blocked?.elves.has(post.elfId));
       for (const id of new Set([...posts.map((p) => p.elfId), profile.activeElfId].filter(Boolean))) {
         if (!assets.has(id)) { const elf = await tx.get('elf', id); if (elf) assets.set(id, normalizeElf(elf)); }
@@ -607,6 +627,7 @@ function createCommerceService({ db = null, store, settings, payout = null, payo
         // 创作者收益三档 + 提现规则，客户端只做展示与入口。
         earnings: {
           pendingCents: wallet.pendingCents, availableCents: wallet.availableCents,
+          withdrawalBlockedReason,
           withdrawnCents: wallet.withdrawnCents, lifetimeCents: wallet.earningsFen,
           settleDays: SETTLE_DAYS, minWithdrawCents: WITHDRAW_MIN_CENTS,
           feeBps: WITHDRAW_FEE_BPS, dailyLimitCents: WITHDRAW_DAILY_LIMIT_CENTS,
@@ -619,6 +640,7 @@ function createCommerceService({ db = null, store, settings, payout = null, payo
           },
         },
         withdrawals: (await tx.list('withdrawal', { owner: user.id, limit: 20 })).map(publicWithdrawal),
+        accountId: user.id,
         humanAddress: profile.humanAddress,
         modulePrices: { ...MODULE_PRICES,
           ...Object.fromEntries(devModules.map((row) => [row.id, toNumber(row.price_diamonds)])) },
@@ -635,10 +657,10 @@ function createCommerceService({ db = null, store, settings, payout = null, payo
         comments: comments.map((row) => ({ id: row.id, postId: row.postId, authorLabel: row.authorLabel,
           text: row.text, time: timeAgoLabel(row.time), isMine: row.userId === user.id })),
         books: books.map((book) => ({ id: book.id, moduleId: book.moduleId,
-          ownerAddress: book.ownerAddress, mintedAt: book.mintedAt })),
+          ownerAddress: user.id, mintedAt: book.mintedAt })),
         elves: [...assets.values()].map((elf) => ({ ...decayAttention(elf),
           isMine: elf.ownerId === user.id && elf.status === 'owned',
-          earningsYuan: elf.ownerId === user.id ? wallet.earningsFen / 100 : 0 })),
+          earningsYuan: elf.ownerId === user.id ? (earningsByElf.get(elf.id) || 0) / 100 : 0 })),
         primary: await Promise.all(CATALOG.map(async (item) => {
           // 市场货架同样带头像：种子脚本渲染的官方形象图，未种子时为 null。
           const seedRow = await tx.get('elf_avatar_seed', item.id);
@@ -666,6 +688,9 @@ function createCommerceService({ db = null, store, settings, payout = null, payo
       let posted = 0;
       let stopped = 0;
       for (const elf of due) {
+        // Content restrictions do not alter ownership, balances or withdrawals.
+        if ((await tx.get('community_sanction', 'elf:' + elf.id))?.active ||
+            (await tx.get('community_sanction', 'user:' + elf.ownerId))?.active) continue;
         const candidates = (elf.learnedSkills || []).filter((id) => id !== 'auto' && MODULES[id]);
         if (!candidates.length) {
           // 只有运营中枢、没有可选技能：下一轮再来，不算停工。
@@ -781,7 +806,7 @@ function createCommerceService({ db = null, store, settings, payout = null, payo
       const mine = sort === 'mine'
         ? new Set((await tx.list('elf', { owner: user.id })).map((elf) => elf.id)) : null;
       const owners = blocked?.users.size ? await tx.owners('elf') : null;
-      const pool = (await tx.list('post', { limit: FEED_SCAN, state: '' })).map(normalizePost)
+      const pool = (await tx.list('post', { limit: FEED_SCAN })).map(normalizePost)
         .filter((post) => (channel === 'video' ? post.kind === 'video' : true))
         .filter((post) => (mine ? mine.has(post.elfId) : true))
         .filter((post) => !blocked?.elves.has(post.elfId))
@@ -821,7 +846,7 @@ function createCommerceService({ db = null, store, settings, payout = null, payo
         elves.push({ ...normalized,
           isMine: user != null && normalized.ownerId === user.id && normalized.status === 'owned' });
       }
-      return { channel, sort, page, size, posts, elves, qualityFiltered,
+      return { communityViewer: user?.id || null, channel, sort, page, size, posts, elves, qualityFiltered,
         hasMore: (page + 1) * size < ranked.length };
     });
   }
@@ -874,7 +899,8 @@ function createCommerceService({ db = null, store, settings, payout = null, payo
         const target = wallets.get(id);
         // 创作者分成进「待结算」，冷静期后才可提现；平台保留剩余部分。
         await creditEarning(tx, id, target, { diamonds, source,
-          refId: body.listingId || body.elfId || null, at: Date.now() });
+          refId: source === 'tip' ? body.elfId : body.listingId || body.elfId || null,
+          payerId: user.id, at: Date.now() });
         await tx.saveWallet(id, target);
       };
       /// 指定 AI 优先，其次回落到当前选中的 AI；找不到或不属于当前用户返回 null。
@@ -894,8 +920,8 @@ function createCommerceService({ db = null, store, settings, payout = null, payo
         if (!value) throw fail(400, 'INVALID_RECIPIENT', '请填写接收方手机号或人类地址');
         let target;
         if (PHONE_RE.test(value)) target = await tx.userByPhone(value);
-        else if (ADDRESS_RE.test(value.toLowerCase())) target = await tx.userByHumanAddress(value.toLowerCase());
-        else throw fail(400, 'INVALID_RECIPIENT', '接收方需为 11 位手机号或 0x 人类地址');
+        else if (USER_RE.test(value)) target = await tx.user(value);
+        else throw fail(400, 'INVALID_RECIPIENT', '接收方需为11位手机号或站内账号ID，不支持外部钱包');
         if (!target || target.status !== 'active') throw fail(404, 'RECIPIENT_NOT_FOUND', '找不到接收方账号');
         return target;
       };
@@ -1084,7 +1110,7 @@ function createCommerceService({ db = null, store, settings, payout = null, payo
         await changeBalance(tx, user.id, wallet, { eventId, type: 'buy_module', amount: -price, spend: true, note: '购入技能书 ' + body.moduleId });
         const bookId = 'bk_' + crypto.randomUUID().replaceAll('-', '');
         await tx.put('book', bookId, { id: bookId, moduleId: body.moduleId, ownerId: user.id,
-          ownerAddress: profile.humanAddress, mintedAt: new Date().toISOString(), status: 'owned' },
+          ownerAddress: user.id, mintedAt: new Date().toISOString(), status: 'owned' },
         { owner: user.id, state: 'owned' });
         if (devRow && db) {
           // 开发者分成同样先进「待结算」，冷静期后转为可提现；并单独记一份平台对账流水。
@@ -1280,7 +1306,12 @@ function createCommerceService({ db = null, store, settings, payout = null, payo
     const env = environment(hint);
     return store.transaction(env, async (tx) => {
       const profile = await tx.get('profile', user.id);
-      return profile?.humanAddress || null;
+      const value = profile?.humanAddress;
+      // Legacy display identifiers are deterministic hashes, not registered
+      // wallets. Never mint to them merely because they look like 0x addresses.
+      if (typeof value !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(value)
+          || value.toLowerCase() === address('user:' + user.id).toLowerCase()) return null;
+      return value;
     });
   }
 

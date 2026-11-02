@@ -1,6 +1,8 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { prepare } = require('../deploy/android/patch.cjs');
 const { prepare: prepareApple } = require('../deploy/apple/patch.cjs');
 const original = {
@@ -40,4 +42,30 @@ test('纯Apple补丁不引入安卓路由/SDK，已更新安卓时保留其路�
   assert.ok(!baseline.app.includes('const alipay ='));
   const updated = prepare(baseline);
   assert.deepEqual(prepareApple(updated), updated);
+});
+
+test('重复补丁保留独立平台充值初始化，不重复复制或吞掉未知代码', () => {
+  const updated = prepare(prepareApple(original));
+  const marker = '  // 内购默认关闭。';
+  const independent = "  const platformTopup = { marker: 'keep-web-topup' };\n";
+  const baseline = { ...updated, app: updated.app.replace(marker, independent + marker) };
+  const again = prepare(baseline);
+  assert.ok(again.app.includes(independent));
+  assert.equal(again.app.split('const platformTopup =').length, 2);
+  assert.deepEqual(prepare(again), again);
+  assert.throws(() => prepare({ ...updated,
+    app: updated.app.replace('settings: config.androidCommerce, payout', 'settings: unknownSettings, payout') }), /无法识别/);
+});
+
+test('当前完整服务端源码重复部署保留网页、推送和注销入口', () => {
+  const root = path.resolve(__dirname, '..');
+  const source = Object.fromEntries(Object.entries({ app: 'src/app.js', config: 'src/config.js',
+    db: 'src/db.js', packageJson: 'package.json' }).map(([key, file]) =>
+    [key, fs.readFileSync(path.join(root, file), 'utf8')]));
+  const prepared = prepare(source);
+  assert.deepEqual(prepare(prepared), prepared);
+  assert.equal(prepared.app.split('const platformTopup =').length, 2);
+  for (const module of ['platform/web_topup', 'push_routes', 'account_deletion']) {
+    assert.ok(prepared.app.includes("require('./" + module + "')"));
+  }
 });

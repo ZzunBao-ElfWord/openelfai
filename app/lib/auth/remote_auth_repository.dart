@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/api_config.dart';
+import '../push/push_service.dart';
 import '../models/user.dart';
 import 'auth_repository.dart';
 
@@ -14,6 +15,9 @@ import 'auth_repository.dart';
 /// 令牌存放在 Android Keystore 加密存储，用户资料缓存在 shared_preferences。
 class RemoteAuthRepository implements AuthRepository {
   RemoteAuthRepository._();
+
+  RemoteAuthRepository.forTesting({required http.Client client})
+      : _client = client;
 
   static final RemoteAuthRepository instance = RemoteAuthRepository._();
 
@@ -28,6 +32,7 @@ class RemoteAuthRepository implements AuthRepository {
 
   http.Client? _client;
   Future<bool>? _refreshing;
+  int _sessionEpoch = 0;
 
   http.Client get _http => _client ??= http.Client();
 
@@ -46,6 +51,7 @@ class RemoteAuthRepository implements AuthRepository {
 
   @override
   Future<User?> restoreSession() async {
+    final epoch = _sessionEpoch;
     final accessToken = await _secure.read(key: _kAccessToken);
     final refreshToken = await _secure.read(key: _kRefreshToken);
 
@@ -54,6 +60,7 @@ class RemoteAuthRepository implements AuthRepository {
     try {
       final body = await _get(ApiConfig.mePath, accessToken: accessToken);
       final user = _parseUser(body['user'], await currentUser);
+      if (epoch != _sessionEpoch) return null;
       await _cacheUser(user);
       return user;
     } on AuthException catch (error) {
@@ -109,6 +116,8 @@ class RemoteAuthRepository implements AuthRepository {
 
   @override
   Future<void> logout() async {
+    _sessionEpoch++;
+    await PushService.instance.signOut();
     final accessToken = await _secure.read(key: _kAccessToken);
     final refreshToken = await _secure.read(key: _kRefreshToken);
 
@@ -127,6 +136,35 @@ class RemoteAuthRepository implements AuthRepository {
     await _clearSession();
   }
 
+  @override
+  Future<void> deleteAccount() async {
+    final userId = (await currentUser)?.id;
+    final result = await authenticatedRequest('/api/v1/auth/delete-account',
+        body: {'confirmation': 'DELETE_MY_ACCOUNT'});
+    if (result['deleted'] != true) {
+      throw const AuthException('DELETE_NOT_CONFIRMED', '服务器未确认注销成功，请稍后重试');
+    }
+    _sessionEpoch++;
+    // A refresh started before deletion must not restore an old local session.
+    await PushService.instance.signOut();
+    final pending = _refreshing;
+    if (pending != null) {
+      try {
+        await pending;
+      } catch (_) {}
+    }
+    await _clearSession();
+    if (userId != null && userId.isNotEmpty) {
+      final prefs = await _prefs;
+      for (final key in prefs.getKeys().toList()) {
+        if (key.startsWith('openelf.') &&
+            (key.endsWith('.$userId') || key.contains('.$userId.'))) {
+          await prefs.remove(key);
+        }
+      }
+    }
+  }
+
   // —— 会话续期（单飞：并发请求只刷新一次）——
 
   Future<bool> _refreshSession() {
@@ -139,6 +177,7 @@ class RemoteAuthRepository implements AuthRepository {
   }
 
   Future<bool> _doRefresh() async {
+    final epoch = _sessionEpoch;
     final refreshToken = await _secure.read(key: _kRefreshToken);
     if (refreshToken == null) return false;
 
@@ -158,6 +197,14 @@ class RemoteAuthRepository implements AuthRepository {
       }
 
       final user = _parseUser(body['user'], await currentUser);
+      if (epoch != _sessionEpoch) {
+        // A response from before logout/deletion must never resurrect a session.
+        try {
+          await _post(ApiConfig.logoutPath, {'refreshToken': newRefreshToken},
+              accessToken: accessToken);
+        } catch (_) {}
+        return false;
+      }
       await _saveSession(accessToken, newRefreshToken, user);
       return true;
     } on AuthException catch (error) {
@@ -355,6 +402,7 @@ class RemoteAuthRepository implements AuthRepository {
   }
 
   Future<void> _clearSession() async {
+    PushService.instance.clearLocalAccount();
     await _secure.delete(key: _kAccessToken);
     await _secure.delete(key: _kRefreshToken);
     await (await _prefs).remove(_kUserCache);

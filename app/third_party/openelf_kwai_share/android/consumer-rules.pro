@@ -1,0 +1,2 @@
+-keep class com.kwai.opensdk.sdk.** { *; }
+-keep class com.kwai.auth.** { *; }

@@ -110,6 +110,8 @@ test('校验通过后落盘并发布一条视频动态', async () => {
 
   const saved = [...store.objects.entries()].find(([key]) => key.startsWith('post:'));
   assert.ok(saved, '应写入帖子记录');
+  assert.equal(saved[1].videoUrl, post.videoUrl.replace('media.openelfai.com', 'openelfai.com'),
+    '数据库保留原站，CDN 只改返回值');
   const elf = store.objects.get('elf:elf-1');
   assert.equal(elf.works, 4);
 });
