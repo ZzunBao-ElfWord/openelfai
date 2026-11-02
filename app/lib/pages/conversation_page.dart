@@ -16,15 +16,17 @@ class ConversationPage extends StatelessWidget {
               key: const PageStorageKey('desktop-conversation-scroll'),
               child: ConstrainedBox(
                 constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                child: Center(
+                child: Align(
+                  alignment: Alignment.topCenter,
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 760),
+                    constraints: const BoxConstraints(maxWidth: 1000),
                     child: SizedBox(
                       width: double.infinity,
                       child: AnimatedBuilder(
                         animation: AppState.instance,
-                        builder: (context, _) =>
-                            WorkbenchPanel(wide: constraints.maxWidth >= 640),
+                        builder: (context, _) => WorkbenchPanel(
+                            wide: constraints.maxWidth >= 640,
+                            desktopLayout: true),
                       ),
                     ),
                   ),

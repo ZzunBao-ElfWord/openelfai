@@ -121,7 +121,7 @@ void main() {
     expect(find.byType(ConversationPage), findsOneWidget);
     expect(find.text('OpenElf，我帮你'), findsOneWidget);
     expect(find.text('创作'), findsOneWidget);
-    expect(find.text('快速'), findsOneWidget);
+    expect(find.text('快捷指令'), findsOneWidget);
     state.selectElf('desktop-dialogue-fixture');
     await tester.pump();
     expect(

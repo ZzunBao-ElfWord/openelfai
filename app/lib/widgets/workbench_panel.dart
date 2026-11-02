@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../compliance/ai_creation_policy.dart';
 import '../models/elf.dart';
@@ -20,8 +21,10 @@ import 'common.dart';
 class WorkbenchPanel extends StatefulWidget {
   /// 宽屏（桌面 / Web >900）使用大尺寸排版，窄屏收成紧凑版。
   final bool wide;
+  final bool desktopLayout;
 
-  const WorkbenchPanel({super.key, this.wide = false});
+  const WorkbenchPanel(
+      {super.key, this.wide = false, this.desktopLayout = false});
 
   /// 「形象工坊」官方技能书的固定 id：学会后进入对话式工坊。
   static const String studioSkillId = 'studio';
@@ -33,10 +36,7 @@ class WorkbenchPanel extends StatefulWidget {
     final elf = state.myElf;
     final installed = elf == null
         ? const <AbilityModule>[]
-        : state
-            .modulesOf(elf.id)
-            .where((m) => m.id != 'auto')
-            .toList();
+        : state.modulesOf(elf.id).where((m) => m.id != 'auto').toList();
     installed.sort((a, b) {
       if (a.id == studioSkillId) return -1;
       if (b.id == studioSkillId) return 1;
@@ -72,11 +72,10 @@ class WorkbenchPanel extends StatefulWidget {
 
   /// 形象工坊生成前必须逐条确认的合规声明（运营可配置，缺省用内置三条）。
   static Future<bool> confirmStudioPolicy(BuildContext context) async {
-    final configured =
-        AppContentService.instance.content.value.list('app.create.declarations');
-    final items = configured.isEmpty
-        ? AiCreationPolicy.declarations
-        : configured;
+    final configured = AppContentService.instance.content.value
+        .list('app.create.declarations');
+    final items =
+        configured.isEmpty ? AiCreationPolicy.declarations : configured;
     final accepted = List<bool>.filled(items.length, false);
     final ok = await showDialog<bool>(
       context: context,
@@ -96,7 +95,8 @@ class WorkbenchPanel extends StatefulWidget {
                     for (var i = 0; i < items.length; i++)
                       CheckboxListTile(
                         value: accepted[i],
-                        onChanged: (v) => setLocal(() => accepted[i] = v ?? false),
+                        onChanged: (v) =>
+                            setLocal(() => accepted[i] = v ?? false),
                         contentPadding: EdgeInsets.zero,
                         controlAffinity: ListTileControlAffinity.leading,
                         dense: true,
@@ -116,13 +116,11 @@ class WorkbenchPanel extends StatefulWidget {
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(dctx).pop(false),
-                child:
-                    Text('取消', style: TextStyle(color: AppColors.textMuted)),
+                child: Text('取消', style: TextStyle(color: AppColors.textMuted)),
               ),
               TextButton(
                 onPressed: done ? () => Navigator.of(dctx).pop(true) : null,
-                child: Text('同意并继续',
-                    style: TextStyle(color: AppColors.cyan)),
+                child: Text('同意并继续', style: TextStyle(color: AppColors.cyan)),
               ),
             ],
           );
@@ -287,6 +285,7 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.desktopLayout) return _desktopWorkbench(context);
     final keyboard = MediaQuery.viewInsetsOf(context).bottom > 0;
     final wide = widget.wide && !keyboard;
     final horizontal = wide ? 40.0 : 16.0;
@@ -333,6 +332,297 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
       ),
     );
   }
+
+  Widget _desktopWorkbench(BuildContext context) {
+    const labels = ['写文章', '图片创意', '视频脚本', '语音文案', '知识问答', '社交文案'];
+    return LayoutBuilder(builder: (context, constraints) {
+      final compact = constraints.maxWidth < 600;
+      return Padding(
+        padding: EdgeInsets.fromLTRB(
+            compact ? 16 : 32,
+            MediaQuery.sizeOf(context).height >= 760 ? 76 : 32,
+            compact ? 16 : 32,
+            40),
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 840),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('OpenElf，我帮你',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        fontSize: compact ? 27 : 32,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.text)),
+                const SizedBox(height: 12),
+                Text('描述目标，选择 AI，开始创作、运营或互动。',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        fontSize: 14, height: 1.6, color: AppColors.textSub)),
+                const SizedBox(height: 20),
+                Center(
+                    child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                      color: AppColors.surfaceAlt,
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: AppColors.strokeSoft)),
+                  child: Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: List.generate(_modes.length, (i) {
+                        final selected = _mode == i;
+                        return Semantics(
+                          button: true,
+                          selected: selected,
+                          child: InkWell(
+                            onTap: () => setState(() => _mode = i),
+                            borderRadius: BorderRadius.circular(20),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 18, vertical: 9),
+                              decoration: BoxDecoration(
+                                  color: selected
+                                      ? AppColors.surface
+                                      : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                      color: selected
+                                          ? AppColors.stroke
+                                          : Colors.transparent)),
+                              child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(_modes[i].$1,
+                                        size: 17,
+                                        color: selected
+                                            ? AppColors.brand
+                                            : AppColors.textSub),
+                                    const SizedBox(width: 7),
+                                    Text(_modes[i].$2,
+                                        style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: selected
+                                                ? FontWeight.w600
+                                                : FontWeight.w400,
+                                            color: selected
+                                                ? AppColors.text
+                                                : AppColors.textSub)),
+                                  ]),
+                            ),
+                          ),
+                        );
+                      })),
+                )),
+                SizedBox(height: compact ? 28 : 48),
+                Wrap(spacing: 8, runSpacing: 8, children: [
+                  for (var i = 0; i < _quickTracks.length; i++)
+                    OutlinedButton.icon(
+                      onPressed: () => _fill(_quickTracks[i].$3),
+                      icon: Icon(_quickTracks[i].$1, size: 16),
+                      label: Text(labels[i]),
+                      style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.textSub,
+                          backgroundColor: AppColors.surface,
+                          side: BorderSide(color: AppColors.stroke),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 13, vertical: 12),
+                          textStyle: const TextStyle(fontSize: 13),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20))),
+                    ),
+                ]),
+                const SizedBox(height: 14),
+                _desktopComposer(context),
+                const SizedBox(height: 32),
+                Text('试试这样说',
+                    style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.text)),
+                const SizedBox(height: 6),
+                Text('点击示例填入输入框，不会直接执行',
+                    style: TextStyle(fontSize: 12, color: AppColors.textSub)),
+                const SizedBox(height: 12),
+                for (final example in _examples[_mode])
+                  Align(
+                      alignment: Alignment.centerLeft,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 520),
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Material(
+                            color: AppColors.surface,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(13),
+                                side: BorderSide(color: AppColors.strokeSoft)),
+                            child: InkWell(
+                              onTap: () => _fill(example),
+                              borderRadius: BorderRadius.circular(13),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 12),
+                                child: Row(children: [
+                                  Expanded(
+                                      child: Text(example,
+                                          style: TextStyle(
+                                              fontSize: 14,
+                                              height: 1.5,
+                                              color: AppColors.text))),
+                                  const SizedBox(width: 12),
+                                  Icon(Icons.north_east,
+                                      size: 16, color: AppColors.textSub),
+                                ]),
+                              ),
+                            ),
+                          ),
+                        ),
+                      )),
+              ],
+            ),
+          ),
+        ),
+      );
+    });
+  }
+
+  Widget _desktopComposer(BuildContext context) => AnimatedBuilder(
+        animation: _state,
+        builder: (context, _) => LayoutBuilder(builder: (context, constraints) {
+          final compact = constraints.maxWidth < 500;
+          return Container(
+            key: const ValueKey('desktop-task-composer'),
+            decoration: BoxDecoration(
+                color: AppColors.surfaceAlt,
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(color: AppColors.strokeSoft)),
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(
+                    padding: EdgeInsets.all(compact ? 16 : 20),
+                    decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(21),
+                        border: Border.all(color: AppColors.stroke),
+                        boxShadow: [
+                          BoxShadow(
+                              color: Colors.black.withValues(
+                                  alpha:
+                                      AppColors.palette.isDark ? 0.12 : 0.025),
+                              blurRadius: 16,
+                              offset: const Offset(0, 4))
+                        ]),
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (_skill != null)
+                            Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: InputChip(
+                                    label: Text('技能：${_skill!.name}',
+                                        style: const TextStyle(fontSize: 13)),
+                                    onDeleted: () =>
+                                        setState(() => _skill = null))),
+                          CallbackShortcuts(
+                              bindings: {
+                                const SingleActivator(LogicalKeyboardKey.enter,
+                                    control: true): () {
+                                  if (_input.text.trim().isNotEmpty) _submit();
+                                },
+                              },
+                              child: TextField(
+                                key: const ValueKey('desktop-task-input'),
+                                controller: _input,
+                                focusNode: _focus,
+                                minLines: 4,
+                                maxLines: 8,
+                                keyboardType: TextInputType.multiline,
+                                textInputAction: TextInputAction.newline,
+                                style: TextStyle(
+                                    fontSize: 16,
+                                    height: 1.65,
+                                    color: AppColors.text),
+                                decoration: InputDecoration(
+                                    border: InputBorder.none,
+                                    isDense: true,
+                                    contentPadding: EdgeInsets.zero,
+                                    hintText:
+                                        '今天想让 AI 帮你完成什么？\n说说你的目标、要求，或先点选一个示例。',
+                                    hintStyle: TextStyle(
+                                        fontSize: 15,
+                                        height: 1.65,
+                                        color: AppColors.textSub)),
+                              )),
+                          const SizedBox(height: 16),
+                          Row(children: [
+                            TextButton.icon(
+                                onPressed: _openSkillPicker,
+                                icon: const Icon(Icons.extension_outlined,
+                                    size: 18),
+                                label: const Text('技能与工具'),
+                                style: TextButton.styleFrom(
+                                    foregroundColor: AppColors.textSub,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 12),
+                                    textStyle: const TextStyle(fontSize: 13))),
+                            const Spacer(),
+                            _fastCommand(compact: compact),
+                            const SizedBox(width: 16),
+                            ValueListenableBuilder<TextEditingValue>(
+                              valueListenable: _input,
+                              builder: (context, value, _) => Tooltip(
+                                message: 'Ctrl+Enter 发送',
+                                child: FilledButton.icon(
+                                  key: const ValueKey('desktop-task-send'),
+                                  onPressed: value.text.trim().isEmpty
+                                      ? null
+                                      : _submit,
+                                  icon:
+                                      const Icon(Icons.arrow_upward, size: 18),
+                                  label: const Text('发送'),
+                                  style: FilledButton.styleFrom(
+                                      backgroundColor: AppColors.brand,
+                                      foregroundColor: AppColors.onBrand,
+                                      textStyle: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 18, vertical: 14)),
+                                ),
+                              ),
+                            ),
+                          ]),
+                        ]),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 18, vertical: 12),
+                    child: Wrap(
+                        spacing: 20,
+                        runSpacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Row(mainAxisSize: MainAxisSize.min, children: [
+                            Text('执行 AI',
+                                style: TextStyle(
+                                    fontSize: 13, color: AppColors.textSub)),
+                            const SizedBox(width: 8),
+                            _aiSelector(!compact),
+                          ]),
+                          if (!compact)
+                            Text('Enter 换行 · Ctrl+Enter 发送',
+                                style: TextStyle(
+                                    fontSize: 12, color: AppColors.textSub)),
+                        ]),
+                  ),
+                ]),
+          );
+        }),
+      );
 
   Widget _modeChips(bool wide) {
     return Wrap(
@@ -403,8 +693,8 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
                   Icon(icon, size: 12, color: AppColors.textMuted),
                   const SizedBox(width: 4),
                   Text(label,
-                      style: TextStyle(
-                          fontSize: 10.5, color: AppColors.textSub)),
+                      style:
+                          TextStyle(fontSize: 10.5, color: AppColors.textSub)),
                 ],
               ),
             ),
@@ -418,16 +708,16 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
       animation: _state,
       builder: (context, _) {
         return Container(
-          padding: EdgeInsets.fromLTRB(wide ? 16 : 12, wide ? 14 : 10,
-              wide ? 12 : 8, wide ? 10 : 8),
+          padding: EdgeInsets.fromLTRB(
+              wide ? 16 : 12, wide ? 14 : 10, wide ? 12 : 8, wide ? 10 : 8),
           decoration: BoxDecoration(
             color: AppColors.surface,
             borderRadius: BorderRadius.circular(wide ? 18 : 14),
             border: Border.all(color: AppColors.stroke),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(
-                    alpha: AppColors.palette.isDark ? 0.28 : 0.04),
+                color: Colors.black
+                    .withValues(alpha: AppColors.palette.isDark ? 0.28 : 0.04),
                 blurRadius: 18,
                 offset: const Offset(0, 6),
               ),
@@ -445,15 +735,19 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
                 textInputAction: TextInputAction.send,
                 onSubmitted: (_) => _submit(),
                 style: TextStyle(
-                    fontSize: wide ? 13 : 12, height: 1.6, color: AppColors.text),
+                    fontSize: wide ? 13 : 12,
+                    height: 1.6,
+                    color: AppColors.text),
                 decoration: InputDecoration(
                   isDense: true,
                   border: InputBorder.none,
                   hintText: _skill == null
                       ? '今天让你的 AI 做点什么？输入主题，选一个技能就开始'
                       : '发消息…（${_skill!.name}已选中）',
-                  hintStyle:
-                      TextStyle(fontSize: wide ? 12.5 : 11.5, height: 1.6, color: AppColors.textFaint),
+                  hintStyle: TextStyle(
+                      fontSize: wide ? 12.5 : 11.5,
+                      height: 1.6,
+                      color: AppColors.textFaint),
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
@@ -524,7 +818,8 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
     );
   }
 
-  Widget _iconButton(double size, IconData icon, String semantics, VoidCallback onTap) {
+  Widget _iconButton(
+      double size, IconData icon, String semantics, VoidCallback onTap) {
     return Semantics(
       label: semantics,
       button: true,
@@ -598,7 +893,11 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
         ];
       },
       child: Container(
-        height: wide ? 30 : 26,
+        height: widget.desktopLayout
+            ? 36
+            : wide
+                ? 30
+                : 26,
         padding: EdgeInsets.symmetric(horizontal: wide ? 9 : 8),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(999),
@@ -614,18 +913,33 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
               const SizedBox(width: 5),
               Text('选择 AI',
                   style: TextStyle(
-                      fontSize: wide ? 11 : 10, color: AppColors.textMuted)),
+                      fontSize: widget.desktopLayout
+                          ? 14
+                          : wide
+                              ? 11
+                              : 10,
+                      color: AppColors.textSub)),
             ] else ...[
               ElfAvatar(elf: _state.myElf!, size: wide ? 18 : 16),
               const SizedBox(width: 6),
               ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: wide ? 96 : 72),
+                constraints: BoxConstraints(
+                    maxWidth: widget.desktopLayout
+                        ? (wide ? 160 : 96)
+                        : wide
+                            ? 96
+                            : 72),
                 child: Text(
                   _state.myElf!.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                      fontSize: wide ? 11 : 10, color: AppColors.textSub),
+                      fontSize: widget.desktopLayout
+                          ? 14
+                          : wide
+                              ? 11
+                              : 10,
+                      color: AppColors.text),
                 ),
               ),
             ],
@@ -638,7 +952,7 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
     );
   }
 
-  Widget _fastCommand() {
+  Widget _fastCommand({bool compact = false}) {
     return PopupMenuButton<int>(
       tooltip: '快速指令',
       position: PopupMenuPosition.under,
@@ -657,8 +971,7 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
               children: [
                 Icon(_fastCommands[i].$1, size: 14, color: AppColors.textMuted),
                 const SizedBox(width: 8),
-                Text(_fastCommands[i].$2,
-                    style: const TextStyle(fontSize: 12)),
+                Text(_fastCommands[i].$2, style: const TextStyle(fontSize: 12)),
               ],
             ),
           ),
@@ -666,10 +979,14 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.bolt_outlined, size: 13, color: AppColors.textMuted),
+          Icon(Icons.bolt_outlined,
+              size: widget.desktopLayout ? 18 : 13, color: AppColors.textSub),
           const SizedBox(width: 3),
-          Text('快速',
-              style: TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
+          if (!compact)
+            Text(widget.desktopLayout ? '快捷指令' : '快速',
+                style: TextStyle(
+                    fontSize: widget.desktopLayout ? 13 : 10.5,
+                    color: AppColors.textSub)),
         ],
       ),
     );
