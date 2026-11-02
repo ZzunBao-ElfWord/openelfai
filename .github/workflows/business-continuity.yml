@@ -48,6 +48,12 @@ jobs:
       - name: Test client platform isolation and existing features
         run: flutter test
         working-directory: app
+      - name: Test Windows single-instance startup and link forwarding
+        # Native startup protection is independent from Flutter tests.
+        run: |
+          cmake -S app/windows/runner/tests -B build/single-instance-tests -A x64
+          cmake --build build/single-instance-tests --config Release
+          ./build/single-instance-tests/Release/single_instance_test.exe
       - name: Build web with the deployed API origin
         run: flutter build web --release --no-pub --pwa-strategy=none --dart-define=OPENELF_API_BASE=https://openelfai.com --dart-define=VIDEO_CDN_ENABLED=true
         working-directory: app

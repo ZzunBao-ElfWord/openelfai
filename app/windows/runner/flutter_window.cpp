@@ -1,4 +1,5 @@
 #include "flutter_window.h"
+#include "single_instance.h"
 
 #include <optional>
 
@@ -51,6 +52,11 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  if (openelf::ActivationMessage() != 0 && message == openelf::ActivationMessage()) {
+    ::ShowWindow(hwnd, ::IsIconic(hwnd) ? SW_RESTORE : SW_SHOW);
+    ::SetForegroundWindow(hwnd);
+    return 0;
+  }
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     std::optional<LRESULT> result =
