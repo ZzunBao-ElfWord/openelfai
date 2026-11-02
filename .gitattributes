@@ -1,0 +1,2 @@
+# Deployment scripts must remain executable by Bash on Linux/Windows runners.
+*.sh text eol=lf
