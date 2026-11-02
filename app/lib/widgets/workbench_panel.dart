@@ -340,13 +340,13 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
       return Padding(
         padding: EdgeInsets.fromLTRB(
             compact ? 16 : 32,
-            MediaQuery.sizeOf(context).height >= 760 ? 76 : 32,
+            MediaQuery.sizeOf(context).height >= 760 ? 48 : 28,
             compact ? 16 : 32,
             40),
         child: Align(
           alignment: Alignment.topCenter,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 760),
+            constraints: const BoxConstraints(maxWidth: 700),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -354,15 +354,15 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
                 Text('OpenElf，我帮你',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                        fontSize: compact ? 27 : 32,
+                        fontSize: compact ? 25 : 28,
                         fontWeight: FontWeight.w700,
                         color: AppColors.text)),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 Text('描述目标，选择 AI，开始创作、运营或互动。',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                        fontSize: 14, height: 1.6, color: AppColors.textSub)),
-                const SizedBox(height: 20),
+                        fontSize: 13, height: 1.5, color: AppColors.textSub)),
+                const SizedBox(height: 16),
                 Center(
                     child: Container(
                   padding: const EdgeInsets.all(4),
@@ -383,7 +383,7 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
                             borderRadius: BorderRadius.circular(20),
                             child: Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 18, vertical: 9),
+                                  horizontal: 14, vertical: 7),
                               decoration: BoxDecoration(
                                   color: selected
                                       ? AppColors.surface
@@ -417,8 +417,8 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
                         );
                       })),
                 )),
-                SizedBox(height: compact ? 24 : 36),
-                Wrap(spacing: 8, runSpacing: 8, children: [
+                SizedBox(height: compact ? 20 : 28),
+                Wrap(spacing: 6, runSpacing: 6, children: [
                   for (var i = 0; i < _quickTracks.length; i++)
                     OutlinedButton.icon(
                       onPressed: () => _fill(_quickTracks[i].$3),
@@ -429,15 +429,15 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
                           backgroundColor: AppColors.surface,
                           side: BorderSide(color: AppColors.stroke),
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 13, vertical: 12),
+                              horizontal: 10, vertical: 9),
                           textStyle: const TextStyle(fontSize: 13),
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(20))),
                     ),
                 ]),
-                const SizedBox(height: 14),
+                const SizedBox(height: 10),
                 _desktopComposer(context),
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
                 Text('试试这样说',
                     style: TextStyle(
                         fontSize: 14,
@@ -451,7 +451,7 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
                   Align(
                       alignment: Alignment.centerLeft,
                       child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 520),
+                        constraints: const BoxConstraints(maxWidth: 460),
                         child: Padding(
                           padding: const EdgeInsets.only(bottom: 8),
                           child: Material(
@@ -464,12 +464,12 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
                               borderRadius: BorderRadius.circular(13),
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 16, vertical: 12),
+                                    horizontal: 14, vertical: 9),
                                 child: Row(children: [
                                   Expanded(
                                       child: Text(example,
                                           style: TextStyle(
-                                              fontSize: 14,
+                                              fontSize: 13,
                                               height: 1.5,
                                               color: AppColors.text))),
                                   const SizedBox(width: 12),
@@ -503,7 +503,7 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Container(
-                    padding: EdgeInsets.all(compact ? 14 : 16),
+                    padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
                         color: AppColors.surface,
                         borderRadius: BorderRadius.circular(21),
@@ -544,7 +544,7 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
                                 textInputAction: TextInputAction.newline,
                                 style: TextStyle(
                                     fontSize: 16,
-                                    height: 1.65,
+                                    height: 1.5,
                                     color: AppColors.text),
                                 decoration: InputDecoration(
                                     border: InputBorder.none,
@@ -553,8 +553,8 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
                                     hintText:
                                         '今天想让 AI 帮你完成什么？\n说说你的目标、要求，或先点选一个示例。',
                                     hintStyle: TextStyle(
-                                        fontSize: 15,
-                                        height: 1.65,
+                                        fontSize: 14,
+                                        height: 1.5,
                                         color: AppColors.textSub)),
                               )),
                           const SizedBox(height: 12),
@@ -591,7 +591,7 @@ class _WorkbenchPanelState extends State<WorkbenchPanel> {
                                           fontSize: 14,
                                           fontWeight: FontWeight.w600),
                                       padding: const EdgeInsets.symmetric(
-                                          horizontal: 18, vertical: 14)),
+                                          horizontal: 14, vertical: 10)),
                                 ),
                               ),
                             ),
