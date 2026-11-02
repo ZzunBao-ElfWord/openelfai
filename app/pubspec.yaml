@@ -13,6 +13,7 @@ dependencies:
   shared_preferences: ^2.3.4
   flutter_secure_storage: ^9.2.2
   http: ^1.2.2
+  webview_windows: 0.4.0
   in_app_purchase: ^3.3.1
   in_app_purchase_storekit: ^0.4.15
   video_player: ^2.9.2
@@ -47,3 +48,4 @@ flutter:
   assets:
     - assets/brand/
     - assets/styles/
+    - assets/captcha/

@@ -1,0 +1,9 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' https:; script-src 'self' https: 'unsafe-inline'; style-src 'self' 'unsafe-inline' https:; img-src 'self' https: data: blob:; connect-src https:; frame-src https:; object-src 'none'; base-uri 'none'">
+<title>OpenElf 图形验证</title>
+<style>body{margin:0;background:#fff;color:#16203a;font:16px system-ui;text-align:center}main{padding:48px 24px}button{border:0;border-radius:10px;background:#2463eb;color:white;padding:14px 32px;font:inherit;cursor:pointer}button:disabled{opacity:.5}p{line-height:1.7;color:#65718a}#status{min-height:48px;font-size:14px}</style>
+</head><body><main><h2>完成图形验证</h2><p>验证通过后，桌面应用才会发送短信。<br>此页面不接触手机号、短信码或登录令牌。</p>
+<button id="verify" disabled>加载验证组件…</button><p id="status" role="status"></p></main>
+<script src="ct4.js"></script><script src="web-captcha.js"></script><script src="desktop.js"></script>
+</body></html>
